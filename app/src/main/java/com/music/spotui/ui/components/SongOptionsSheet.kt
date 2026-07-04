@@ -38,6 +38,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.music.spotui.R
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -155,7 +157,7 @@ fun SongOptionsSheet(
                 com.music.spotui.data.api.SpotifySync.setTrackSaved(context, song.spotifyTrackId, liked)
             }
             SongMenuRow(
-                icon = if (downloaded) Icons.Default.CheckCircle else Icons.Default.KeyboardArrowDown,
+                icon = if (downloaded) Icons.Default.CheckCircle else ImageVector.vectorResource(R.drawable.ic_download),
                 label = when {
                     downloaded -> "Downloaded — remove"
                     downloadingNow -> if (downloadPct in 1..99) "Downloading… $downloadPct%" else "Downloading…"

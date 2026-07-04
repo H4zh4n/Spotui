@@ -52,6 +52,11 @@ object SongPlayer {
     // user knows real Spotify vs a lossless mirror vs the YouTube fallback.
     @Volatile var currentSource: String = "YouTube"
         private set
+    // Human-readable quality of the CURRENT stream (e.g. "FLAC 16-bit",
+    // "OPUS 141 kbps"), shown next to the source badge.
+    @Volatile var currentQuality: String = ""
+        private set
+    private val qualityCache = java.util.concurrent.ConcurrentHashMap<String, String>()
     // Maps a "title artist" play query -> the track's real Spotify id, so the
     // lossless resolver can be seeded from a play site that only has the query.
     // Populated centrally whenever the queue changes (see CurrentSongState).
@@ -61,6 +66,17 @@ object SongPlayer {
     fun registerLossless(pairs: List<Pair<String, String>>) {
         pairs.forEach { (query, spotifyId) ->
             if (query.isNotBlank() && spotifyId.isNotBlank()) trackIdRegistry[query] = spotifyId
+        }
+    }
+
+    // Whether each play query is the explicit version on Spotify, so the YouTube
+    // fallback can pick the matching (explicit vs clean) edit.
+    private val explicitRegistry = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+    /** Register query→explicit pairs (populated whenever the queue changes). */
+    fun registerExplicit(pairs: List<Pair<String, Boolean>>) {
+        pairs.forEach { (query, explicit) ->
+            if (query.isNotBlank()) explicitRegistry[query] = explicit
         }
     }
     // Tracks which query is the latest play request so a slow resolve for an old
@@ -94,6 +110,7 @@ object SongPlayer {
         ) {
             runCatching { player?.pause() }
             currentSource = "Spotify"
+            currentQuality = ""
             SpotifyWebPlayer.playEpisode(song.removePrefix("episode:"))
             return
         }
@@ -113,6 +130,7 @@ object SongPlayer {
             if (spotifyId != null) {
                 runCatching { player?.pause() }
                 currentSource = "Spotify"
+                currentQuality = ""
                 SpotifyWebPlayer.play(spotifyId)
                 return
             }
@@ -246,13 +264,19 @@ object SongPlayer {
     private suspend fun resolveStreamUrl(song: String, appContext: Context, forPlayback: Boolean = false): String? {
         // Offline: if this track was downloaded, play the local file instead of the network.
         com.music.spotui.data.preferences.downloadedPathForQuery(appContext, song)?.let { path ->
-            if (forPlayback) currentSource = "Downloaded"
+            if (forPlayback) {
+                currentSource = "Downloaded"
+                currentQuality = path.substringAfterLast('.', "").uppercase()
+            }
             return android.net.Uri.fromFile(java.io.File(path)).toString()
         }
         streamCache[song]?.let {
             // Cache hits must still update the badge — returning early kept the
             // previous track's label (e.g. "Downloaded") on a streamed track.
-            if (forPlayback) currentSource = sourceCache[song] ?: "YouTube"
+            if (forPlayback) {
+                currentSource = sourceCache[song] ?: "YouTube"
+                currentQuality = qualityCache[song] ?: ""
+            }
             return it
         }
         // Quality for the current network (Wi-Fi vs cellular), from Settings.
@@ -265,15 +289,20 @@ object SongPlayer {
                 when (val r = com.metrolist.spotify.SpotiFlac.resolve(spotifyId, isrc = null, preferHiRes = losslessHiRes)) {
                     is com.metrolist.spotify.SpotiFlac.Result.Success -> {
                         Log.d(TAG, "lossless ${r.track.provider} ${r.track.quality}-bit for: $song")
+                        val flacQuality = "FLAC ${r.track.quality}-bit"
                         // SpotiFLAC pulls from Tidal/Qobuz/Amazon — not Spotify.
-                        if (forPlayback) currentSource = "Lossless • ${r.track.provider}"
+                        if (forPlayback) {
+                            currentSource = "Lossless • ${r.track.provider}"
+                            currentQuality = flacQuality
+                        }
                         streamCache[song] = r.track.url
                         sourceCache[song] = "Lossless • ${r.track.provider}"
+                        qualityCache[song] = flacQuality
                         return r.track.url
                     }
                     is com.metrolist.spotify.SpotiFlac.Result.Cooldown ->
                         Log.d(TAG, "lossless on cooldown, using YouTube for: $song")
-                    else -> Unit
+                    else -> Log.w(TAG, "lossless miss ($r), using YouTube for: $song")
                 }
             }
         }
@@ -292,8 +321,16 @@ object SongPlayer {
             Log.e(TAG, "Failed to resolve stream for $videoId", it)
             return null
         }
+        // e.g. "OPUS 141 kbps" from the chosen adaptive format.
+        val codec = playback.format.mimeType
+            .substringAfter("codecs=\"", "").substringBefore('"').substringBefore('.')
+            .uppercase()
+        val ytQuality = listOf(codec, "${playback.format.bitrate / 1000} kbps")
+            .filter { it.isNotBlank() }.joinToString(" ")
+        if (forPlayback) currentQuality = ytQuality
         streamCache[song] = playback.streamUrl
         sourceCache[song] = "YouTube"
+        qualityCache[song] = ytQuality
         return playback.streamUrl
     }
 
@@ -567,11 +604,28 @@ object SongPlayer {
     private suspend fun resolveVideoId(query: String): String? {
         // A raw YouTube videoId is 11 chars with no spaces — accept it directly.
         if (query.length == 11 && !query.contains(' ')) return query
-        return YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()
+        val hits = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG)
+            .onFailure { Log.w(TAG, "resolveVideoId: YouTube search failed for: $query", it) }
+            .getOrNull()
             ?.items
             ?.filterIsInstance<SongItem>()
-            ?.firstOrNull()
-            ?.id
+            .orEmpty()
+        if (hits.isEmpty()) {
+            Log.w(TAG, "resolveVideoId: no YouTube song results for: $query")
+            return null
+        }
+        // Prefer the version whose explicit flag matches the real Spotify track,
+        // so an explicit track doesn't silently play as the clean edit.
+        val wantExplicit = explicitRegistry[query]
+        val match = if (wantExplicit != null) hits.firstOrNull { it.explicit == wantExplicit } else null
+        if (wantExplicit != null && match == null) {
+            Log.w(
+                TAG,
+                "resolveVideoId: no ${if (wantExplicit) "explicit" else "clean"} match in " +
+                    "${hits.size} hits for: $query — using first hit",
+            )
+        }
+        return (match ?: hits.first()).id
     }
 
     private fun buildAudioAttributes() =

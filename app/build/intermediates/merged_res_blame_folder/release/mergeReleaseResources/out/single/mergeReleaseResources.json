@@ -1,142 +1,226 @@
 [
     {
-        "merged": "com.music.spotui.app-release-58:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
-        "source": "com.music.spotui.app-main-59:/mipmap-anydpi-v26/ic_launcher_round.xml"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_launcher_foreground.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_launcher_foreground.xml"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_added.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/added.xml"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_library_big.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_library_big.xml"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_ic_share.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/ic_share.xml"
+        "merged": "com.music.spotui.app-release-58:/xml_automotive_app_desc.xml.flat",
+        "source": "com.music.spotui.app-main-59:/xml/automotive_app_desc.xml"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/font_spotify_mix_ui_title_bold.otf.flat",
-        "source": "com.music.spotui.app-main-59:/font/spotify_mix_ui_title_bold.otf"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/font_spotify_mix_ui_title_bold.otf.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/font/spotify_mix_ui_title_bold.otf"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/font_spotify_mix_ui_bold.otf.flat",
-        "source": "com.music.spotui.app-main-59:/font/spotify_mix_ui_bold.otf"
+        "merged": "com.music.spotui.app-release-58:/mipmap-mdpi_ic_launcher_foreground.webp.flat",
+        "source": "com.music.spotui.app-main-59:/mipmap-mdpi/ic_launcher_foreground.webp"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/xml_backup_rules.xml.flat",
-        "source": "com.music.spotui.app-main-59:/xml/backup_rules.xml"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_devices.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_devices.xml"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_visibility.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/visibility.xml"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_minus.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_minus.xml"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_ic_add.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/ic_add.xml"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_dots.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_dots.xml"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/font_montserrat_variable.ttf.flat",
-        "source": "com.music.spotui.app-main-59:/font/montserrat_variable.ttf"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_search_big.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_search_big.xml"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_ic_devices.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/ic_devices.xml"
+        "merged": "com.music.spotui.app-release-58:/mipmap-hdpi_ic_launcher_foreground.webp.flat",
+        "source": "com.music.spotui.app-main-59:/mipmap-hdpi/ic_launcher_foreground.webp"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_splash.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/splash.xml"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_add.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_add.xml"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_visibility_off.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/visibility_off.xml"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_player_shuffle.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_player_shuffle.xml"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_ic_player_back.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/ic_player_back.xml"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/font_spotify_mix_ui_regular.otf.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/font/spotify_mix_ui_regular.otf"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_album.jpeg.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/album.jpeg"
+        "merged": "com.music.spotui.app-release-58:/mipmap-xxhdpi_ic_launcher_foreground.webp.flat",
+        "source": "com.music.spotui.app-main-59:/mipmap-xxhdpi/ic_launcher_foreground.webp"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_ic_settings.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/ic_settings.xml"
-    },
-    {
-        "merged": "com.music.spotui.app-release-58:/drawable_ic_search_big.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/ic_search_big.xml"
-    },
-    {
-        "merged": "com.music.spotui.app-release-58:/xml_data_extraction_rules.xml.flat",
-        "source": "com.music.spotui.app-main-59:/xml/data_extraction_rules.xml"
-    },
-    {
-        "merged": "com.music.spotui.app-release-58:/drawable_ic_h_outline.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/ic_h_outline.xml"
-    },
-    {
-        "merged": "com.music.spotui.app-release-58:/drawable_ic_library_big.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/ic_library_big.xml"
+        "merged": "com.music.spotui.app-release-58:/mipmap-hdpi_ic_launcher.webp.flat",
+        "source": "com.music.spotui.app-main-59:/mipmap-hdpi/ic_launcher.webp"
     },
     {
         "merged": "com.music.spotui.app-release-58:/drawable_ic_launcher_foreground.xml.flat",
         "source": "com.music.spotui.app-main-59:/drawable/ic_launcher_foreground.xml"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_ic_repeat.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/ic_repeat.xml"
+        "merged": "com.music.spotui.app-release-58:/mipmap-xxhdpi_ic_launcher.webp.flat",
+        "source": "com.music.spotui.app-main-59:/mipmap-xxhdpi/ic_launcher.webp"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_ic_down.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/ic_down.xml"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_album.jpeg.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/album.jpeg"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_ic_playing.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/ic_playing.xml"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_visibility.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/visibility.xml"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_placeholder.jpg.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/placeholder.jpg"
+        "merged": "com.music.spotui.app-release-58:/mipmap-mdpi_ic_launcher_round.webp.flat",
+        "source": "com.music.spotui.app-main-59:/mipmap-mdpi/ic_launcher_round.webp"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_ic_player_shuffle.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/ic_player_shuffle.xml"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_visibility_off.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/visibility_off.xml"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/font_spotify_mix_ui_title_extrabold.otf.flat",
-        "source": "com.music.spotui.app-main-59:/font/spotify_mix_ui_title_extrabold.otf"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_added.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/added.xml"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/font_spotify_mix_ui_regular.otf.flat",
-        "source": "com.music.spotui.app-main-59:/font/spotify_mix_ui_regular.otf"
+        "merged": "com.music.spotui.app-release-58:/mipmap-xxhdpi_ic_launcher_round.webp.flat",
+        "source": "com.music.spotui.app-main-59:/mipmap-xxhdpi/ic_launcher_round.webp"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_ic_dots.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/ic_dots.xml"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/font_spotify_mix_ui_title_extrabold.otf.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/font/spotify_mix_ui_title_extrabold.otf"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_play_svgrepo_com.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/play_svgrepo_com.xml"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_home_filled.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_home_filled.xml"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_ic_minus.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/ic_minus.xml"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_logo.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/logo.xml"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_ic_player_skip.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/ic_player_skip.xml"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_splash.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/splash.xml"
+    },
+    {
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/mipmap-anydpi-v26/ic_launcher_round.xml"
+    },
+    {
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_share.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_share.xml"
+    },
+    {
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/xml_backup_rules.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/xml/backup_rules.xml"
     },
     {
         "merged": "com.music.spotui.app-release-58:/mipmap-anydpi-v26_ic_launcher.xml.flat",
         "source": "com.music.spotui.app-main-59:/mipmap-anydpi-v26/ic_launcher.xml"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_ic_paused.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/ic_paused.xml"
+        "merged": "com.music.spotui.app-release-58:/mipmap-mdpi_ic_launcher.webp.flat",
+        "source": "com.music.spotui.app-main-59:/mipmap-mdpi/ic_launcher.webp"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_ic_home_filled.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/ic_home_filled.xml"
+        "merged": "com.music.spotui.app-release-58:/mipmap-xhdpi_ic_launcher_foreground.webp.flat",
+        "source": "com.music.spotui.app-main-59:/mipmap-xhdpi/ic_launcher_foreground.webp"
     },
     {
-        "merged": "com.music.spotui.app-release-58:/drawable_logo.xml.flat",
-        "source": "com.music.spotui.app-main-59:/drawable/logo.xml"
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/font_montserrat_variable.ttf.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/font/montserrat_variable.ttf"
+    },
+    {
+        "merged": "com.music.spotui.app-release-58:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "com.music.spotui.app-main-59:/mipmap-anydpi-v26/ic_launcher_round.xml"
+    },
+    {
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_h_outline.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_h_outline.xml"
+    },
+    {
+        "merged": "com.music.spotui.app-release-58:/drawable_ic_download.xml.flat",
+        "source": "com.music.spotui.app-main-59:/drawable/ic_download.xml"
+    },
+    {
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_repeat.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_repeat.xml"
+    },
+    {
+        "merged": "com.music.spotui.app-release-58:/mipmap-xxxhdpi_ic_launcher_round.webp.flat",
+        "source": "com.music.spotui.app-main-59:/mipmap-xxxhdpi/ic_launcher_round.webp"
+    },
+    {
+        "merged": "com.music.spotui.app-release-58:/mipmap-xhdpi_ic_launcher.webp.flat",
+        "source": "com.music.spotui.app-main-59:/mipmap-xhdpi/ic_launcher.webp"
+    },
+    {
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_playing.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_playing.xml"
+    },
+    {
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/font_spotify_mix_ui_bold.otf.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/font/spotify_mix_ui_bold.otf"
+    },
+    {
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_down.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_down.xml"
+    },
+    {
+        "merged": "com.music.spotui.app-release-58:/mipmap-xhdpi_ic_launcher_round.webp.flat",
+        "source": "com.music.spotui.app-main-59:/mipmap-xhdpi/ic_launcher_round.webp"
+    },
+    {
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/mipmap-anydpi-v26/ic_launcher.xml"
+    },
+    {
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/xml_data_extraction_rules.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/xml/data_extraction_rules.xml"
+    },
+    {
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_paused.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_paused.xml"
+    },
+    {
+        "merged": "com.music.spotui.app-release-58:/drawable_ic_launcher_background.xml.flat",
+        "source": "com.music.spotui.app-main-59:/drawable/ic_launcher_background.xml"
+    },
+    {
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_play_svgrepo_com.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/play_svgrepo_com.xml"
+    },
+    {
+        "merged": "com.music.spotui.app-release-58:/mipmap-hdpi_ic_launcher_round.webp.flat",
+        "source": "com.music.spotui.app-main-59:/mipmap-hdpi/ic_launcher_round.webp"
+    },
+    {
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_player_back.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_player_back.xml"
+    },
+    {
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_placeholder.jpg.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/placeholder.jpg"
+    },
+    {
+        "merged": "com.music.spotui.app-release-58:/mipmap-xxxhdpi_ic_launcher_foreground.webp.flat",
+        "source": "com.music.spotui.app-main-59:/mipmap-xxxhdpi/ic_launcher_foreground.webp"
+    },
+    {
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_player_skip.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_player_skip.xml"
+    },
+    {
+        "merged": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-release-58:/drawable_ic_settings.xml.flat",
+        "source": "/home/tim/.gradle/daemon/8.6/com.music.spotui.app-main-59:/drawable/ic_settings.xml"
+    },
+    {
+        "merged": "com.music.spotui.app-release-58:/mipmap-xxxhdpi_ic_launcher.webp.flat",
+        "source": "com.music.spotui.app-main-59:/mipmap-xxxhdpi/ic_launcher.webp"
     }
 ]

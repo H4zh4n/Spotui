@@ -37,6 +37,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -151,7 +153,7 @@ fun DownloadsScreen(navController: NavController) {
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                imageVector = Icons.Default.KeyboardArrowDown,
+                                imageVector = ImageVector.vectorResource(R.drawable.ic_download),
                                 contentDescription = "",
                                 tint = accent,
                                 modifier = Modifier.size(90.dp),

@@ -23,6 +23,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -39,6 +41,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -208,7 +212,64 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                             .height(52.dp)
                             .padding(20.dp, 0.dp)
                     ) {
-                        if (!playlistViewModel.currentSongPlayingState.value && songs.isNotEmpty()) {
+                        // Download the whole playlist (all tracks) for offline playback.
+                        var playlistDownloaded by remember(songs) {
+                            mutableStateOf(songs.isNotEmpty() && SongPlayer.allDownloaded(songs, context))
+                        }
+                        if (songs.isNotEmpty()) {
+                            Icon(
+                                imageVector = if (playlistDownloaded)
+                                    Icons.Default.CheckCircle else ImageVector.vectorResource(R.drawable.ic_download),
+                                tint = if (playlistDownloaded) Color(AppPalette.toArgb()) else Color.White,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {
+                                        if (!playlistDownloaded) {
+                                            SongPlayer.downloadAll(songs, context)
+                                            android.widget.Toast.makeText(
+                                                context,
+                                                "Downloading ${songs.size} tracks…",
+                                                android.widget.Toast.LENGTH_SHORT,
+                                            ).show()
+                                        }
+                                    },
+                                contentDescription = "Download playlist",
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            // Shuffle-play: start the playlist in random order.
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_player_shuffle),
+                                tint = Color.White,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {
+                                        playlistViewModel.startShuffled(songs)?.let { first ->
+                                            SongPlayer.playSong(first.url, context)
+                                            playlistViewModel.updateSongState(
+                                                first.coverUri,
+                                                first.title,
+                                                first.singer,
+                                                true,
+                                                first.id,
+                                                0,
+                                                playlist.name,
+                                            )
+                                        }
+                                    },
+                                contentDescription = "Shuffle play",
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                        }
+                        // Always visible: pause when playing, resume when this
+                        // list's track is paused, otherwise start from the top.
+                        if (songs.isNotEmpty()) {
+                            val playing = playlistViewModel.currentSongPlayingState.value
                             Box(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier
@@ -219,24 +280,33 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                                         interactionSource = remember { MutableInteractionSource() },
                                         indication = null
                                     ) {
-                                        playlistViewModel.updateQueue(songs)
-                                        SongPlayer.playSong(songs[0].url, context)
-                                        playlistViewModel.updateSongState(
-                                            songs[0].coverUri,
-                                            songs[0].title,
-                                            songs[0].singer,
-                                            true,
-                                            songs[0].id,
-                                            0,
-                                            playlist.name
-                                        )
+                                        when {
+                                            playing -> playlistViewModel.setPlaying(false)
+                                            songs.any { it.id == playlistViewModel.currentSongId.value } ->
+                                                playlistViewModel.setPlaying(true)
+                                            else -> {
+                                                playlistViewModel.updateQueue(songs)
+                                                SongPlayer.playSong(songs[0].url, context)
+                                                playlistViewModel.updateSongState(
+                                                    songs[0].coverUri,
+                                                    songs[0].title,
+                                                    songs[0].singer,
+                                                    true,
+                                                    songs[0].id,
+                                                    0,
+                                                    playlist.name
+                                                )
+                                            }
+                                        }
                                     }
                             ) {
                                 Icon(
                                     modifier = Modifier.size(25.dp),
                                     tint = Color.Black,
-                                    painter = painterResource(id = R.drawable.play_svgrepo_com),
-                                    contentDescription = ""
+                                    painter = painterResource(
+                                        id = if (playing) R.drawable.ic_playing else R.drawable.play_svgrepo_com,
+                                    ),
+                                    contentDescription = if (playing) "Pause" else "Play"
                                 )
                             }
                         }

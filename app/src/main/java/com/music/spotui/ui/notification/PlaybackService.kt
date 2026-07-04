@@ -2,15 +2,34 @@ package com.music.spotui.ui.notification
 
 import android.app.PendingIntent
 import android.content.Intent
+import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.session.LibraryResult
+import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
+import com.google.common.collect.ImmutableList
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.SettableFuture
 import com.music.spotui.MainActivity
+import com.music.spotui.data.api.Api
+import com.music.spotui.data.api.Response
+import com.music.spotui.data.entity.SongsModel
 import com.music.spotui.di.CurrentSongState
 import com.music.spotui.di.SongPlayer
 import com.music.spotui.di.SpotifyWebPlayer
+import com.music.spotui.ui.repository.AppRepository
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -20,13 +39,24 @@ import javax.inject.Inject
  * back into playback. Next/previous are wired to the in-app queue because our
  * player only ever holds one resolved stream at a time (YouTube URLs are resolved
  * lazily per track), so we advance the queue ourselves rather than via a playlist.
+ *
+ * It is a [MediaLibraryService] (not just a session service) so Android Auto can
+ * browse the library — Liked Songs, Downloads, playlists and albums — and start
+ * playback from the car.
  */
 @AndroidEntryPoint
-class PlaybackService : MediaSessionService() {
+class PlaybackService : MediaLibraryService() {
 
     @Inject lateinit var currentSongState: CurrentSongState
+    @Inject lateinit var repository: AppRepository
 
-    private var mediaSession: MediaSession? = null
+    private var mediaSession: MediaLibrarySession? = null
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    // Android Auto browse cache: mediaId → track, and mediaId → the list it was
+    // browsed from (so playing a track queues its whole playlist/album).
+    private val trackById = java.util.concurrent.ConcurrentHashMap<String, SongsModel>()
+    private val queueByTrackId = java.util.concurrent.ConcurrentHashMap<String, List<SongsModel>>()
     private var webPlayer: WebMediaPlayer? = null
     private var showingWeb = false
 
@@ -48,7 +78,7 @@ class PlaybackService : MediaSessionService() {
 
         webPlayer = WebMediaPlayer(mainLooper, currentSongState) { forward -> advance(forward) }
 
-        mediaSession = MediaSession.Builder(this, wrap(base))
+        mediaSession = MediaLibrarySession.Builder(this, wrap(base), LibraryCallback())
             .setSessionActivity(sessionActivity)
             .build()
 
@@ -130,7 +160,170 @@ class PlaybackService : MediaSessionService() {
         SongPlayer.playSong(song.url, applicationContext)
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = mediaSession
+
+    // ── Android Auto browse tree ──────────────────────────────────────────
+
+    private companion object {
+        const val ROOT = "root"
+        const val NODE_LIKED = "liked"
+        const val NODE_DOWNLOADS = "downloads"
+        const val NODE_PLAYLISTS = "playlists"
+        const val NODE_ALBUMS = "albums"
+    }
+
+    private inner class LibraryCallback : MediaLibrarySession.Callback {
+
+        override fun onGetLibraryRoot(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<MediaItem>> =
+            Futures.immediateFuture(LibraryResult.ofItem(folder(ROOT, "spotui"), params))
+
+        override fun onGetChildren(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> = future {
+            LibraryResult.ofItemList(ImmutableList.copyOf(childrenOf(parentId)), params)
+        }
+
+        override fun onGetItem(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            mediaId: String,
+        ): ListenableFuture<LibraryResult<MediaItem>> = Futures.immediateFuture(
+            trackById[mediaId]?.let { LibraryResult.ofItem(playable(it), null) }
+                ?: LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE),
+        )
+
+        // A browsed track was tapped in the car: queue the list it came from and
+        // play through our own engine (streams are resolved lazily per track, so
+        // we never hand the session a playlist of URIs).
+        override fun onSetMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long,
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val requested = mediaItems.getOrNull(startIndex) ?: mediaItems.firstOrNull()
+            val song = requested?.let { trackById[it.mediaId] }
+            if (song != null) {
+                val queue = queueByTrackId[requested.mediaId] ?: listOf(song)
+                currentSongState.updateQueue(queue)
+                val idx = queue.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
+                currentSongState.updateSongState(
+                    song.coverUri, song.title, song.singer, true,
+                    song.id, idx, song.album,
+                )
+                SongPlayer.playSong(song.url, applicationContext)
+            }
+            return Futures.immediateFuture(
+                MediaSession.MediaItemsWithStartPosition(emptyList(), C.INDEX_UNSET, C.TIME_UNSET),
+            )
+        }
+    }
+
+    private suspend fun childrenOf(parentId: String): List<MediaItem> = when {
+        parentId == ROOT -> listOf(
+            folder(NODE_LIKED, "Liked Songs"),
+            folder(NODE_DOWNLOADS, "Downloads"),
+            folder(NODE_PLAYLISTS, "Playlists"),
+            folder(NODE_ALBUMS, "Albums"),
+        )
+        parentId == NODE_LIKED ->
+            registerTracks(NODE_LIKED, lastSuccess(repository.provideLikedSongs()).orEmpty())
+        parentId == NODE_DOWNLOADS ->
+            registerTracks(
+                NODE_DOWNLOADS,
+                com.music.spotui.data.preferences.getDownloadedSongs(applicationContext),
+            )
+        parentId == NODE_PLAYLISTS ->
+            libraryEntries().filter {
+                it.isPlaylist && it.spotifyId != Api.LIKED_SONGS_ID && it.spotifyId != Api.DOWNLOADS_ID
+            }.map { folder("playlist/${it.spotifyId}", it.name, it.coverUri) }
+        parentId == NODE_ALBUMS ->
+            libraryEntries().filter { !it.isPlaylist }.map {
+                folder(
+                    "album/${android.net.Uri.encode(it.name)}/${android.net.Uri.encode(it.artists)}",
+                    it.name,
+                    it.coverUri,
+                )
+            }
+        parentId.startsWith("playlist/") -> {
+            val songs = lastSuccess(repository.providePlaylistSongs(parentId.removePrefix("playlist/")))
+            registerTracks(parentId, songs.orEmpty())
+        }
+        parentId.startsWith("album/") -> {
+            val parts = parentId.removePrefix("album/").split('/')
+            val name = android.net.Uri.decode(parts.getOrElse(0) { "" })
+            val artist = android.net.Uri.decode(parts.getOrElse(1) { "" })
+            registerTracks(parentId, lastSuccess(repository.provideAlbumSongs(name, artist)).orEmpty())
+        }
+        else -> emptyList()
+    }
+
+    private suspend fun libraryEntries() =
+        lastSuccess(repository.provideLibrary()).orEmpty()
+
+    /** Runs a paged/cached response flow to completion and keeps the final data. */
+    private suspend fun <T> lastSuccess(flow: Flow<Response<T>>): T? =
+        runCatching { flow.toList() }.getOrNull()
+            ?.filterIsInstance<Response.Success<T>>()
+            ?.lastOrNull()?.data
+
+    private fun registerTracks(parentId: String, songs: List<SongsModel>): List<MediaItem> {
+        songs.forEach { song ->
+            trackById["song/${song.id}"] = song
+            queueByTrackId["song/${song.id}"] = songs
+        }
+        return songs.map { playable(it) }
+    }
+
+    private fun folder(id: String, title: String, coverUri: String = ""): MediaItem =
+        MediaItem.Builder()
+            .setMediaId(id)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setIsBrowsable(true)
+                    .setIsPlayable(false)
+                    .apply { if (coverUri.isNotBlank()) setArtworkUri(android.net.Uri.parse(coverUri)) }
+                    .build(),
+            )
+            .build()
+
+    private fun playable(song: SongsModel): MediaItem =
+        MediaItem.Builder()
+            .setMediaId("song/${song.id}")
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(song.title)
+                    .setArtist(song.singer)
+                    .setAlbumTitle(song.album)
+                    .setIsBrowsable(false)
+                    .setIsPlayable(true)
+                    .apply { if (song.coverUri.isNotBlank()) setArtworkUri(android.net.Uri.parse(song.coverUri)) }
+                    .build(),
+            )
+            .build()
+
+    private fun <T> future(block: suspend () -> T): ListenableFuture<T> {
+        val f = SettableFuture.create<T>()
+        serviceScope.launch {
+            try {
+                f.set(block())
+            } catch (e: Exception) {
+                f.setException(e)
+            }
+        }
+        return f
+    }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         // Stop playback + tear the service down when the app is swiped away.
@@ -139,6 +332,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        serviceScope.cancel()
         SongPlayer.onPlayerSwapped = null
         SpotifyWebPlayer.onStateChanged = null
         webPlayer?.release()

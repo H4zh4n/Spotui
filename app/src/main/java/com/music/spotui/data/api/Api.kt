@@ -71,6 +71,7 @@ class Api @Inject constructor(
             // Playback resolves this query against YouTube (see SongPlayer).
             url = listOf(name, singer).filter { it.isNotBlank() }.joinToString(" "),
             spotifyTrackId = id,
+            explicit = explicit,
         )
     }
 
@@ -111,7 +112,7 @@ class Api @Inject constructor(
     /** Artists the user follows on Spotify (library "Artists" filter). */
     suspend fun getFollowedArtists(): List<ArtistsModel> {
         if (!SpotifyTokenProvider.ensureToken(context)) return emptyList()
-        return Spotify.myArtists(limit = 50).getOrNull()?.items.orEmpty()
+        return fetchAllPages { offset -> Spotify.myArtists(limit = 50, offset = offset) }
             .map { it.toArtistModel() }
             .also { if (it.isEmpty()) Log.d("Api", "getFollowedArtists: none") }
     }
@@ -441,8 +442,11 @@ class Api @Inject constructor(
             emit(Response.Error("Spotify not authenticated — set sp_dc cookie")); return@flow
         }
         val artist = if (knownArtistId.isBlank()) {
-            Spotify.search(artistName, types = listOf("artist"), limit = 1).getOrNull()
-                ?.artists?.items?.firstOrNull()
+            // Prefer an EXACT name match among the top hits — the first fuzzy
+            // hit for a short name like "RAM" can be a different artist entirely.
+            val hits = Spotify.search(artistName, types = listOf("artist"), limit = 5).getOrNull()
+                ?.artists?.items.orEmpty()
+            hits.firstOrNull { it.name.equals(artistName, ignoreCase = true) } ?: hits.firstOrNull()
         } else null
         val artistId = knownArtistId.ifBlank { artist?.id.orEmpty() }
         if (artistId.isBlank()) {
@@ -523,11 +527,41 @@ class Api @Inject constructor(
             emit(Response.Error("Spotify not authenticated — set sp_dc cookie")); return@flow
         }
         Spotify.playlistTracks(playlistId, limit = 100).fold(
-            onSuccess = { paging ->
-                emit(Response.Success(paging.items.mapNotNull { it.track?.toSongModel() }))
+            onSuccess = { first ->
+                val songs = first.items.mapNotNull { it.track?.toSongModel() }.toMutableList()
+                // Show the first page right away, then keep paging until the
+                // playlist's full track count is loaded.
+                emit(Response.Success(songs.toList()))
+                var offset = first.items.size
+                while (offset < first.total && first.items.isNotEmpty()) {
+                    val page = Spotify.playlistTracks(playlistId, limit = 100, offset = offset).getOrNull() ?: break
+                    if (page.items.isEmpty()) break
+                    songs += page.items.mapNotNull { it.track?.toSongModel() }
+                    offset += page.items.size
+                    emit(Response.Success(songs.toList()))
+                }
             },
             onFailure = { Log.e("Api", "getPlaylistSongs failed", it); emit(Response.Error(it.message ?: "error")) },
         )
+    }
+
+    /**
+     * Follows a paged endpoint until every item is fetched, so libraries with
+     * more than one page (50+ playlists/albums) load completely.
+     */
+    private suspend fun <T> fetchAllPages(
+        fetch: suspend (offset: Int) -> kotlin.Result<com.metrolist.spotify.models.SpotifyPaging<T>>,
+    ): List<T> {
+        val first = fetch(0).getOrNull() ?: return emptyList()
+        val items = first.items.toMutableList()
+        var offset = first.items.size
+        while (offset < first.total && first.items.isNotEmpty()) {
+            val page = fetch(offset).getOrNull() ?: break
+            if (page.items.isEmpty()) break
+            items += page.items
+            offset += page.items.size
+        }
+        return items
     }
 
     /**
@@ -541,7 +575,7 @@ class Api @Inject constructor(
             if (HomeCache.library == null) emit(Response.Error("Spotify not authenticated — set sp_dc cookie"))
             return@flow
         }
-        val albums = Spotify.myAlbums(limit = 50).getOrNull()?.items.orEmpty().map { a ->
+        val albums = fetchAllPages { offset -> Spotify.myAlbums(limit = 50, offset = offset) }.map { a ->
             com.music.spotui.data.entity.LibraryEntry(
                 spotifyId = a.id,
                 name = a.name,
@@ -551,7 +585,7 @@ class Api @Inject constructor(
                 artists = a.artists.joinToString(", ") { it.name },
             )
         }
-        val playlists = Spotify.myPlaylists(limit = 50).getOrNull()?.items.orEmpty().map { p ->
+        val playlists = fetchAllPages { offset -> Spotify.myPlaylists(limit = 50, offset = offset) }.map { p ->
             com.music.spotui.data.entity.LibraryEntry(
                 spotifyId = p.id,
                 name = p.name,
@@ -588,12 +622,23 @@ class Api @Inject constructor(
             emit(Response.Error("Spotify not authenticated")); return@flow
         }
         Spotify.likedSongs(limit = 50).fold(
-            onSuccess = { paging ->
-                val models = paging.items.map { it.track.toSongModel() }
+            onSuccess = { first ->
+                val models = first.items.map { it.track.toSongModel() }.toMutableList()
                 // Seed the local like registry so hearts/menus show these as liked
                 // and unliking them can be mirrored back to Spotify.
                 models.forEach { com.music.spotui.data.preferences.addLikedSongId(context, it.id.toString()) }
-                emit(Response.Success(models))
+                // First page immediately, then page through the whole library.
+                emit(Response.Success(models.toList()))
+                var offset = first.items.size
+                while (offset < first.total && first.items.isNotEmpty()) {
+                    val page = Spotify.likedSongs(limit = 50, offset = offset).getOrNull() ?: break
+                    if (page.items.isEmpty()) break
+                    val pageModels = page.items.map { it.track.toSongModel() }
+                    pageModels.forEach { com.music.spotui.data.preferences.addLikedSongId(context, it.id.toString()) }
+                    models += pageModels
+                    offset += page.items.size
+                    emit(Response.Success(models.toList()))
+                }
             },
             onFailure = { Log.e("Api", "getLikedSongs failed", it); emit(Response.Error(it.message ?: "error")) },
         )

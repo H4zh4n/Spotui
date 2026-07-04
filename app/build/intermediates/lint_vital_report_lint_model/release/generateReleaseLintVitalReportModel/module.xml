@@ -6,7 +6,7 @@
     maven="spotui:app:unspecified"
     agpVersion="8.4.2"
     buildFolder="build"
-    bootClassPath="/home/tim/.android-sdk/platforms/android-34/android.jar:/home/tim/.android-sdk/build-tools/34.0.0/core-lambda-stubs.jar"
+    bootClassPath="/home/tim/Android/Sdk/platforms/android-34/android.jar:/home/tim/Android/Sdk/build-tools/34.0.0/core-lambda-stubs.jar"
     javaSourceLevel="17"
     compileTarget="android-34"
     neverShrinking="true">

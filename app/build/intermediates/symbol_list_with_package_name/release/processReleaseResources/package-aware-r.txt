@@ -114,8 +114,10 @@ drawable ic_call_decline_low
 drawable ic_devices
 drawable ic_dots
 drawable ic_down
+drawable ic_download
 drawable ic_h_outline
 drawable ic_home_filled
+drawable ic_launcher_background
 drawable ic_launcher_foreground
 drawable ic_library_big
 drawable ic_minus
@@ -285,6 +287,7 @@ layout notification_template_part_chronometer
 layout notification_template_part_time
 layout splash_screen_view
 mipmap ic_launcher
+mipmap ic_launcher_foreground
 mipmap ic_launcher_round
 string androidx_startup
 string app_name
@@ -432,5 +435,6 @@ styleable NavGraphNavigator startDestination
 styleable NavHost navGraph
 styleable NavInclude graph
 styleable Navigator android_label android_id route
+xml automotive_app_desc
 xml backup_rules
 xml data_extraction_rules

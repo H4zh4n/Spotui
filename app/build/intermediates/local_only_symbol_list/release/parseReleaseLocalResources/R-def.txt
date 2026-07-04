@@ -15,8 +15,10 @@ drawable ic_add
 drawable ic_devices
 drawable ic_dots
 drawable ic_down
+drawable ic_download
 drawable ic_h_outline
 drawable ic_home_filled
+drawable ic_launcher_background
 drawable ic_launcher_foreground
 drawable ic_library_big
 drawable ic_minus
@@ -41,9 +43,11 @@ font spotify_mix_ui_regular
 font spotify_mix_ui_title_bold
 font spotify_mix_ui_title_extrabold
 mipmap ic_launcher
+mipmap ic_launcher_foreground
 mipmap ic_launcher_round
 string app_name
 style Theme.Spotui
 style splashScreenTheme
+xml automotive_app_desc
 xml backup_rules
 xml data_extraction_rules

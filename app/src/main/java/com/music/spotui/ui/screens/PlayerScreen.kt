@@ -54,6 +54,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -334,6 +335,7 @@ fun PlayerScreen(navController: NavController) {
                 PlayerInfo(
                     songTitle, songSinger, songId, context, isLiked,
                     source = SongPlayer.currentSource,
+                    quality = SongPlayer.currentQuality,
                     onArtistClick = {
                         val track = queueSongs.firstOrNull { it.id == songId }
                         playerViewModel.goToArtist(track?.spotifyTrackId.orEmpty(), songSinger) { route ->
@@ -523,6 +525,7 @@ fun PlayerInfo(
     context: Context,
     isLiked: MutableState<Boolean>,
     source: String = "",
+    quality: String = "",
     onArtistClick: (() -> Unit)? = null,
     spotifyTrackId: String = "",
     onShowSavedIn: (() -> Unit)? = null,
@@ -608,7 +611,10 @@ fun PlayerInfo(
                         )
                         Text(
                             // Don't advertise the fallback engine — just "Streamed".
-                            text = if (source == "YouTube") "Streamed" else source,
+                            // Append the stream quality (codec/bitrate or FLAC depth)
+                            // so the user can see what they're actually hearing.
+                            text = (if (source == "YouTube") "Streamed" else source) +
+                                (if (quality.isNotBlank()) " • $quality" else ""),
                             color = badgeColor,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -771,13 +777,9 @@ fun PlayerFull(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
                 ) {
-                    if (shuffle) {
-
-                        playerViewModel.playPreviousSong(queueSongs.shuffled(), context)
-                    } else {
-
-                        playerViewModel.playPreviousSong(queueSongs, context)
-                    }
+                    // The queue itself is already in shuffled order when shuffle
+                    // is on (reordered once at toggle) — never re-shuffle per tap.
+                    playerViewModel.playPreviousSong(queueSongs, context)
                     isLiked.value =
                         isSongLiked(context, playerViewModel.currentSongId.value.toString())
                 }
@@ -842,11 +844,7 @@ fun PlayerFull(
                     indication = null
                 ) {
 
-                    if (shuffle) {
-                        playerViewModel.playNextSongs(queueSongs.shuffled(), context)
-                    } else {
-                        playerViewModel.playNextSongs(queueSongs, context)
-                    }
+                    playerViewModel.playNextSongs(queueSongs, context)
                     isLiked.value =
                         isSongLiked(context, playerViewModel.currentSongId.value.toString())
                 }
@@ -1062,7 +1060,7 @@ fun PlayerOptionsSheet(
                     onDismiss()
                 }
                 PlayerMenuRow(
-                    icon = if (downloaded) Icons.Default.CheckCircle else Icons.Default.KeyboardArrowDown,
+                    icon = if (downloaded) Icons.Default.CheckCircle else ImageVector.vectorResource(R.drawable.ic_download),
                     iconTint = if (downloaded) Color(AppPalette.toArgb()) else Color.White,
                     label = when {
                         downloaded -> "Downloaded — remove"

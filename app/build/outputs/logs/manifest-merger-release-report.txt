@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:2:1-44:12
-INJECTED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:2:1-44:12
-INJECTED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:2:1-44:12
-INJECTED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:2:1-44:12
+ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:2:1-52:12
+INJECTED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:2:1-52:12
+INJECTED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:2:1-52:12
+INJECTED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:2:1-52:12
 MERGED from [com.github.bumptech.glide:compose:1.0.0-beta01] /home/tim/.gradle/caches/transforms-4/f78de0337e08ed568ba783ab91104c6c/transformed/compose-1.0.0-beta01/AndroidManifest.xml:2:1-7:12
 MERGED from [androidx.media3:media3-session:1.3.1] /home/tim/.gradle/caches/transforms-4/536c2e4dedba2c9b7588416af514463f/transformed/media3-session-1.3.1/AndroidManifest.xml:17:1-22:12
 MERGED from [androidx.media3:media3-extractor:1.3.1] /home/tim/.gradle/caches/transforms-4/8d867eeccfc2358f71612e5d16301a5e/transformed/media3-extractor-1.3.1/AndroidManifest.xml:17:1-22:12
@@ -121,8 +121,8 @@ ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManife
 	android:name
 		ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:8:22-74
 application
-ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:10:5-42:19
-INJECTED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:10:5-42:19
+ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:10:5-50:19
+INJECTED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:10:5-50:19
 MERGED from [androidx.emoji2:emoji2:1.3.0] /home/tim/.gradle/caches/transforms-4/fe351634f0abb679b5e0f4b8999c15af/transformed/emoji2-1.3.0/AndroidManifest.xml:23:5-33:19
 MERGED from [androidx.emoji2:emoji2:1.3.0] /home/tim/.gradle/caches/transforms-4/fe351634f0abb679b5e0f4b8999c15af/transformed/emoji2-1.3.0/AndroidManifest.xml:23:5-33:19
 MERGED from [androidx.lifecycle:lifecycle-process:2.8.2] /home/tim/.gradle/caches/transforms-4/45f4fd97f485fc5ec9e175770cd8096d/transformed/lifecycle-process-2.8.2/AndroidManifest.xml:23:5-33:19
@@ -189,20 +189,34 @@ category#android.intent.category.LAUNCHER
 ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:30:17-77
 	android:name
 		ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:30:27-74
+meta-data#com.google.android.gms.car.application
+ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:35:9-37:59
+	android:resource
+		ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:37:13-56
+	android:name
+		ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:36:13-66
 service#com.music.spotui.ui.notification.PlaybackService
-ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:34:9-41:19
+ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:39:9-49:19
 	android:exported
-		ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:36:13-36
+		ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:41:13-36
 	android:foregroundServiceType
-		ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:37:13-58
+		ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:42:13-58
 	android:name
-		ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:35:13-60
-intent-filter#action:name:androidx.media3.session.MediaSessionService
-ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:38:13-40:29
+		ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:40:13-60
+intent-filter#action:name:android.media.browse.MediaBrowserService+action:name:androidx.media3.session.MediaLibraryService+action:name:androidx.media3.session.MediaSessionService
+ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:43:13-48:29
 action#androidx.media3.session.MediaSessionService
-ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:39:17-86
+ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:44:17-86
 	android:name
-		ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:39:25-83
+		ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:44:25-83
+action#androidx.media3.session.MediaLibraryService
+ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:45:17-86
+	android:name
+		ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:45:25-83
+action#android.media.browse.MediaBrowserService
+ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:47:17-83
+	android:name
+		ADDED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml:47:25-80
 uses-sdk
 INJECTED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from /home/tim/Documents/Meld/git/spotui-github/app/src/main/AndroidManifest.xml

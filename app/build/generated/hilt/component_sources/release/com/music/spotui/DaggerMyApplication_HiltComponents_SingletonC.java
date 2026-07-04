@@ -633,6 +633,14 @@ public final class DaggerMyApplication_HiltComponents_SingletonC {
 
     }
 
+    Api api() {
+      return new Api(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));
+    }
+
+    AppRepository appRepository() {
+      return new AppRepository(api());
+    }
+
     @Override
     public void injectPlaybackService(PlaybackService arg0) {
       injectPlaybackService2(arg0);
@@ -640,6 +648,7 @@ public final class DaggerMyApplication_HiltComponents_SingletonC {
 
     private PlaybackService injectPlaybackService2(PlaybackService instance) {
       PlaybackService_MembersInjector.injectCurrentSongState(instance, singletonCImpl.currentSongStateProvider.get());
+      PlaybackService_MembersInjector.injectRepository(instance, appRepository());
       return instance;
     }
   }
@@ -663,7 +672,7 @@ public final class DaggerMyApplication_HiltComponents_SingletonC {
     }
 
     @Override
-    public void injectMyApplication(MyApplication arg0) {
+    public void injectMyApplication(MyApplication myApplication) {
     }
 
     @Override

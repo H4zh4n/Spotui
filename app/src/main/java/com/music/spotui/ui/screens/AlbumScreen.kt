@@ -42,6 +42,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -348,7 +350,7 @@ fun SumUpAlbumScreen(
                             }
                             Icon(
                                 imageVector = if (albumDownloaded)
-                                    Icons.Default.CheckCircle else Icons.Default.KeyboardArrowDown,
+                                    Icons.Default.CheckCircle else ImageVector.vectorResource(R.drawable.ic_download),
                                 tint = if (albumDownloaded) Color(AppPalette.toArgb()) else Color.White,
                                 modifier = Modifier
                                     .size(24.dp)
@@ -364,10 +366,39 @@ fun SumUpAlbumScreen(
                                     },
                                 contentDescription = "Download album",
                             )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            // Shuffle-play: start the album in random order.
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_player_shuffle),
+                                tint = Color.White,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {
+                                        albumViewModel.startShuffled(albumSongs)?.let { first ->
+                                            SongPlayer.playSong(first.url, context)
+                                            albumViewModel.updateSongState(
+                                                first.coverUri,
+                                                first.title,
+                                                first.singer,
+                                                true,
+                                                first.id,
+                                                0,
+                                                albumName,
+                                            )
+                                        }
+                                    },
+                                contentDescription = "Shuffle play",
+                            )
                         }
 
 
-                        if(!albumViewModel.currentSongPlayingState.value && albumSongs.isNotEmpty()){
+                        // Always visible: pause when playing, resume when this
+                        // album's track is paused, otherwise start from the top.
+                        if (albumSongs.isNotEmpty()) {
+                            val playing = albumViewModel.currentSongPlayingState.value
                             androidx.compose.foundation.layout.Box(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier
@@ -378,25 +409,34 @@ fun SumUpAlbumScreen(
                                         interactionSource = remember { MutableInteractionSource() },
                                         indication = null
                                     ) {
-                                        albumViewModel.updateQueue(albumSongs)
-                                        SongPlayer.playSong(albumSongs[0].url, context)
-                                        albumViewModel.updateSongState(
-                                            albumSongs[0].coverUri,
-                                            albumSongs[0].title,
-                                            albumSongs[0].singer,
-                                            true,
-                                            albumSongs[0].id,
-                                            0,
-                                            albumName
-                                        )
+                                        when {
+                                            playing -> albumViewModel.setPlaying(false)
+                                            albumSongs.any { it.id == albumViewModel.currentSongId.value } ->
+                                                albumViewModel.setPlaying(true)
+                                            else -> {
+                                                albumViewModel.updateQueue(albumSongs)
+                                                SongPlayer.playSong(albumSongs[0].url, context)
+                                                albumViewModel.updateSongState(
+                                                    albumSongs[0].coverUri,
+                                                    albumSongs[0].title,
+                                                    albumSongs[0].singer,
+                                                    true,
+                                                    albumSongs[0].id,
+                                                    0,
+                                                    albumName
+                                                )
+                                            }
+                                        }
                                     }
                             ) {
                                 Icon(
                                     modifier = Modifier
                                         .size(25.dp),
                                     tint = Color.Black,
-                                    painter = painterResource(id = R.drawable.play_svgrepo_com),
-                                    contentDescription = "")
+                                    painter = painterResource(
+                                        id = if (playing) R.drawable.ic_playing else R.drawable.play_svgrepo_com,
+                                    ),
+                                    contentDescription = if (playing) "Pause" else "Play")
                             }
                         }
                     }

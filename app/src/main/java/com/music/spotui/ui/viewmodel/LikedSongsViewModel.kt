@@ -29,6 +29,14 @@ class LikedSongsViewModel @Inject constructor(
     val queue: State<List<SongsModel>> get() = currentSongState.queue
     fun updateQueue(songs: List<SongsModel>) = currentSongState.updateQueue(songs)
 
+    fun startShuffled(songs: List<SongsModel>) = currentSongState.startShuffled(songs)
+
+    /** Pause/resume global playback (the header play button stays visible while playing). */
+    fun setPlaying(playing: Boolean) {
+        if (playing) com.music.spotui.di.SongPlayer.play() else com.music.spotui.di.SongPlayer.pause()
+        currentSongState.updatePlayingState(playing)
+    }
+
     fun updateSongState(coverUri: String, title: String, singer: String, playingState: Boolean, songId: Int, songIndex: Int = 0, album: String = "") {
         currentSongState.updateSongState(coverUri, title, singer, playingState, songId, songIndex, album)
     }

@@ -1,7 +1,7 @@
 package com.music.spotui.ui.notification;
 
 import androidx.annotation.CallSuper;
-import androidx.media3.session.MediaSessionService;
+import androidx.media3.session.MediaLibraryService;
 import dagger.hilt.android.internal.managers.ServiceComponentManager;
 import dagger.hilt.internal.GeneratedComponentManagerHolder;
 import dagger.hilt.internal.UnsafeCasts;
@@ -13,7 +13,7 @@ import javax.annotation.processing.Generated;
  * A generated base class to be extended by the @dagger.hilt.android.AndroidEntryPoint annotated class. If using the Gradle plugin, this is swapped as the base class via bytecode transformation.
  */
 @Generated("dagger.hilt.android.processor.internal.androidentrypoint.ServiceGenerator")
-public abstract class Hilt_PlaybackService extends MediaSessionService implements GeneratedComponentManagerHolder {
+public abstract class Hilt_PlaybackService extends MediaLibraryService implements GeneratedComponentManagerHolder {
   private volatile ServiceComponentManager componentManager;
 
   private final Object componentManagerLock = new Object();
