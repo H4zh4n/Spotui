@@ -600,6 +600,7 @@ fun PlayerScreen(navController: NavController) {
                     quality = SongPlayer.currentQuality,
                     isResolving = playerViewModel.isResolving.value,
                     resolveStatus = playerViewModel.resolveStatus.value,
+                    resolveError = playerViewModel.resolveError.value,
                     onArtistClick = {
                         val track = queueSongs.firstOrNull { it.id == songId }
                         playerViewModel.goToArtist(track?.spotifyTrackId.orEmpty(), songSinger) { route ->
@@ -793,6 +794,7 @@ fun PlayerInfo(
     quality: String = "",
     isResolving: Boolean = false,
     resolveStatus: String = "",
+    resolveError: String? = null,
     onArtistClick: (() -> Unit)? = null,
     spotifyTrackId: String = "",
     onShowSavedIn: (() -> Unit)? = null,
@@ -858,11 +860,13 @@ fun PlayerInfo(
                     ) { onArtistClick() } else Modifier,
                 )
                 val isResolvingState = isResolving && resolveStatus.isNotBlank()
-                val displaySource = if (isResolvingState) "Resolving" else source
+                val hasError = !resolveError.isNullOrBlank()
+                val displaySource = if (isResolvingState) "Resolving" else if (hasError) "Error" else source
                 if (displaySource.isNotBlank()) {
                     // Source badge: green = real Spotify; other colors = not Spotify
                     // (Lossless via SpotiFLAC's Tidal/Qobuz/Amazon mirrors, or YouTube).
                     val badgeColor = when {
+                        hasError -> Color(0xFFFF6B6B)
                         isResolvingState -> Color(0xFF3DABFF)
                         source == "Spotify" -> Color(0xFF1ED760)
                         source.startsWith("Lossless") -> Color(0xFFFFC862)
@@ -883,9 +887,13 @@ fun PlayerInfo(
                             // Don't advertise the fallback engine — just "Streamed".
                             // Append the stream quality (codec/bitrate or FLAC depth)
                             // so the user can see what they're actually hearing.
-                            text = if (isResolvingState) resolveStatus else {
-                                (if (source == "YouTube") "Streamed" else source) +
-                                    (if (quality.isNotBlank()) " • $quality" else "")
+                            text = when {
+                                hasError -> resolveError!!
+                                isResolvingState -> resolveStatus
+                                else -> {
+                                    (if (source == "YouTube") "Streamed" else source) +
+                                        (if (quality.isNotBlank()) " • $quality" else "")
+                                }
                             },
                             color = badgeColor,
                             fontSize = 11.sp,

@@ -71,6 +71,8 @@ object SongPlayer {
     @Volatile var currentQuality: String = ""
         private set
 
+    @Volatile private var lastYtFailureReason: String? = null
+
     private fun updateResolveStatus(isResolving: Boolean, status: String = "") {
         boundState?.updateResolveState(isResolving, status)
     }
@@ -549,7 +551,17 @@ object SongPlayer {
             updateResolveStatus(true, "Locating YouTube source...")
         }
         val playback = resolveYtPlayback(song, quality.audioQuality, appContext, forPlayback = forPlayback) ?: run {
-            if (forPlayback) updateResolveStatus(false)
+            if (forPlayback) {
+                val cacheKey = "$song|${com.metrolist.innertube.YouTube.SearchFilter.FILTER_SONG.value}"
+                val cachedCandidates = videoCandidatesCache[cacheKey]
+                val reason = when {
+                    cachedCandidates == null -> "YouTube search failed"
+                    cachedCandidates.isEmpty() -> "No matching song found on YouTube"
+                    else -> lastYtFailureReason ?: "All candidates failed to resolve"
+                }
+                boundState?.updateResolveError(reason)
+                updateResolveStatus(false)
+            }
             return null
         }
         // e.g. "OPUS 141 kbps" from the chosen adaptive format.
@@ -1233,6 +1245,7 @@ object SongPlayer {
         appContext: Context,
         forPlayback: Boolean = false,
     ): YTPlayerUtils.PlaybackData? {
+        lastYtFailureReason = null
         val connectivityManager =
             appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         // Skip the HTTP HEAD validation probe when the video ID came from a
@@ -1254,7 +1267,10 @@ object SongPlayer {
                     skipValidation = skipValidation,
                 ).fold(
                     onSuccess = { return it },
-                    onFailure = { Log.w(TAG, "stream failed for $videoId (${it.message}) — trying next candidate for: ${searchTextForPlayback(query)}") },
+                    onFailure = { 
+                        lastYtFailureReason = it.message ?: "Stream failed"
+                        Log.w(TAG, "stream failed for $videoId (${it.message}) — trying next candidate for: ${searchTextForPlayback(query)}") 
+                    },
                 )
             }
             return null

@@ -137,9 +137,19 @@ class CurrentSongState @Inject constructor() {
     private val _isBuffering: MutableState<Boolean> = mutableStateOf(false)
     val isBuffering: State<Boolean> get() = _isBuffering
 
+    private val _resolveError: MutableState<String?> = mutableStateOf(null)
+    val resolveError: State<String?> get() = _resolveError
+
+    fun updateResolveError(error: String?) {
+        _resolveError.value = error
+    }
+
     fun updateResolveState(isResolving: Boolean, status: String = "") {
         _isResolving.value = isResolving
         _resolveStatus.value = status
+        if (isResolving) {
+            _resolveError.value = null
+        }
     }
 
     fun updateBufferingState(isBuffering: Boolean) {

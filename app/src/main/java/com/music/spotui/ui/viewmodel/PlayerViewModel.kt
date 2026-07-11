@@ -36,6 +36,7 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
     val isResolving: State<Boolean> get() = currentSongState.isResolving
     val resolveStatus: State<String> get() = currentSongState.resolveStatus
     val isBuffering: State<Boolean> get() = currentSongState.isBuffering
+    val resolveError: State<String?> get() = currentSongState.resolveError
 
     val currentSongId : State<Int> get() = currentSongState.songId
 
