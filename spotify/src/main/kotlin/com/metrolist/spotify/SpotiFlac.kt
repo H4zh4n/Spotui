@@ -281,29 +281,48 @@ object SpotiFlac {
         id: String,
         quality: String,
     ): Result {
-        val resp: HttpResponse = runCatching {
-            client.post("$base$DL_PATH") {
-                header("x-api-key", API_KEY)
-                header("User-Agent", UA)
-                header("Accept", "application/json")
-                contentType(ContentType.Application.Json)
-                setBody(json.encodeToString(JsonObject.serializer(), buildJsonObject {
-                    put("id", id)
-                    put("quality", quality)
-                }))
-            }
-        }.getOrElse { return Result.Error(it.message ?: "network error") }
+        // Retry transient errors (429/502/504) with a short backoff — the proxies
+        // are flaky-but-alive far more often than genuinely down. 503 is a real
+        // scheduled cooldown, so we surface it instead of hammering.
+        var resp: HttpResponse? = null
+        val maxAttempts = 3
+        for (attempt in 1..maxAttempts) {
+            val r = runCatching {
+                client.post("$base$DL_PATH") {
+                    header("x-api-key", API_KEY)
+                    header("User-Agent", UA)
+                    header("Accept", "application/json")
+                    contentType(ContentType.Application.Json)
+                    setBody(json.encodeToString(JsonObject.serializer(), buildJsonObject {
+                        put("id", id)
+                        put("quality", quality)
+                    }))
+                }
+            }.getOrElse { return Result.Error(it.message ?: "network error") }
 
-        val bodyText = runCatching { resp.bodyAsText() }.getOrDefault("")
-        if (resp.status.value == 503) {
-            val msg = runCatching {
-                json.parseToJsonElement(bodyText).jsonObject["detail"]?.jsonPrimitive?.contentOrNull
-            }.getOrNull() ?: "Lossless servers are busy. Try again shortly."
-            log("W", "$provider on cooldown (503)")
-            return Result.Cooldown(msg)
+            if (r.status.value == 503) {
+                val msg = runCatching {
+                    json.parseToJsonElement(runCatching { r.bodyAsText() }.getOrDefault(""))
+                        .jsonObject["detail"]?.jsonPrimitive?.contentOrNull
+                }.getOrNull() ?: "Lossless servers are busy. Try again shortly."
+                log("W", "$provider on cooldown (503)")
+                return Result.Cooldown(msg)
+            }
+            if (r.status.value in intArrayOf(429, 502, 504) && attempt < maxAttempts) {
+                val retryAfter = r.headers["Retry-After"]?.toIntOrNull()?.takeIf { it in 1..3 }
+                val waitMs = (retryAfter ?: attempt) * 1000L
+                log("W", "$provider transient ${r.status.value}, retrying in ${waitMs}ms ($attempt/$maxAttempts)")
+                kotlinx.coroutines.delay(waitMs)
+                continue
+            }
+            resp = r
+            break
         }
-        if (resp.status.value !in 200..299) {
-            return Result.Error("$provider HTTP ${resp.status.value}")
+        val response = resp ?: return Result.Error("$provider unavailable")
+
+        val bodyText = runCatching { response.bodyAsText() }.getOrDefault("")
+        if (response.status.value !in 200..299) {
+            return Result.Error("$provider HTTP ${response.status.value}")
         }
 
         val url = extractStreamUrl(bodyText)
