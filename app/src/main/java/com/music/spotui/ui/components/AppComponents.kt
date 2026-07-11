@@ -60,6 +60,8 @@ import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.GridBackground
 import com.music.spotui.ui.viewmodel.PlayerViewModel
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 
 @Composable
 fun Loader() {
@@ -163,11 +165,34 @@ fun MiniPlayer(navController: NavHostController) {
                 .fillMaxWidth()
                 //.background(Color.Green)
                 .padding(0.dp, 4.dp)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {
-                    navController.navigate(Routes.Player.route)
+                .pointerInput(Unit) {
+                    var dragThresholdPassed = false
+                    var totalDragY = 0f
+                    val dragThreshold = 15.dp.toPx()
+                    val tapThreshold = 5.dp.toPx()
+                    detectDragGestures(
+                        onDragStart = {
+                            dragThresholdPassed = false
+                            totalDragY = 0f
+                        },
+                        onDragEnd = {
+                            if (!dragThresholdPassed && kotlin.math.abs(totalDragY) < tapThreshold) {
+                                navController.navigate(Routes.Player.route)
+                            }
+                        },
+                        onDragCancel = {
+                            if (!dragThresholdPassed && kotlin.math.abs(totalDragY) < tapThreshold) {
+                                navController.navigate(Routes.Player.route)
+                            }
+                        }
+                    ) { change, dragAmount ->
+                        change.consume()
+                        totalDragY += dragAmount.y
+                        if (totalDragY < -dragThreshold && !dragThresholdPassed) {
+                            dragThresholdPassed = true
+                            navController.navigate(Routes.Player.route)
+                        }
+                    }
                 }
         ){
 

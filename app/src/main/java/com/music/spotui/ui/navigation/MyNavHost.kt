@@ -17,7 +17,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.dialog
 import androidx.navigation.navArgument
+import androidx.compose.ui.window.DialogProperties
 import com.music.spotui.ui.screens.AlbumScreen
 import com.music.spotui.ui.screens.ArtistReleasesScreen
 import com.music.spotui.ui.screens.ArtistScreen
@@ -38,9 +40,7 @@ import com.music.spotui.ui.viewmodel.PlayerViewModel
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun MyNavHost(
-    navHostController: NavHostController,
-    bottomBarState: MutableState<Boolean>,
-    bottomBarPlayerState: MutableState<Boolean>
+    navHostController: NavHostController
 ) {
 
     val playerViewModel : PlayerViewModel = hiltViewModel()
@@ -83,78 +83,45 @@ fun MyNavHost(
         popExitTransition = { fadeOut(animationSpec = tween(150)) },
     ){
         composable(Routes.Login.route){
-            LaunchedEffect(Unit) {
-                bottomBarState.value = false
-                bottomBarPlayerState.value = false
-            }
             SpotifyLoginScreen(navHostController)
         }
         composable(Routes.Home.route){
-            LaunchedEffect(playerState) {
-                bottomBarState.value = true
-                bottomBarPlayerState.value = playerState != ""
-            }
-                HomeScreen(navHostController)
+            HomeScreen(navHostController)
         }
         composable(Routes.Search.route){
-            LaunchedEffect(playerState) {
-                bottomBarState.value = true
-                bottomBarPlayerState.value = playerState != ""
-            }
             SearchScreen(navHostController)
         }
         composable(Routes.Library.route) {
-            LaunchedEffect(playerState) {
-                bottomBarState.value = true
-                bottomBarPlayerState.value = playerState != ""
-            }
             LibraryScreen(navHostController)
         }
-        composable(Routes.Player.route){
-            LaunchedEffect(playerState) {
-                bottomBarState.value = false
-                bottomBarPlayerState.value = playerState != ""
-            }
+        dialog(
+            route = Routes.Player.route,
+            dialogProperties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            )
+        ) {
             PlayerScreen(navHostController)
         }
 
         composable(Routes.Queue.route){
-            LaunchedEffect(playerState) {
-                bottomBarState.value = false
-                bottomBarPlayerState.value = false
-            }
             QueueScreen(navHostController)
         }
 
         composable(Routes.Liked.route){
-            LaunchedEffect(playerState) {
-                bottomBarState.value = true
-                bottomBarPlayerState.value = playerState != ""
-            }
             LikedSongsScreen(navHostController)
         }
 
         composable(Routes.Downloads.route){
-            LaunchedEffect(playerState) {
-                bottomBarState.value = true
-                bottomBarPlayerState.value = playerState != ""
-            }
             DownloadsScreen(navHostController)
         }
 
         composable(Routes.Settings.route){
-            LaunchedEffect(playerState) {
-                bottomBarState.value = true
-                bottomBarPlayerState.value = playerState != ""
-            }
             SettingsScreen(navHostController)
         }
 
         composable(Routes.History.route){
-            LaunchedEffect(playerState) {
-                bottomBarState.value = true
-                bottomBarPlayerState.value = playerState != ""
-            }
             HistoryScreen(navHostController)
         }
 
@@ -162,10 +129,6 @@ fun MyNavHost(
             "${Routes.Category.route}/{genre}?title={title}",
             arguments = listOf(navArgument("title") { defaultValue = "" }),
         ) { navBackStackEntry ->
-            LaunchedEffect(playerState) {
-                bottomBarState.value = true
-                bottomBarPlayerState.value = playerState != ""
-            }
             val genre = navBackStackEntry.arguments?.getString("genre").orEmpty()
             val title = navBackStackEntry.arguments?.getString("title").orEmpty()
             CategoryScreen(navHostController, genre = genre, title = title.ifBlank { genre })
@@ -175,11 +138,6 @@ fun MyNavHost(
             "${Routes.Album.route}/{uString}?artist={artist}",
             arguments = listOf(navArgument("artist") { defaultValue = "" }),
         ) { navBackStackEntry ->
-            LaunchedEffect(playerState) {
-                bottomBarState.value = true
-                bottomBarPlayerState.value = playerState != ""
-            }
-
             /* Extracting the id from the route */
             val uId = navBackStackEntry.arguments?.getString("uString")
             val artist = navBackStackEntry.arguments?.getString("artist").orEmpty()
@@ -193,10 +151,6 @@ fun MyNavHost(
             "${Routes.Playlist.route}/{pId}?name={name}",
             arguments = listOf(navArgument("name") { defaultValue = "" }),
         ) { navBackStackEntry ->
-            LaunchedEffect(playerState) {
-                bottomBarState.value = true
-                bottomBarPlayerState.value = playerState != ""
-            }
             val pId = navBackStackEntry.arguments?.getString("pId")
             val name = navBackStackEntry.arguments?.getString("name").orEmpty()
             pId?.let { PlaylistScreen(navHostController, playlistId = it, playlistName = name) }
@@ -206,20 +160,12 @@ fun MyNavHost(
             "${Routes.Show.route}/{sId}?name={name}",
             arguments = listOf(navArgument("name") { defaultValue = "" }),
         ) { navBackStackEntry ->
-            LaunchedEffect(playerState) {
-                bottomBarState.value = true
-                bottomBarPlayerState.value = playerState != ""
-            }
             val sId = navBackStackEntry.arguments?.getString("sId")
             val name = navBackStackEntry.arguments?.getString("name").orEmpty()
             sId?.let { ShowScreen(navHostController, showId = it, showName = name) }
         }
 
         composable("${Routes.ArtistReleases.route}/{aString}") { navBackStackEntry ->
-            LaunchedEffect(playerState) {
-                bottomBarState.value = true
-                bottomBarPlayerState.value = playerState != ""
-            }
             val aId = navBackStackEntry.arguments?.getString("aString")
             aId?.let { ArtistReleasesScreen(navHostController, it) }
         }
@@ -228,11 +174,6 @@ fun MyNavHost(
             "${Routes.Artist.route}/{aString}?id={artistId}",
             arguments = listOf(navArgument("artistId") { defaultValue = "" }),
         ) { navBackStackEntry ->
-            LaunchedEffect(playerState) {
-                bottomBarState.value = true
-                bottomBarPlayerState.value = playerState != ""
-            }
-
             /* Extracting the id from the route */
             val aId = navBackStackEntry.arguments?.getString("aString")
             val artistId = navBackStackEntry.arguments?.getString("artistId").orEmpty()

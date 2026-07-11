@@ -108,10 +108,133 @@ import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.PlayerViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 
 @OptIn(ExperimentalGlideComposeApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun PlayerScreen(navController: NavController) {
+    val density = LocalDensity.current
+    val screenHeight = with(density) {
+        val dpHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
+        if (dpHeight.value > 0f) dpHeight.toPx() else 2000f
+    }
+    val coroutineScope = rememberCoroutineScope()
+    
+    // offsetY represents the current translation offset of the player screen.
+    // It starts at screenHeight (so the screen initially renders fully off-screen)
+    // and animates up to 0f.
+    var offsetY by remember { mutableFloatStateOf(screenHeight) }
+    val animatable = remember { Animatable(screenHeight) }
+    
+    // Configure Dialog Window if this screen is opened inside a Compose dialog destination.
+    // This removes background dim, sets window size to full screen, and allows transparent/translucent navigation.
+    val view = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.SideEffect {
+        val window = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+        if (window != null) {
+            window.setDimAmount(0f)
+            window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
+            window.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
+            window.setStatusBarColor(android.graphics.Color.TRANSPARENT)
+            window.setNavigationBarColor(android.graphics.Color.TRANSPARENT)
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        }
+    }
+
+    // Animate the player sliding up when first opened
+    LaunchedEffect(Unit) {
+        animatable.animateTo(0f, animationSpec = tween(350)) {
+            offsetY = this.value
+        }
+    }
+    
+    // Function to handle sliding down the player and popping the backstack
+    val dismissPlayer: () -> Unit = {
+        coroutineScope.launch {
+            animatable.snapTo(offsetY)
+            animatable.animateTo(screenHeight, animationSpec = tween(300)) {
+                offsetY = this.value
+            }
+            navController.navigateUp()
+        }
+    }
+    
+    // Intercept hardware system back press to slide player down smoothly
+    BackHandler {
+        dismissPlayer()
+    }
+    
+    // Create nested scroll connection to handle drag gestures
+    val nestedScrollConnection = remember(screenHeight) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val delta = available.y
+                // If the player is currently offset (offsetY > 0) and the user drags up (delta < 0),
+                // we consume the drag to slide the player back up towards 0.
+                if (offsetY > 0f && delta < 0f) {
+                    val newOffset = (offsetY + delta).coerceIn(0f, screenHeight)
+                    offsetY = newOffset
+                    return Offset(0f, delta)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                val delta = available.y
+                // If there is unconsumed downward scroll (delta > 0) because the list is at the top,
+                // we consume it to translate the player screen down.
+                if (delta > 0f) {
+                    offsetY = (offsetY + delta).coerceIn(0f, screenHeight)
+                    return Offset(0f, delta)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                // When the drag is released, if the player is offset, animate it to either 0f or screenHeight
+                if (offsetY > 0f) {
+                    val targetValue = if (offsetY > screenHeight * 0.25f || available.y > 1000f) {
+                        screenHeight
+                    } else {
+                        0f
+                    }
+                    
+                    animatable.snapTo(offsetY)
+                    animatable.animateTo(
+                        targetValue = targetValue,
+                        initialVelocity = available.y
+                    ) {
+                        offsetY = this.value
+                    }
+                    
+                    if (targetValue == screenHeight) {
+                        navController.navigateUp()
+                    }
+                    return available
+                }
+                return Velocity.Zero
+            }
+        }
+    }
+
     val playerViewModel : PlayerViewModel = hiltViewModel()
     val songTitle = playerViewModel.currentSongTitle.value
     val songSinger = playerViewModel.currentSongSinger.value
@@ -290,6 +413,11 @@ fun PlayerScreen(navController: NavController) {
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .nestedScroll(nestedScrollConnection)
+            .graphicsLayer {
+                translationY = offsetY
+                alpha = (1f - (offsetY / screenHeight)).coerceIn(0f, 1f)
+            }
             .background(
                 Brush.verticalGradient(
                     colors = listOf(dominentColor, Color.Black),
@@ -335,9 +463,10 @@ fun PlayerScreen(navController: NavController) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             PlayerTopBar(
-                navController,
+                navController = navController,
                 onMenuClick = { showMenu = true },
                 contextName = playerViewModel.currentSongAlbum.value,
+                onBackClick = { dismissPlayer() }
             )
             //Spacer(modifier = Modifier.padding(16.dp))
             // Swipe the artwork left/right to skip to the next/previous track. Using a
@@ -531,6 +660,7 @@ fun PlayerTopBar(
     navController: NavController,
     onMenuClick: () -> Unit,
     contextName: String = "",
+    onBackClick: () -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier
@@ -542,7 +672,7 @@ fun PlayerTopBar(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null
             ) {
-                       navController.navigateUp()
+                       onBackClick()
             },
             painter = painterResource(id = R.drawable.ic_down),
             tint = Color.White,
