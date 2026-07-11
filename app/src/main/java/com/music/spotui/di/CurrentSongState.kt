@@ -72,6 +72,8 @@ class CurrentSongState @Inject constructor() {
         // Seed the lyrics resolver with track ids so it can use Spotify's own
         // color-lyrics endpoint (exact synced lyrics) instead of LRCLIB matching.
         com.music.spotui.data.api.LyricsApi.registerTracks(songs)
+        // Persist the current queue so a fresh launch can restore it.
+        com.music.spotui.data.preferences.saveLastQueue(com.music.spotui.MyApplication.instance, songs)
     }
 
     val shuffle = mutableStateOf(false)
@@ -115,6 +117,8 @@ class CurrentSongState @Inject constructor() {
                 if (idx >= 0) _songIndex.value = idx
             }
         }
+        // Persist the current queue after shuffle changes.
+        com.music.spotui.data.preferences.saveLastQueue(com.music.spotui.MyApplication.instance, _queue.value)
     }
 
     /**

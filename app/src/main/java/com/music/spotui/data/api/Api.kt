@@ -33,7 +33,7 @@ import javax.inject.Inject
  * text, rather than a direct stream URL.
  */
 class Api @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
 ) {
     private fun stableId(key: String): Int = key.hashCode() and 0x7fffffff
 

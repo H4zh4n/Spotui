@@ -29,10 +29,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Person
-
-import androidx.compose.material.icons.filled.List
 
 
 import androidx.compose.material3.AlertDialog
@@ -495,11 +493,11 @@ fun DownloadsScreen(navController: NavController) {
                             Spacer(modifier = Modifier.height(4.dp))
                             DownloadSortOption.entries.forEach { option ->
                                 val isSelected = option == currentSort
-                                val icon = when (option) {
-                                    DownloadSortOption.DATE -> Icons.Default.DateRange
-                                    DownloadSortOption.TITLE -> Icons.Default.List
-                                    DownloadSortOption.ARTIST -> Icons.Default.Person
-                                }
+                                 val icon = when (option) {
+                                     DownloadSortOption.DATE -> Icons.Default.DateRange
+                                     DownloadSortOption.TITLE -> Icons.AutoMirrored.Filled.List
+                                     DownloadSortOption.ARTIST -> Icons.Default.Person
+                                 }
 
                                 Row(
                                     modifier = Modifier

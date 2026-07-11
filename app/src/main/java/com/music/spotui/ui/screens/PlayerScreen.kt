@@ -38,7 +38,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
@@ -1665,7 +1665,7 @@ fun PlayerMenuRow(
         )
         if (trailingArrow) {
             Icon(
-                imageVector = Icons.Default.KeyboardArrowRight,
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 tint = Color.Gray,
                 modifier = Modifier.size(20.dp),
                 contentDescription = null
@@ -1705,7 +1705,6 @@ private fun CanvasVideo(url: String, modifier: Modifier = Modifier) {
                 controllerAutoShow = false
                 setShowBuffering(androidx.media3.ui.PlayerView.SHOW_BUFFERING_NEVER)
                 setArtworkDisplayMode(androidx.media3.ui.PlayerView.ARTWORK_DISPLAY_MODE_OFF)
-                setUseArtwork(false)
                 setDefaultArtwork(null)
                 hideController()
                 resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM

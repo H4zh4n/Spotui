@@ -4,7 +4,7 @@ import androidx.annotation.DrawableRes
 import com.music.spotui.R
 
 sealed class Routes(
-    @DrawableRes val icon : Int = 0,
+    @param:DrawableRes val icon : Int = 0,
     val label : String,
     val route : String
 ) {

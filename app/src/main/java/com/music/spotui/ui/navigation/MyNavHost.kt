@@ -65,9 +65,12 @@ fun MyNavHost(
     LaunchedEffect(Unit) {
         if (playerViewModel.currentSongTitle.value.isBlank()) {
             com.music.spotui.data.preferences.loadLastPlayback(context)?.let { (song, positionMs) ->
-                playerViewModel.updateQueue(listOf(song))
+                val savedQueue = com.music.spotui.data.preferences.loadLastQueue(context)
+                val queue = if (savedQueue.isNotEmpty()) savedQueue else listOf(song)
+                val idx = queue.indexOfFirst { it.id == song.id }.coerceAtLeast(0)
+                playerViewModel.updateQueue(queue)
                 playerViewModel.updateSongState(
-                    song.coverUri, song.title, song.singer, false, song.id, 0, song.album)
+                    song.coverUri, song.title, song.singer, false, song.id, idx, song.album)
                 com.music.spotui.di.SongPlayer.setRestorePoint(song.url, positionMs)
             }
         }

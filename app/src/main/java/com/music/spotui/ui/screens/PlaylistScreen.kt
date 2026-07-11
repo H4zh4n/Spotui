@@ -32,7 +32,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -570,7 +570,7 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                         val isSelected = option == currentSort
                         val icon = when (option) {
                             PlaylistSortOption.DATE -> Icons.Default.DateRange
-                            PlaylistSortOption.TITLE -> Icons.Default.List
+                            PlaylistSortOption.TITLE -> Icons.AutoMirrored.Filled.List
                             PlaylistSortOption.ARTIST -> Icons.Default.Person
                             PlaylistSortOption.ALBUM -> Icons.Default.Menu
                         }
