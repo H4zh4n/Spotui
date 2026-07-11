@@ -213,7 +213,9 @@ fun PlayerScreen(navController: NavController) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 val delta = available.y
-                cancelAnimation()
+                if (source == NestedScrollSource.Drag) {
+                    cancelAnimation()
+                }
                 // If the player is currently offset (offsetY > 0) and the user drags up (delta < 0),
                 // we consume the drag to slide the player back up towards 0.
                 if (offsetY > 0f && delta < 0f) {
@@ -230,7 +232,9 @@ fun PlayerScreen(navController: NavController) {
                 source: NestedScrollSource
             ): Offset {
                 val delta = available.y
-                cancelAnimation()
+                if (source == NestedScrollSource.Drag) {
+                    cancelAnimation()
+                }
                 // If there is unconsumed downward scroll (delta > 0) because the list is at the top,
                 // we consume it to translate the player screen down.
                 if (delta > 0f) {
@@ -249,6 +253,32 @@ fun PlayerScreen(navController: NavController) {
                         else -> if (offsetY > screenHeight * 0.25f) screenHeight else 0f
                     }
                     
+                    cancelAnimation()
+                    val job = coroutineScope.launch {
+                        try {
+                            runAnimation(targetValue, available.y)
+                        } catch (e: Exception) {
+                            // ignore
+                        }
+                    }
+                    animationJob = job
+                    try {
+                        job.join()
+                    } catch (e: Exception) {
+                        // ignore
+                    }
+                    return available
+                }
+                return Velocity.Zero
+            }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                if (offsetY > 0f) {
+                    val targetValue = when {
+                        available.y < -500f -> 0f
+                        available.y > 500f -> screenHeight
+                        else -> if (offsetY > screenHeight * 0.25f) screenHeight else 0f
+                    }
                     cancelAnimation()
                     val job = coroutineScope.launch {
                         try {
@@ -446,18 +476,6 @@ fun PlayerScreen(navController: NavController) {
                             if (animationJob != null) {
                                 cancelAnimation()
                             }
-                        } else {
-                            if (!isFlinging && offsetY > 0f && offsetY < screenHeight) {
-                                val targetValue = if (offsetY > screenHeight * 0.25f) screenHeight else 0f
-                                cancelAnimation()
-                                animationJob = coroutineScope.launch {
-                                    try {
-                                        runAnimation(targetValue, 0f)
-                                    } catch (e: Exception) {
-                                        // ignore
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -578,6 +596,8 @@ fun PlayerScreen(navController: NavController) {
                     songTitle, songSinger, songId, context, isLiked,
                     source = SongPlayer.currentSource,
                     quality = SongPlayer.currentQuality,
+                    isResolving = playerViewModel.isResolving.value,
+                    resolveStatus = playerViewModel.resolveStatus.value,
                     onArtistClick = {
                         val track = queueSongs.firstOrNull { it.id == songId }
                         playerViewModel.goToArtist(track?.spotifyTrackId.orEmpty(), songSinger) { route ->
@@ -769,6 +789,8 @@ fun PlayerInfo(
     isLiked: MutableState<Boolean>,
     source: String = "",
     quality: String = "",
+    isResolving: Boolean = false,
+    resolveStatus: String = "",
     onArtistClick: (() -> Unit)? = null,
     spotifyTrackId: String = "",
     onShowSavedIn: (() -> Unit)? = null,
@@ -833,10 +855,13 @@ fun PlayerInfo(
                         indication = null,
                     ) { onArtistClick() } else Modifier,
                 )
-                if (source.isNotBlank()) {
+                val isResolvingState = isResolving && resolveStatus.isNotBlank()
+                val displaySource = if (isResolvingState) "Resolving" else source
+                if (displaySource.isNotBlank()) {
                     // Source badge: green = real Spotify; other colors = not Spotify
                     // (Lossless via SpotiFLAC's Tidal/Qobuz/Amazon mirrors, or YouTube).
                     val badgeColor = when {
+                        isResolvingState -> Color(0xFF3DABFF)
                         source == "Spotify" -> Color(0xFF1ED760)
                         source.startsWith("Lossless") -> Color(0xFFFFC862)
                         source == "Downloaded" -> Color(0xFF9C9C9C)
@@ -856,8 +881,10 @@ fun PlayerInfo(
                             // Don't advertise the fallback engine — just "Streamed".
                             // Append the stream quality (codec/bitrate or FLAC depth)
                             // so the user can see what they're actually hearing.
-                            text = (if (source == "YouTube") "Streamed" else source) +
-                                (if (quality.isNotBlank()) " • $quality" else ""),
+                            text = if (isResolvingState) resolveStatus else {
+                                (if (source == "YouTube") "Streamed" else source) +
+                                    (if (quality.isNotBlank()) " • $quality" else "")
+                            },
                             color = badgeColor,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
@@ -1065,18 +1092,27 @@ fun PlayerFull(
             ,
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                modifier = Modifier
-                    .size(30.dp)
+            val isLocatingOrBuffering = playerViewModel.isResolving.value || playerViewModel.isBuffering.value
+            if (isLocatingOrBuffering) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(30.dp),
+                    color = Color.Black,
+                    strokeWidth = 3.dp
+                )
+            } else {
+                Icon(
+                    modifier = Modifier
+                        .size(30.dp)
 
-                ,
-                tint = Color.Black,
-                painter = if (songPlayingState)
-                    painterResource(id = R.drawable.ic_playing)
-                else
-                    painterResource(id = R.drawable.play_svgrepo_com)
-                ,
-                contentDescription = "")
+                    ,
+                    tint = Color.Black,
+                    painter = if (songPlayingState)
+                        painterResource(id = R.drawable.ic_playing)
+                    else
+                        painterResource(id = R.drawable.play_svgrepo_com)
+                    ,
+                    contentDescription = "")
+            }
         }
 
         Icon(

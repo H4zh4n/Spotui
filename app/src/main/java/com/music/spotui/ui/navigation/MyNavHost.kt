@@ -99,7 +99,8 @@ fun MyNavHost(
             dialogProperties = DialogProperties(
                 usePlatformDefaultWidth = false,
                 dismissOnBackPress = false,
-                dismissOnClickOutside = false
+                dismissOnClickOutside = false,
+                decorFitsSystemWindows = false
             )
         ) {
             PlayerScreen(navHostController)
