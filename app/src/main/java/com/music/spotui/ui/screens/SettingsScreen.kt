@@ -12,15 +12,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -55,6 +59,10 @@ import com.music.spotui.data.preferences.setCellularQuality
 import com.music.spotui.data.preferences.setDownloadQuality
 import com.music.spotui.data.preferences.setVideoFallbackEnabled
 import com.music.spotui.data.preferences.setWifiQuality
+import com.music.spotui.data.preferences.getUpdateRepoUrl
+import com.music.spotui.data.preferences.setUpdateRepoUrl
+import com.music.spotui.data.preferences.resetUpdateRepoUrl
+import com.music.spotui.data.preferences.DEFAULT_UPDATE_REPO_URL
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 
@@ -69,6 +77,7 @@ fun SettingsScreen(navController: NavController) {
     var crossfadeMs by remember { mutableStateOf(getCrossfadeMs(context).toFloat()) }
     var videoFallback by remember { mutableStateOf(isVideoFallbackEnabled(context)) }
     var batteryOptExempt by remember { mutableStateOf(BatteryOptimizationHelper.isIgnoringBatteryOptimization(context)) }
+    var updateRepoUrl by remember { mutableStateOf(getUpdateRepoUrl(context)) }
 
     val batteryOptLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -213,6 +222,52 @@ fun SettingsScreen(navController: NavController) {
                     activeTrackColor = AppPalette,
                     inactiveTrackColor = Color(0xFF333333),
                 ),
+            )
+            Spacer(Modifier.height(12.dp))
+            SectionTitle("Updates")
+            Text(
+                "Update source repository",
+                color = Color.White,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                "GitHub repo URL used to check for new versions",
+                color = Color(0xFFB3B3B3),
+                fontSize = 12.sp,
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = updateRepoUrl,
+                onValueChange = {
+                    updateRepoUrl = it
+                    setUpdateRepoUrl(context, it)
+                },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedBorderColor = AppPalette,
+                    unfocusedBorderColor = Color(0xFF333333),
+                    cursorColor = AppPalette,
+                    focusedPlaceholderColor = Color(0xFF666666),
+                    unfocusedPlaceholderColor = Color(0xFF666666),
+                ),
+                placeholder = { Text("https://github.com/Owner/Repo") },
+                trailingIcon = {
+                    Icon(
+                        imageVector = Icons.Filled.Refresh,
+                        contentDescription = "Reset to default",
+                        tint = if (updateRepoUrl != DEFAULT_UPDATE_REPO_URL) AppPalette else Color(0xFF444444),
+                        modifier = Modifier
+                            .padding(end = 4.dp)
+                            .clickable {
+                                updateRepoUrl = DEFAULT_UPDATE_REPO_URL
+                                resetUpdateRepoUrl(context)
+                            }
+                    )
+                },
             )
             Spacer(Modifier.height(12.dp))
             SectionTitle("Account")

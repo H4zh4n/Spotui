@@ -31,6 +31,8 @@ private const val KEY_WEB_PLAYBACK = "web_playback_enabled"
 private const val KEY_VIDEO_FALLBACK = "video_fallback_enabled"
 private const val KEY_LIBRARY_GRID = "library_grid_view"
 private const val KEY_IGNORE_BATTERY_OPT = "ignore_battery_optimization"
+private const val KEY_UPDATE_REPO_URL = "update_repo_url"
+const val DEFAULT_UPDATE_REPO_URL = "https://github.com/H4zh4n/Spotui"
 
 /** Off (0s) … 12s. 0 disables crossfade. */
 const val CROSSFADE_MIN_MS = 0
@@ -100,6 +102,15 @@ fun setCrossfadeDjMode(c: Context, v: Boolean) = prefs(c).edit().putBoolean(KEY_
 
 fun isIgnoreBatteryOptimization(c: Context): Boolean = prefs(c).getBoolean(KEY_IGNORE_BATTERY_OPT, false)
 fun setIgnoreBatteryOptimization(c: Context, v: Boolean) = prefs(c).edit().putBoolean(KEY_IGNORE_BATTERY_OPT, v).apply()
+
+fun getUpdateRepoUrl(c: Context): String =
+    prefs(c).getString(KEY_UPDATE_REPO_URL, DEFAULT_UPDATE_REPO_URL).orEmpty().ifBlank { DEFAULT_UPDATE_REPO_URL }
+
+fun setUpdateRepoUrl(c: Context, url: String) =
+    prefs(c).edit().putString(KEY_UPDATE_REPO_URL, url).apply()
+
+fun resetUpdateRepoUrl(c: Context) =
+    prefs(c).edit().remove(KEY_UPDATE_REPO_URL).apply()
 
 /**
  * The streaming quality to use for the *current* active network: the cellular setting
