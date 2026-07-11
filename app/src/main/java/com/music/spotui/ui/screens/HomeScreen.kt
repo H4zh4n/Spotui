@@ -115,11 +115,28 @@ fun HomeScreen(navController: NavController){
 
             else -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "Couldn't load music.\nCheck your connection and try again.",
-                        color = Color.White,
-                        textAlign = TextAlign.Center,
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "Couldn't load music.\nCheck your connection and try again.",
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            text = "Go to Downloads",
+                            color = Color(0xFF1ED760), // Spotify Green
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            modifier = Modifier
+                                .clickable {
+                                    navController.navigate(Routes.Downloads.route)
+                                }
+                                .padding(12.dp)
+                        )
+                    }
                 }
             }
         }

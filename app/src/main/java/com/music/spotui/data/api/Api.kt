@@ -576,7 +576,18 @@ class Api @Inject constructor(
     suspend fun getLibrary(): Flow<Response<List<com.music.spotui.data.entity.LibraryEntry>>> = flow {
         HomeCache.library?.let { emit(Response.Success(it)) } ?: emit(Response.Loading())
         if (!SpotifyTokenProvider.ensureToken(context)) {
-            if (HomeCache.library == null) emit(Response.Error("Spotify not authenticated — set sp_dc cookie"))
+            if (HomeCache.library == null) {
+                val downloaded = com.music.spotui.data.entity.LibraryEntry(
+                    spotifyId = DOWNLOADS_ID,
+                    name = "Downloaded",
+                    subtitle = "Available offline",
+                    coverUri = "",
+                    isPlaylist = true,
+                )
+                emit(Response.Success(listOf(downloaded)))
+            } else {
+                emit(Response.Success(HomeCache.library!!))
+            }
             return@flow
         }
         val albums = fetchAllPages { offset -> Spotify.myAlbums(limit = 50, offset = offset) }.map { a ->
