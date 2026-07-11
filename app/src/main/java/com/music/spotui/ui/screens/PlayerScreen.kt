@@ -116,6 +116,7 @@ import kotlinx.coroutines.launch
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.mutableFloatStateOf
@@ -137,7 +138,7 @@ fun PlayerScreen(navController: NavController) {
         if (dpHeight.value > 0f) dpHeight.toPx() else 2000f
     }
     val coroutineScope = rememberCoroutineScope()
-    
+
     // offsetY represents the current translation offset of the player screen.
     // It starts at screenHeight (so the screen initially renders fully off-screen)
     // and animates up to 0f.
@@ -145,81 +146,130 @@ fun PlayerScreen(navController: NavController) {
     val animatable = remember { Animatable(screenHeight) }
 
     var animationJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    var isFlinging by remember { mutableStateOf(false) }
 
-    suspend fun runAnimation(targetValue: Float, velocity: Float) {
-        isFlinging = true
+    // Track whether the entrance animation has completed so the auto-dismiss
+    // safety-net doesn't fire on the initial off-screen state.
+    var hasAppeared by remember { mutableStateOf(false) }
+
+    suspend fun slideTo(targetValue: Float, velocity: Float = 0f) {
         try {
             animatable.snapTo(offsetY)
             animatable.animateTo(
                 targetValue = targetValue,
-                initialVelocity = velocity
+                initialVelocity = velocity,
+                animationSpec = if (targetValue == 0f || targetValue == screenHeight)
+                    tween(350) else spring()
             ) {
                 offsetY = this.value
             }
-            if (targetValue == screenHeight) {
-                navController.navigateUp()
-            }
-        } finally {
-            isFlinging = false
+        } catch (_: kotlinx.coroutines.CancellationException) {
+            // Animation was cancelled — offsetY is wherever the Animatable stopped.
         }
     }
 
-    val cancelAnimation = {
+    fun cancelRunningAnimation() {
         animationJob?.cancel()
         animationJob = null
     }
-    
-    // Configure Dialog Window if this screen is opened inside a Compose dialog destination.
-    // This removes background dim, sets window size to full screen, and allows transparent/translucent navigation.
+
+    fun launchAnimation(targetValue: Float, velocity: Float = 0f) {
+        cancelRunningAnimation()
+        animationJob = coroutineScope.launch {
+            slideTo(targetValue, velocity)
+            if (targetValue == screenHeight) {
+                navController.navigateUp()
+            }
+        }
+    }
+
+    // ── Safety net: if offsetY ever reaches the bottom after the player has
+    //    opened, dismiss regardless of how it got there. ──
+    LaunchedEffect(offsetY) {
+        if (hasAppeared && offsetY >= screenHeight - 1f) {
+            navController.navigateUp()
+        }
+    }
+
+    // ── Configure dialog window for edge-to-edge ──
+    // `decorFitsSystemWindows = false` in DialogProperties does NOT actually
+    // make a Compose Navigation dialog draw behind system bars (known unfixed
+    // issue).  The proven workaround is to copy the Activity window's
+    // LayoutParams onto the dialog window and resize the dialog's parent view
+    // to fill the screen — see https://stackoverflow.com/a/75768025
     val view = androidx.compose.ui.platform.LocalView.current
     androidx.compose.runtime.SideEffect {
-        val window = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
-        if (window != null) {
-            window.setDimAmount(0f)
-            window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
-            window.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
-            window.setStatusBarColor(android.graphics.Color.TRANSPARENT)
-            window.setNavigationBarColor(android.graphics.Color.TRANSPARENT)
-            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
-            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        // Walk up the view tree to find the dialog window.
+        var dialogWindow: android.view.Window? = null
+        var v: android.view.View? = view
+        while (v != null) {
+            if (v is androidx.compose.ui.window.DialogWindowProvider) {
+                dialogWindow = v.window
+                break
+            }
+            val parent = v.parent
+            if (parent is android.view.View) {
+                v = parent
+            } else {
+                if (parent is androidx.compose.ui.window.DialogWindowProvider) {
+                    dialogWindow = parent.window
+                    break
+                }
+                break
+            }
+        }
+        // Get the Activity window through the context (works even inside a dialog).
+        val activityWindow = generateSequence<android.content.Context>(view.context) { ctx ->
+            (ctx as? android.content.ContextWrapper)?.baseContext
+        }.filterIsInstance<android.app.Activity>().firstOrNull()?.window
+
+        if (activityWindow != null && dialogWindow != null) {
+            // Copy the Activity's window attributes (which already have
+            // edge-to-edge configured) onto the dialog window.
+            val attrs = android.view.WindowManager.LayoutParams()
+            attrs.copyFrom(activityWindow.attributes)
+            attrs.type = dialogWindow.attributes.type
+            dialogWindow.attributes = attrs
+            // Resize the dialog's parent view to fill the screen.
+            val parentView = view.parent as? android.view.View
+            parentView?.layoutParams = android.widget.FrameLayout.LayoutParams(
+                activityWindow.decorView.width,
+                activityWindow.decorView.height
+            )
+            // Make bars transparent.
+            dialogWindow.statusBarColor = android.graphics.Color.TRANSPARENT
+            dialogWindow.navigationBarColor = android.graphics.Color.TRANSPARENT
         }
     }
 
     // Animate the player sliding up when first opened
     LaunchedEffect(Unit) {
-        animatable.animateTo(0f, animationSpec = tween(350)) {
-            offsetY = this.value
-        }
+        slideTo(0f)
+        hasAppeared = true
     }
-    
+
     // Function to handle sliding down the player and popping the backstack
     val dismissPlayer: () -> Unit = {
-        cancelAnimation()
-        animationJob = coroutineScope.launch {
-            try {
-                runAnimation(screenHeight, 0f)
-            } catch (e: Exception) {
-                // ignore
-            }
-        }
+        launchAnimation(screenHeight)
     }
-    
+
     // Intercept hardware system back press to slide player down smoothly
     BackHandler {
         dismissPlayer()
     }
-    
+
     // Create nested scroll connection to handle drag gestures
     val nestedScrollConnection = remember(screenHeight) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 val delta = available.y
+                // Only cancel ongoing slide animations when the USER is physically
+                // dragging.  Fling-driven scroll events must not interfere.
                 if (source == NestedScrollSource.Drag) {
-                    cancelAnimation()
+                    cancelRunningAnimation()
                 }
-                // If the player is currently offset (offsetY > 0) and the user drags up (delta < 0),
-                // we consume the drag to slide the player back up towards 0.
+                // If the player is currently offset (offsetY > 0) and the user
+                // drags up (delta < 0), consume the drag to slide the player back
+                // up towards 0.
                 if (offsetY > 0f && delta < 0f) {
                     val newOffset = (offsetY + delta).coerceIn(0f, screenHeight)
                     offsetY = newOffset
@@ -235,10 +285,10 @@ fun PlayerScreen(navController: NavController) {
             ): Offset {
                 val delta = available.y
                 if (source == NestedScrollSource.Drag) {
-                    cancelAnimation()
+                    cancelRunningAnimation()
                 }
-                // If there is unconsumed downward scroll (delta > 0) because the list is at the top,
-                // we consume it to translate the player screen down.
+                // Unconsumed downward scroll (delta > 0) because the list is at
+                // the top — translate the player screen down.
                 if (delta > 0f) {
                     offsetY = (offsetY + delta).coerceIn(0f, screenHeight)
                     return Offset(0f, delta)
@@ -247,54 +297,24 @@ fun PlayerScreen(navController: NavController) {
             }
 
             override suspend fun onPreFling(available: Velocity): Velocity {
-                // When the drag is released, if the player is offset, animate it to either 0f or screenHeight
+                // When the drag is released, if the player is offset, animate it
+                // to either 0f (open) or screenHeight (dismiss).
                 if (offsetY > 0f) {
                     val targetValue = when {
                         available.y < -500f -> 0f
                         available.y > 500f -> screenHeight
                         else -> if (offsetY > screenHeight * 0.25f) screenHeight else 0f
                     }
-                    
-                    cancelAnimation()
                     val job = coroutineScope.launch {
-                        try {
-                            runAnimation(targetValue, available.y)
-                        } catch (e: Exception) {
-                            // ignore
+                        slideTo(targetValue, available.y)
+                        if (targetValue == screenHeight) {
+                            navController.navigateUp()
                         }
                     }
                     animationJob = job
                     try {
                         job.join()
-                    } catch (e: Exception) {
-                        // ignore
-                    }
-                    return available
-                }
-                return Velocity.Zero
-            }
-
-            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                if (offsetY > 0f) {
-                    val targetValue = when {
-                        available.y < -500f -> 0f
-                        available.y > 500f -> screenHeight
-                        else -> if (offsetY > screenHeight * 0.25f) screenHeight else 0f
-                    }
-                    cancelAnimation()
-                    val job = coroutineScope.launch {
-                        try {
-                            runAnimation(targetValue, available.y)
-                        } catch (e: Exception) {
-                            // ignore
-                        }
-                    }
-                    animationJob = job
-                    try {
-                        job.join()
-                    } catch (e: Exception) {
-                        // ignore
-                    }
+                    } catch (_: Exception) { }
                     return available
                 }
                 return Velocity.Zero
@@ -476,7 +496,7 @@ fun PlayerScreen(navController: NavController) {
                         val anyPressed = event.changes.any { it.pressed }
                         if (anyPressed) {
                             if (animationJob != null) {
-                                cancelAnimation()
+                                cancelRunningAnimation()
                             }
                         }
                     }
