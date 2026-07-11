@@ -191,12 +191,15 @@ object SongPlayer {
         currentRequest = song
         // A manual play (tap / next / prev) supersedes any in-flight crossfade.
         cancelCrossfade()
-        // Do not keep the previous track audible while this request resolves.
-        // Otherwise the UI can show the newly tapped track while old audio keeps
-        // playing for several seconds, or forever if resolution fails.
+        // Update the player with a placeholder MediaItem containing the new metadata immediately,
+        // so Media3 keeps the notification/foreground service alive and displays the new track info
+        // with a loading spinner while we resolve the stream URL in the background!
         runCatching {
+            ensurePlayer(appContext)
             player?.pause()
-            player?.clearMediaItems()
+            val placeholderMediaItem = buildMediaItem("", streamMimeType(""))
+            player?.setMediaItem(placeholderMediaItem)
+            player?.prepare() // Transitions to STATE_BUFFERING, keeping session active!
         }
 
         // Podcast episodes are encoded as "episode:<id>" queries — play them via the
