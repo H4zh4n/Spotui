@@ -2,19 +2,25 @@ package com.music.spotui.ui.notification
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.os.Bundle
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.session.CommandButton
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
 import com.music.spotui.MainActivity
+import com.music.spotui.R
 import com.music.spotui.data.api.Api
 import com.music.spotui.data.api.Response
 import com.music.spotui.data.entity.SongsModel
@@ -63,6 +69,27 @@ class PlaybackService : MediaLibraryService() {
     override fun onCreate() {
         super.onCreate()
         SongPlayer.ensureCreated(this)
+
+        // explicitly order notification buttons to put the close button on the right
+        val notificationProvider = object : DefaultMediaNotificationProvider(this) {
+            override fun getMediaButtons(
+                session: MediaSession,
+                playerCommands: Player.Commands,
+                customLayout: ImmutableList<CommandButton>,
+                showPauseButton: Boolean
+            ): ImmutableList<CommandButton> {
+                val buttons = super.getMediaButtons(session, playerCommands, customLayout, showPauseButton)
+                val closeBtn = buttons.find { it.sessionCommand?.customAction == "ACTION_CLOSE" }
+                return if (closeBtn != null) {
+                    val filtered = buttons.filter { it != closeBtn }
+                    ImmutableList.builder<CommandButton>().addAll(filtered).add(closeBtn).build()
+                } else {
+                    buttons
+                }
+            }
+        }
+        setMediaNotificationProvider(notificationProvider)
+
         // Let the player advance the in-app queue itself during a crossfade.
         SongPlayer.bindState(currentSongState)
         val base = SongPlayer.exoPlayer ?: return
@@ -173,6 +200,50 @@ class PlaybackService : MediaLibraryService() {
     }
 
     private inner class LibraryCallback : MediaLibrarySession.Callback {
+
+        override fun onConnect(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo
+        ): MediaSession.ConnectionResult {
+            val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                .add(SessionCommand("ACTION_CLOSE", Bundle.EMPTY))
+                .add(SessionCommand("ACTION_NONE", Bundle.EMPTY))
+                .build()
+
+            val emptyButton = CommandButton.Builder()
+                .setDisplayName(" ")
+                .setSessionCommand(SessionCommand("ACTION_NONE", Bundle.EMPTY))
+                .setIconResId(R.drawable.ic_transparent)
+                .setEnabled(false)
+                .build()
+
+            val closeButton = CommandButton.Builder()
+                .setDisplayName("Close")
+                .setSessionCommand(SessionCommand("ACTION_CLOSE", Bundle.EMPTY))
+                .setIconResId(R.drawable.ic_close)
+                .build()
+
+            // ponytail: push close button to the right by adding an empty spacer button first
+            return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                .setAvailableSessionCommands(sessionCommands)
+                .setCustomLayout(ImmutableList.of(emptyButton, closeButton))
+                .build()
+        }
+
+        override fun onCustomCommand(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            customCommand: SessionCommand,
+            args: Bundle
+        ): ListenableFuture<SessionResult> {
+            if (customCommand.customAction == "ACTION_CLOSE") {
+                // exit the player and kill the process directly to terminate the app cleanly
+                SongPlayer.pause()
+                android.os.Process.killProcess(android.os.Process.myPid())
+                return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+            }
+            return super.onCustomCommand(session, controller, customCommand, args)
+        }
 
         override fun onGetLibraryRoot(
             session: MediaLibrarySession,
