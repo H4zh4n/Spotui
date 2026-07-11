@@ -84,6 +84,7 @@ object YTPlayerUtils {
         playlistId: String? = null,
         audioQuality: AudioQuality,
         connectivityManager: ConnectivityManager,
+        skipValidation: Boolean = false,
     ): Result<PlaybackData> = runCatching {
         Timber.tag(TAG).d("=== PLAYER RESPONSE FOR PLAYBACK ===")
         Timber.tag(TAG).d("videoId: $videoId")
@@ -98,25 +99,35 @@ object YTPlayerUtils {
         val isLoggedIn = YouTube.cookie != null
         Timber.tag(TAG).d("Authentication status: ${if (isLoggedIn) "LOGGED_IN" else "ANONYMOUS"}")
 
-        // Get signature timestamp (same as before for normal content)
-        val signatureTimestamp = getSignatureTimestampOrNull(videoId)
-        Timber.tag(logTag).d("Signature timestamp: ${signatureTimestamp.timestamp}")
-
-        // Generate PoToken
-        var poToken: PoTokenResult? = null
+        // Run signature-timestamp and PoToken generation in parallel — they are
+        // independent and each takes 1-3s, so overlapping them nearly halves the
+        // cold-start latency. Both are blocking calls, so we use Java futures on
+        // the IO executor rather than coroutine async (runCatching is non-suspend).
         val sessionId = if (isLoggedIn) YouTube.dataSyncId else YouTube.visitorData
         val mainClientNeedsPoToken = MAIN_CLIENT.useWebPoTokens
-        if (mainClientNeedsPoToken && sessionId != null) {
-            Timber.tag(logTag).d("Generating PoToken for WEB_REMIX with sessionId")
-            try {
-                poToken = poTokenGenerator.getWebClientPoToken(videoId, sessionId)
-                if (poToken != null) {
-                    Timber.tag(logTag).d("PoToken generated successfully")
-                }
-            } catch (e: Exception) {
-                Timber.tag(logTag).e(e, "PoToken generation failed: ${e.message}")
-            }
+
+        val sigFuture = java.util.concurrent.CompletableFuture.supplyAsync {
+            getSignatureTimestampOrNull(videoId)
         }
+        val potFuture: java.util.concurrent.CompletableFuture<PoTokenResult?>? =
+            if (mainClientNeedsPoToken && sessionId != null) {
+                java.util.concurrent.CompletableFuture.supplyAsync {
+                    Timber.tag(logTag).d("Generating PoToken for WEB_REMIX with sessionId")
+                    try {
+                        poTokenGenerator.getWebClientPoToken(videoId, sessionId).also {
+                            if (it != null) Timber.tag(logTag).d("PoToken generated successfully")
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag(logTag).e(e, "PoToken generation failed: ${e.message}")
+                        null
+                    }
+                }
+            } else null
+
+        val signatureTimestamp = sigFuture.get()
+        Timber.tag(logTag).d("Signature timestamp: ${signatureTimestamp.timestamp}")
+        var poToken: PoTokenResult? = potFuture?.get()
+
         // If MAIN_CLIENT needs a PoToken but we couldn't get one (WebView missing, JS
         // blocked, network hostile), WEB_REMIX will return streams that 403 on play.
         // Skip it and go straight to the fallback chain.
@@ -362,7 +373,7 @@ object YTPlayerUtils {
                     break
                 }
 
-                if (validateStatus(streamUrl)) {
+                if (skipValidation || validateStatus(streamUrl)) {
                     // working stream found
                     Timber.tag(logTag).d("Stream validated successfully with client: ${currentClient.clientName}")
                     // Log for release builds

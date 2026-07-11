@@ -28,6 +28,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -139,6 +141,32 @@ fun PlayerScreen(navController: NavController) {
     // and animates up to 0f.
     var offsetY by remember { mutableFloatStateOf(screenHeight) }
     val animatable = remember { Animatable(screenHeight) }
+
+    var animationJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var isFlinging by remember { mutableStateOf(false) }
+
+    suspend fun runAnimation(targetValue: Float, velocity: Float) {
+        isFlinging = true
+        try {
+            animatable.snapTo(offsetY)
+            animatable.animateTo(
+                targetValue = targetValue,
+                initialVelocity = velocity
+            ) {
+                offsetY = this.value
+            }
+            if (targetValue == screenHeight) {
+                navController.navigateUp()
+            }
+        } finally {
+            isFlinging = false
+        }
+    }
+
+    val cancelAnimation = {
+        animationJob?.cancel()
+        animationJob = null
+    }
     
     // Configure Dialog Window if this screen is opened inside a Compose dialog destination.
     // This removes background dim, sets window size to full screen, and allows transparent/translucent navigation.
@@ -151,6 +179,7 @@ fun PlayerScreen(navController: NavController) {
             window.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
             window.setStatusBarColor(android.graphics.Color.TRANSPARENT)
             window.setNavigationBarColor(android.graphics.Color.TRANSPARENT)
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS)
             androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         }
     }
@@ -164,12 +193,13 @@ fun PlayerScreen(navController: NavController) {
     
     // Function to handle sliding down the player and popping the backstack
     val dismissPlayer: () -> Unit = {
-        coroutineScope.launch {
-            animatable.snapTo(offsetY)
-            animatable.animateTo(screenHeight, animationSpec = tween(300)) {
-                offsetY = this.value
+        cancelAnimation()
+        animationJob = coroutineScope.launch {
+            try {
+                runAnimation(screenHeight, 0f)
+            } catch (e: Exception) {
+                // ignore
             }
-            navController.navigateUp()
         }
     }
     
@@ -183,6 +213,7 @@ fun PlayerScreen(navController: NavController) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
                 val delta = available.y
+                cancelAnimation()
                 // If the player is currently offset (offsetY > 0) and the user drags up (delta < 0),
                 // we consume the drag to slide the player back up towards 0.
                 if (offsetY > 0f && delta < 0f) {
@@ -199,6 +230,7 @@ fun PlayerScreen(navController: NavController) {
                 source: NestedScrollSource
             ): Offset {
                 val delta = available.y
+                cancelAnimation()
                 // If there is unconsumed downward scroll (delta > 0) because the list is at the top,
                 // we consume it to translate the player screen down.
                 if (delta > 0f) {
@@ -211,22 +243,25 @@ fun PlayerScreen(navController: NavController) {
             override suspend fun onPreFling(available: Velocity): Velocity {
                 // When the drag is released, if the player is offset, animate it to either 0f or screenHeight
                 if (offsetY > 0f) {
-                    val targetValue = if (offsetY > screenHeight * 0.25f || available.y > 1000f) {
-                        screenHeight
-                    } else {
-                        0f
+                    val targetValue = when {
+                        available.y < -500f -> 0f
+                        available.y > 500f -> screenHeight
+                        else -> if (offsetY > screenHeight * 0.25f) screenHeight else 0f
                     }
                     
-                    animatable.snapTo(offsetY)
-                    animatable.animateTo(
-                        targetValue = targetValue,
-                        initialVelocity = available.y
-                    ) {
-                        offsetY = this.value
+                    cancelAnimation()
+                    val job = coroutineScope.launch {
+                        try {
+                            runAnimation(targetValue, available.y)
+                        } catch (e: Exception) {
+                            // ignore
+                        }
                     }
-                    
-                    if (targetValue == screenHeight) {
-                        navController.navigateUp()
+                    animationJob = job
+                    try {
+                        job.join()
+                    } catch (e: Exception) {
+                        // ignore
                     }
                     return available
                 }
@@ -402,6 +437,31 @@ fun PlayerScreen(navController: NavController) {
         modifier = Modifier
             .fillMaxSize()
             .nestedScroll(nestedScrollConnection)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val anyPressed = event.changes.any { it.pressed }
+                        if (anyPressed) {
+                            if (animationJob != null) {
+                                cancelAnimation()
+                            }
+                        } else {
+                            if (!isFlinging && offsetY > 0f && offsetY < screenHeight) {
+                                val targetValue = if (offsetY > screenHeight * 0.25f) screenHeight else 0f
+                                cancelAnimation()
+                                animationJob = coroutineScope.launch {
+                                    try {
+                                        runAnimation(targetValue, 0f)
+                                    } catch (e: Exception) {
+                                        // ignore
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             .graphicsLayer {
                 translationY = offsetY
                 alpha = (1f - (offsetY / screenHeight)).coerceIn(0f, 1f)
@@ -438,8 +498,7 @@ fun PlayerScreen(navController: NavController) {
         }
         androidx.compose.foundation.lazy.LazyColumn(
             modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding(),
+                .fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
         item {
@@ -450,6 +509,7 @@ fun PlayerScreen(navController: NavController) {
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Spacer(modifier = Modifier.statusBarsPadding())
             PlayerTopBar(
                 navController = navController,
                 onMenuClick = { showMenu = true },

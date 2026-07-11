@@ -57,5 +57,10 @@ class MyApplication : Application(){
         appScope.launch { runCatching { api.getHomeFeed().collect {} } }
         appScope.launch { runCatching { api.getAlbums().collect {} } }
         appScope.launch { runCatching { api.getArtists().collect {} } }
+        // Pre-warm the YouTube playback pipeline so the first tap doesn't pay for
+        // cold-starting the player.js parser and BotGuard WebView (~2-4s combined).
+        appScope.launch {
+            runCatching { com.metrolist.innertube.NewPipeExtractor.init() }
+        }
     }
 }
