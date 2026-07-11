@@ -68,6 +68,7 @@ class PlaybackService : MediaLibraryService() {
 
     private val playerListener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
+            currentSongState.updateBufferingState(playbackState == Player.STATE_BUFFERING)
             if (playbackState == Player.STATE_ENDED) {
                 if (SongPlayer.isCrossfadeActive()) {
                     // Ignore the old player's STATE_ENDED event during an active crossfade.

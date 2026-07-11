@@ -122,6 +122,24 @@ class CurrentSongState @Inject constructor() {
         repeat.value = newRepeatState
     }
 
+    private val _isResolving: MutableState<Boolean> = mutableStateOf(false)
+    val isResolving: State<Boolean> get() = _isResolving
+
+    private val _resolveStatus: MutableState<String> = mutableStateOf("")
+    val resolveStatus: State<String> get() = _resolveStatus
+
+    private val _isBuffering: MutableState<Boolean> = mutableStateOf(false)
+    val isBuffering: State<Boolean> get() = _isBuffering
+
+    fun updateResolveState(isResolving: Boolean, status: String = "") {
+        _isResolving.value = isResolving
+        _resolveStatus.value = status
+    }
+
+    fun updateBufferingState(isBuffering: Boolean) {
+        _isBuffering.value = isBuffering
+    }
+
     /** Sync the play/pause state without touching the rest of the now-playing
      *  metadata — used to reflect the web player's real state (e.g. after the
      *  system notification's pause button) back into the in-app UI. */

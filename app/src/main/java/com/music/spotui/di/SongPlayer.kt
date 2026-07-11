@@ -16,6 +16,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import java.text.Normalizer
 import kotlin.math.abs
 import kotlin.math.PI
@@ -69,6 +70,10 @@ object SongPlayer {
     // "OPUS 141 kbps"), shown next to the source badge.
     @Volatile var currentQuality: String = ""
         private set
+
+    private fun updateResolveStatus(isResolving: Boolean, status: String = "") {
+        boundState?.updateResolveState(isResolving, status)
+    }
     private val qualityCache = java.util.concurrent.ConcurrentHashMap<String, String>()
     // When SpotiFLAC returns Cooldown, record the timestamp so subsequent plays
     // within 60s skip the lossless attempt entirely (avoids burning 4s per tap).
@@ -239,7 +244,12 @@ object SongPlayer {
                 runCatching { player?.pause() }
                 currentSource = "Spotify"
                 currentQuality = ""
+                updateResolveStatus(true, "Loading Spotify track...")
                 SpotifyWebPlayer.play(spotifyId)
+                scope.launch {
+                    delay(1500)
+                    updateResolveStatus(false)
+                }
                 return
             }
             Log.w(TAG, "web playback on but no Spotify id for query: $song — using fallback engine")
@@ -254,12 +264,19 @@ object SongPlayer {
                             android.widget.Toast.LENGTH_SHORT,
                         ).show()
                     }
+                    updateResolveStatus(false)
                     return@launch
                 }
                 // A newer tap superseded this one while we were resolving — drop it.
-                if (currentRequest != song) return@launch
+                if (currentRequest != song) {
+                    updateResolveStatus(false)
+                    return@launch
+                }
                 withContext(Dispatchers.Main) {
-                    if (currentRequest != song) return@withContext
+                    if (currentRequest != song) {
+                        updateResolveStatus(false)
+                        return@withContext
+                    }
                     ensurePlayer(appContext)
                     player!!.setMediaItem(buildMediaItem(streamUrl, streamMimeType(streamUrl)))
                     player!!.prepare()
@@ -270,10 +287,12 @@ object SongPlayer {
                     restoreQuery = null
                     player!!.playWhenReady = playWhenResolved
                     loadedQuery = song
+                    updateResolveStatus(false)
                 }
                 startPositionWatch()
             } catch (e: Exception) {
                 Log.e(TAG, "playSong failed for query: $song", e)
+                updateResolveStatus(false)
             }
         }
     }
@@ -391,15 +410,22 @@ object SongPlayer {
     // prefetch resolving the NEXT track via YouTube was flipping the badge to
     // "YouTube" while the current track streamed from Spotify).
     internal suspend fun resolveStreamUrl(song: String, appContext: Context, forPlayback: Boolean = false): String? {
+        if (forPlayback) {
+            updateResolveStatus(true, "Checking cache...")
+        }
         streamCache[song]?.let {
             if (forPlayback) {
                 currentSource = sourceCache[song] ?: "YouTube"
                 currentQuality = qualityCache[song] ?: ""
+                updateResolveStatus(false)
             }
             return it
         }
         // Persistent stream cache: survives app restarts. YouTube URLs are cached
         // with their server-provided expiry so stale entries are never served.
+        if (forPlayback) {
+            updateResolveStatus(true, "Checking saved cache...")
+        }
         com.music.spotui.data.preferences.getCachedStream(appContext, song)?.let { (url, source, quality) ->
             // Promote back into the in-memory caches for this session.
             streamCache[song] = url
@@ -408,8 +434,12 @@ object SongPlayer {
             if (forPlayback) {
                 currentSource = source
                 currentQuality = quality
+                updateResolveStatus(false)
             }
             return url
+        }
+        if (forPlayback) {
+            updateResolveStatus(true, "Checking alternative source...")
         }
         alternativeStreamForPlayback(song, appContext)?.let { alt ->
             return when {
@@ -417,6 +447,7 @@ object SongPlayer {
                     if (forPlayback) {
                         currentSource = "Alternative file"
                         currentQuality = alt.label.substringAfterLast('.', "").uppercase().takeIf { it.length in 2..5 }.orEmpty()
+                        updateResolveStatus(false)
                     }
                     alt.value
                 }
@@ -426,13 +457,19 @@ object SongPlayer {
                         currentQuality = ""
                     }
                     val quality = com.music.spotui.data.preferences.currentStreamingQuality(appContext)
-                    val playback = resolveYtPlayback(alt.value, quality.audioQuality, appContext) ?: return null
+                    val playback = resolveYtPlayback(alt.value, quality.audioQuality, appContext, forPlayback = forPlayback) ?: run {
+                        if (forPlayback) updateResolveStatus(false)
+                        return null
+                    }
                     val codec = playback.format.mimeType
                         .substringAfter("codecs=\"", "").substringBefore('"').substringBefore('.')
                         .uppercase()
                     val ytQuality = listOf(codec, "${playback.format.bitrate / 1000} kbps")
                         .filter { it.isNotBlank() }.joinToString(" ")
-                    if (forPlayback) currentQuality = ytQuality
+                    if (forPlayback) {
+                        currentQuality = ytQuality
+                        updateResolveStatus(false)
+                    }
 
                     streamCache[song] = playback.streamUrl
                     sourceCache[song] = if (forPlayback) currentSource else "Alternative YouTube"
@@ -440,14 +477,21 @@ object SongPlayer {
 
                     playback.streamUrl
                 }
-                else -> null
+                else -> {
+                    if (forPlayback) updateResolveStatus(false)
+                    null
+                }
             }
         }
         // Offline: if this track was downloaded, play the local file instead of the network.
+        if (forPlayback) {
+            updateResolveStatus(true, "Locating local file...")
+        }
         com.music.spotui.data.preferences.downloadedPathForQuery(appContext, song)?.let { path ->
             if (forPlayback) {
                 currentSource = "Downloaded"
                 currentQuality = path.substringAfterLast('.', "").uppercase()
+                updateResolveStatus(false)
             }
             return android.net.Uri.fromFile(java.io.File(path)).toString()
         }
@@ -458,6 +502,9 @@ object SongPlayer {
         // immediately.
         if (losslessStreaming && quality.lossless && System.currentTimeMillis() >= losslessCooldownUntil) {
             (trackIdRegistry[song] ?: spotifyTrackIdForPlayback(song))?.let { spotifyId ->
+                if (forPlayback) {
+                    updateResolveStatus(true, "Locating Lossless source...")
+                }
                 val r = kotlinx.coroutines.withTimeoutOrNull(4_000) {
                     com.metrolist.spotify.SpotiFlac.resolve(
                         spotifyId,
@@ -473,6 +520,7 @@ object SongPlayer {
                         if (forPlayback) {
                             currentSource = "Lossless • ${r.track.provider}"
                             currentQuality = flacQuality
+                            updateResolveStatus(false)
                         }
                         streamCache[song] = r.track.url
                         sourceCache[song] = "Lossless • ${r.track.provider}"
@@ -490,6 +538,7 @@ object SongPlayer {
         }
         if (!youtubeEnabled) {
             Log.w(TAG, "YouTube fallback disabled — no stream for: $song")
+            if (forPlayback) updateResolveStatus(false)
             return null
         }
         if (forPlayback) {
@@ -497,15 +546,22 @@ object SongPlayer {
             // Clear the previous track's quality so a failed resolve can't leave
             // a stale "FLAC 24-bit" badge on a YouTube stream.
             currentQuality = ""
+            updateResolveStatus(true, "Locating YouTube source...")
         }
-        val playback = resolveYtPlayback(song, quality.audioQuality, appContext) ?: return null
+        val playback = resolveYtPlayback(song, quality.audioQuality, appContext, forPlayback = forPlayback) ?: run {
+            if (forPlayback) updateResolveStatus(false)
+            return null
+        }
         // e.g. "OPUS 141 kbps" from the chosen adaptive format.
         val codec = playback.format.mimeType
             .substringAfter("codecs=\"", "").substringBefore('"').substringBefore('.')
             .uppercase()
         val ytQuality = listOf(codec, "${playback.format.bitrate / 1000} kbps")
             .filter { it.isNotBlank() }.joinToString(" ")
-        if (forPlayback) currentQuality = ytQuality
+        if (forPlayback) {
+            currentQuality = ytQuality
+            updateResolveStatus(false)
+        }
         streamCache[song] = playback.streamUrl
         sourceCache[song] = "YouTube"
         qualityCache[song] = ytQuality
@@ -1037,6 +1093,7 @@ object SongPlayer {
     private suspend fun resolveVideoCandidates(
         query: String,
         filter: YouTube.SearchFilter = YouTube.SearchFilter.FILTER_SONG,
+        forPlayback: Boolean = false,
     ): List<String> {
         val cacheKey = "$query|${filter.value}"
         videoCandidatesCache[cacheKey]?.let { return it }
@@ -1045,6 +1102,9 @@ object SongPlayer {
                 videoCandidatesCache[cacheKey] = cached
                 return cached
             }
+        }
+        if (forPlayback) {
+            updateResolveStatus(true, "Searching YouTube videos...")
         }
         val searchText = searchTextForPlayback(query)
         // A raw YouTube videoId is 11 chars with no spaces — accept it directly.
@@ -1171,6 +1231,7 @@ object SongPlayer {
         query: String,
         audioQuality: com.metrolist.music.constants.AudioQuality,
         appContext: Context,
+        forPlayback: Boolean = false,
     ): YTPlayerUtils.PlaybackData? {
         val connectivityManager =
             appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -1181,8 +1242,11 @@ object SongPlayer {
         val candidatesCached = videoCandidatesCache.containsKey(cacheKey)
         val tried = mutableSetOf<String>()
         suspend fun tryIds(ids: List<String>, skipValidation: Boolean = false): YTPlayerUtils.PlaybackData? {
-            for (videoId in ids) {
+            for ((index, videoId) in ids.withIndex()) {
                 if (!tried.add(videoId)) continue
+                if (forPlayback) {
+                    updateResolveStatus(true, "Resolving YouTube stream ${index + 1}/${ids.size}...")
+                }
                 YTPlayerUtils.playerResponseForPlayback(
                     videoId = videoId,
                     audioQuality = audioQuality,
@@ -1195,7 +1259,7 @@ object SongPlayer {
             }
             return null
         }
-        tryIds(resolveVideoCandidates(query).take(3), skipValidation = candidatesCached)?.let { return it }
+        tryIds(resolveVideoCandidates(query, forPlayback = forPlayback).take(3), skipValidation = candidatesCached)?.let { return it }
         if (!com.music.spotui.data.preferences.isVideoFallbackEnabled(appContext)) {
             Log.w(TAG, "song candidates exhausted and video fallback disabled for: ${searchTextForPlayback(query)}")
             return null
@@ -1204,7 +1268,7 @@ object SongPlayer {
         // we're not signed in to YouTube). Regular video uploads — lyric videos,
         // reuploads — usually aren't age-gated: last-resort pass over those.
         Log.w(TAG, "song candidates exhausted, trying video search for: ${searchTextForPlayback(query)}")
-        tryIds(resolveVideoCandidates(query, YouTube.SearchFilter.FILTER_VIDEO).take(3), skipValidation = candidatesCached)?.let { return it }
+        tryIds(resolveVideoCandidates(query, YouTube.SearchFilter.FILTER_VIDEO, forPlayback = forPlayback).take(3), skipValidation = candidatesCached)?.let { return it }
         Log.e(TAG, "All YouTube candidates failed for: ${searchTextForPlayback(query)}")
         return null
     }
