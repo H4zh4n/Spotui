@@ -176,9 +176,6 @@ fun PlayerScreen(navController: NavController) {
         cancelRunningAnimation()
         animationJob = coroutineScope.launch {
             slideTo(targetValue, velocity)
-            if (targetValue == screenHeight) {
-                navController.navigateUp()
-            }
         }
     }
 
@@ -307,9 +304,6 @@ fun PlayerScreen(navController: NavController) {
                     }
                     val job = coroutineScope.launch {
                         slideTo(targetValue, available.y)
-                        if (targetValue == screenHeight) {
-                            navController.navigateUp()
-                        }
                     }
                     animationJob = job
                     try {
