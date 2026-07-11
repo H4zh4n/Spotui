@@ -7,6 +7,12 @@ import com.music.spotui.data.entity.SongsModel
 import javax.inject.Inject
 import javax.inject.Singleton
 
+enum class RepeatMode {
+    OFF,
+    ONE,
+    ALL
+}
+
 @Singleton
 class CurrentSongState @Inject constructor() {
     private val _title: MutableState<String> = mutableStateOf("")
@@ -64,7 +70,7 @@ class CurrentSongState @Inject constructor() {
     }
 
     val shuffle = mutableStateOf(false)
-    val repeat = mutableStateOf(false)
+    val repeat = mutableStateOf(RepeatMode.OFF)
     val likeState = mutableStateOf(false)
 
     // Original queue order, kept while shuffle is on so turning it off restores
@@ -118,7 +124,7 @@ class CurrentSongState @Inject constructor() {
         shuffle.value = true
         return _queue.value.firstOrNull()
     }
-    fun updateRepeatState(newRepeatState : Boolean){
+    fun updateRepeatState(newRepeatState : RepeatMode){
         repeat.value = newRepeatState
     }
 

@@ -1515,7 +1515,7 @@ object SongPlayer {
                 val crossfadeMs = com.music.spotui.data.preferences.getCrossfadeMs(ctx)
                 if (crossfadeMs <= 0) continue
                 val state = boundState ?: continue
-                if (state.repeat.value) continue // repeat-one loops the same track
+                if (state.repeat.value == RepeatMode.ONE) continue // repeat-one loops the same track
                 val p = player ?: continue
                 val playing = withContext(Dispatchers.Main) { p.isPlaying }
                 if (!playing) continue

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.requiredSize
@@ -102,6 +103,7 @@ import com.music.spotui.data.preferences.setLocalAlternativeStream
 import com.music.spotui.data.preferences.setYouTubeAlternativeStream
 import com.music.spotui.di.Palette
 import com.music.spotui.di.SongPlayer
+import com.music.spotui.di.RepeatMode
 import com.music.spotui.ui.components.Snackbar
 import com.music.spotui.ui.navigation.Routes
 import com.music.spotui.ui.navigation.albumRoute
@@ -1004,7 +1006,7 @@ fun PlayerFull(
     context: Context,
     isLiked: MutableState<Boolean>,
     shuffle: Boolean,
-    repeat: Boolean,
+    repeat: RepeatMode,
     queueSongs: List<SongsModel>
 ) {
 
@@ -1131,30 +1133,50 @@ fun PlayerFull(
             tint = Color.White,
             painter = painterResource(id = R.drawable.ic_player_skip),
             contentDescription = "")
-        Icon(
+        Box(
+            contentAlignment = Alignment.Center,
             modifier = Modifier
-                .size(20.dp)
+                .size(32.dp)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
                 ) {
-                    if (repeat) {
-                        playerViewModel.updateRepeatState(false)
-                    } else {
-                        playerViewModel.updateRepeatState(true)
+                    val nextRepeat = when (repeat) {
+                        RepeatMode.OFF -> RepeatMode.ALL
+                        RepeatMode.ALL -> RepeatMode.ONE
+                        RepeatMode.ONE -> RepeatMode.OFF
                     }
-
-
+                    playerViewModel.updateRepeatState(nextRepeat)
                 }
-            ,
-            tint = if (repeat){
-                Color(AppPalette.toArgb())
+        ) {
+            Icon(
+                modifier = Modifier.size(20.dp),
+                tint = if (repeat != RepeatMode.OFF) {
+                    Color(AppPalette.toArgb())
+                } else {
+                    Color.White
+                },
+                painter = painterResource(id = R.drawable.ic_repeat),
+                contentDescription = "Repeat"
+            )
+            if (repeat == RepeatMode.ONE) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .offset(x = (-2).dp, y = 2.dp)
+                        .size(10.dp)
+                        .background(Color(AppPalette.toArgb()), shape = CircleShape)
+                ) {
+                    Text(
+                        text = "1",
+                        color = Color.Black,
+                        fontSize = 7.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
             }
-            else{
-                Color.White
-            },
-            painter = painterResource(id = R.drawable.ic_repeat),
-            contentDescription = "")
+        }
     }
 }
 

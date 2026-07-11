@@ -25,6 +25,7 @@ import com.music.spotui.data.api.Api
 import com.music.spotui.data.api.Response
 import com.music.spotui.data.entity.SongsModel
 import com.music.spotui.di.CurrentSongState
+import com.music.spotui.di.RepeatMode
 import com.music.spotui.di.SongPlayer
 import com.music.spotui.di.SpotifyWebPlayer
 import com.music.spotui.ui.repository.AppRepository
@@ -84,21 +85,36 @@ class PlaybackService : MediaLibraryService() {
                         return
                     }
                 }
-                if (currentSongState.repeat.value) {
-                    val queue = currentSongState.queue.value
-                    if (queue.isNotEmpty()) {
-                        val curId = currentSongState.songId.value
-                        val cur = queue.indexOfFirst { it.id == curId }
-                            .let { if (it >= 0) it else currentSongState.songIndex.value }
-                            .coerceIn(0, queue.size - 1)
-                        val song = queue[cur]
-                        SongPlayer.playSong(song.url, applicationContext)
-                    } else {
-                        SongPlayer.exoPlayer?.seekTo(0)
-                        SongPlayer.exoPlayer?.play()
+                when (currentSongState.repeat.value) {
+                    RepeatMode.ONE -> {
+                        val queue = currentSongState.queue.value
+                        if (queue.isNotEmpty()) {
+                            val curId = currentSongState.songId.value
+                            val cur = queue.indexOfFirst { it.id == curId }
+                                .let { if (it >= 0) it else currentSongState.songIndex.value }
+                                .coerceIn(0, queue.size - 1)
+                            val song = queue[cur]
+                            SongPlayer.playSong(song.url, applicationContext)
+                        } else {
+                            SongPlayer.exoPlayer?.seekTo(0)
+                            SongPlayer.exoPlayer?.play()
+                        }
                     }
-                } else {
-                    advance(forward = true)
+                    RepeatMode.ALL -> {
+                        advance(forward = true)
+                    }
+                    RepeatMode.OFF -> {
+                        val queue = currentSongState.queue.value
+                        if (queue.isNotEmpty()) {
+                            val curId = currentSongState.songId.value
+                            val cur = queue.indexOfFirst { it.id == curId }
+                                .let { if (it >= 0) it else currentSongState.songIndex.value }
+                                .coerceIn(0, queue.size - 1)
+                            if (cur < queue.size - 1) {
+                                advance(forward = true)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -225,10 +241,28 @@ class PlaybackService : MediaLibraryService() {
         val cur = queue.indexOfFirst { it.id == curId }
             .let { if (it >= 0) it else currentSongState.songIndex.value }
             .coerceIn(0, queue.size - 1)
-        val nextIdx = if (forward) {
-            if (cur < queue.size - 1) cur + 1 else 0
+        
+        val nextIdx: Int
+        if (forward) {
+            if (cur < queue.size - 1) {
+                nextIdx = cur + 1
+            } else {
+                if (currentSongState.repeat.value == RepeatMode.ALL) {
+                    nextIdx = 0
+                } else {
+                    return // do nothing at the end of the queue
+                }
+            }
         } else {
-            if (cur > 0) cur - 1 else queue.size - 1
+            if (cur > 0) {
+                nextIdx = cur - 1
+            } else {
+                if (currentSongState.repeat.value == RepeatMode.ALL) {
+                    nextIdx = queue.size - 1
+                } else {
+                    return // do nothing at the beginning of the queue
+                }
+            }
         }
         val song = queue[nextIdx]
         currentSongState.updateSongState(

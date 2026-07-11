@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.music.spotui.data.api.Response
 import com.music.spotui.data.entity.SongsModel
 import com.music.spotui.di.CurrentSongState
+import com.music.spotui.di.RepeatMode
 import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.navigation.artistRoute
 import com.music.spotui.ui.repository.AppRepository
@@ -157,7 +158,15 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
             continueIntoRadio(queueSongs, context)
             return
         }
-        val nextIdx = if (cur < queueSongs.size - 1) cur + 1 else 0
+        val nextIdx = if (cur < queueSongs.size - 1) {
+            cur + 1
+        } else {
+            if (currentSongState.repeat.value == RepeatMode.ALL) {
+                0
+            } else {
+                return
+            }
+        }
         val nextSong = queueSongs[nextIdx]
         updateSongState(
             nextSong.coverUri,
@@ -269,7 +278,15 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
     fun playPreviousSong(queueSongs : List<SongsModel>, context: Context) {
         if (queueSongs.isEmpty()) return
         val cur = currentPositionIn(queueSongs)
-        val prevIdx = if (cur > 0) cur - 1 else queueSongs.size - 1
+        val prevIdx = if (cur > 0) {
+            cur - 1
+        } else {
+            if (currentSongState.repeat.value == RepeatMode.ALL) {
+                queueSongs.size - 1
+            } else {
+                return
+            }
+        }
         val previousSong = queueSongs[prevIdx]
         updateSongState(previousSong.coverUri, previousSong.title, previousSong.singer, true, previousSong.id, prevIdx, previousSong.album)
         SongPlayer.playSong(previousSong.url, context)
@@ -294,7 +311,7 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
     fun updateShuffleState(shuffleState : Boolean){
         currentSongState.updateShuffleState(shuffleState)
     }
-    fun updateRepeatState(repeatState : Boolean){
+    fun updateRepeatState(repeatState : RepeatMode){
         currentSongState.updateRepeatState(repeatState)
     }
     fun updateLikeState(likeState : Boolean){
