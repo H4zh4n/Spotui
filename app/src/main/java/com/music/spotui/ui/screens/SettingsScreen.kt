@@ -1,10 +1,9 @@
 package com.music.spotui.ui.screens
 
-import android.annotation.SuppressLint
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -43,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavController
+import com.music.spotui.data.BatteryOptimizationHelper
 import com.music.spotui.data.preferences.CROSSFADE_MAX_MS
 import com.music.spotui.data.preferences.StreamQuality
 import com.music.spotui.data.preferences.getCellularQuality
@@ -58,7 +58,6 @@ import com.music.spotui.data.preferences.setWifiQuality
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 
-@SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(navController: NavController) {
@@ -69,6 +68,13 @@ fun SettingsScreen(navController: NavController) {
     var dlQ by remember { mutableStateOf(getDownloadQuality(context)) }
     var crossfadeMs by remember { mutableStateOf(getCrossfadeMs(context).toFloat()) }
     var videoFallback by remember { mutableStateOf(isVideoFallbackEnabled(context)) }
+    var batteryOptExempt by remember { mutableStateOf(BatteryOptimizationHelper.isIgnoringBatteryOptimization(context)) }
+
+    val batteryOptLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        batteryOptExempt = BatteryOptimizationHelper.isIgnoringBatteryOptimization(context)
+    }
 
     Scaffold(
         containerColor = AppBackground,
@@ -93,13 +99,63 @@ fun SettingsScreen(navController: NavController) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 72.dp)
+                .padding(top = padding.calculateTopPadding())
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
                 // Clear the bottom nav + mini player so the last section
-                // (crossfade / DJ mixing) isn't hidden under the bar.
-                .padding(bottom = 160.dp)
+                // (account / log out) isn't hidden under the bar.
+                .padding(bottom = 200.dp)
         ) {
+            SectionTitle("Background playback")
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable {
+                        batteryOptLauncher.launch(BatteryOptimizationHelper.buildAppSettingsIntent(context))
+                    }
+                    .background(Color(0xFF1A1A20))
+                    .padding(horizontal = 12.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Battery optimization", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (batteryOptExempt) "Exempt — app won't be killed" else "Not exempt — tap to change",
+                        color = if (batteryOptExempt) Color(0xFF81C784) else Color(0xFFB3B3B3),
+                        fontSize = 12.sp,
+                    )
+                }
+                if (batteryOptExempt) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = "Enabled",
+                        tint = AppPalette,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            BatteryOptimizationHelper.getManufacturerTips()?.let { (name, tip) ->
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Tip for $name",
+                    color = Color(0xFFB3B3B3),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = tip,
+                    color = Color(0xFF808080),
+                    fontSize = 12.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFF1A1A20))
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
             SectionTitle("Audio quality")
             QualityPicker(
                 title = "Streaming over Wi-Fi",

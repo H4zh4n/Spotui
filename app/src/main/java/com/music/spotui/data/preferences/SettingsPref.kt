@@ -30,6 +30,7 @@ private const val KEY_CROSSFADE_DJ = "crossfade_dj_mode"
 private const val KEY_WEB_PLAYBACK = "web_playback_enabled"
 private const val KEY_VIDEO_FALLBACK = "video_fallback_enabled"
 private const val KEY_LIBRARY_GRID = "library_grid_view"
+private const val KEY_IGNORE_BATTERY_OPT = "ignore_battery_optimization"
 
 /** Off (0s) … 12s. 0 disables crossfade. */
 const val CROSSFADE_MIN_MS = 0
@@ -96,6 +97,9 @@ fun isCrossfadeEnabled(c: Context): Boolean = getCrossfadeMs(c) > 0
 /** DJ-style mixing: low-pass the outgoing track and high-pass the incoming one during the blend. */
 fun isCrossfadeDjMode(c: Context): Boolean = prefs(c).getBoolean(KEY_CROSSFADE_DJ, false)
 fun setCrossfadeDjMode(c: Context, v: Boolean) = prefs(c).edit().putBoolean(KEY_CROSSFADE_DJ, v).apply()
+
+fun isIgnoreBatteryOptimization(c: Context): Boolean = prefs(c).getBoolean(KEY_IGNORE_BATTERY_OPT, false)
+fun setIgnoreBatteryOptimization(c: Context, v: Boolean) = prefs(c).edit().putBoolean(KEY_IGNORE_BATTERY_OPT, v).apply()
 
 /**
  * The streaming quality to use for the *current* active network: the cellular setting
