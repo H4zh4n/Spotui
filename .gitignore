@@ -19,3 +19,4 @@ app/release/
 /.idea/assetWizardSettings.xml
 /.idea/*
 /.github/git-commit-instructions.md
+/app/build/
