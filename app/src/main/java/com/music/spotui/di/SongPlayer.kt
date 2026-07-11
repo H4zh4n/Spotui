@@ -387,8 +387,14 @@ object SongPlayer {
     // prefetch resolving the NEXT track via YouTube was flipping the badge to
     // "YouTube" while the current track streamed from Spotify).
     internal suspend fun resolveStreamUrl(song: String, appContext: Context, forPlayback: Boolean = false): String? {
+        streamCache[song]?.let {
+            if (forPlayback) {
+                currentSource = sourceCache[song] ?: "YouTube"
+                currentQuality = qualityCache[song] ?: ""
+            }
+            return it
+        }
         alternativeStreamForPlayback(song, appContext)?.let { alt ->
-            invalidateResolvedStream(song)
             return when {
                 alt.isLocal -> {
                     if (forPlayback) {
@@ -410,6 +416,11 @@ object SongPlayer {
                     val ytQuality = listOf(codec, "${playback.format.bitrate / 1000} kbps")
                         .filter { it.isNotBlank() }.joinToString(" ")
                     if (forPlayback) currentQuality = ytQuality
+
+                    streamCache[song] = playback.streamUrl
+                    sourceCache[song] = if (forPlayback) currentSource else "Alternative YouTube"
+                    qualityCache[song] = if (forPlayback) currentQuality else ytQuality
+
                     playback.streamUrl
                 }
                 else -> null
@@ -422,15 +433,6 @@ object SongPlayer {
                 currentQuality = path.substringAfterLast('.', "").uppercase()
             }
             return android.net.Uri.fromFile(java.io.File(path)).toString()
-        }
-        streamCache[song]?.let {
-            // Cache hits must still update the badge — returning early kept the
-            // previous track's label (e.g. "Downloaded") on a streamed track.
-            if (forPlayback) {
-                currentSource = sourceCache[song] ?: "YouTube"
-                currentQuality = qualityCache[song] ?: ""
-            }
-            return it
         }
         // Quality for the current network (Wi-Fi vs cellular), from Settings.
         val quality = com.music.spotui.data.preferences.currentStreamingQuality(appContext)
