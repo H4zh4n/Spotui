@@ -547,8 +547,8 @@ fun DownloadsScreen(navController: NavController) {
                 if (showClearConfirmDialog) {
                     AlertDialog(
                         onDismissRequest = { showClearConfirmDialog = false },
-                        title = { Text(text = "Clear all downloads") },
-                        text = { Text(text = "Are you sure you want to remove all downloaded songs?") },
+                        title = { Text(text = "Clear all downloads?", color = Color.White, fontWeight = FontWeight.Bold) },
+                        text = { Text(text = "Are you sure you want to remove all downloaded songs? This action cannot be undone.", color = Color(0xFFB3B3B3)) },
                         confirmButton = {
                             TextButton(onClick = {
                                 val n =
@@ -560,14 +560,17 @@ fun DownloadsScreen(navController: NavController) {
                                     android.widget.Toast.LENGTH_SHORT,
                                 ).show()
                             }) {
-                                Text("Clear")
+                                Text("Clear", color = Color(0xFFE57373))
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { showClearConfirmDialog = false }) {
-                                Text("Cancel")
+                                Text("Cancel", color = Color.White)
                             }
-                        }
+                        },
+                        containerColor = Color(0xFF1A1A1A),
+                        titleContentColor = Color.White,
+                        textContentColor = Color(0xFFB3B3B3),
                     )
                 }
             }
