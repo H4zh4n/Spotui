@@ -368,37 +368,25 @@ fun PlayerScreen(navController: NavController) {
 
 
 
-    if((songProgressText != "0:00") && (songDurationText == songProgressText)){
-        if(repeat){
-            SongPlayer.seekTo(0)
-        }
-        else{
-            // Debounced: this block re-runs every recomposition until the next
-            // track's stream actually starts, so it must not skip repeatedly.
-            playerViewModel.autoAdvance(queueSongs, context)
-        }
-    }
+    LaunchedEffect(playerViewModel.currentSongId.value, songPlayingState) {
+        while (true) {
+            val dur = SongPlayer.getDuration()
+            songDurationText = if (dur < 0) "0:00" else playerViewModel.formatDuration(dur)
 
-    Log.d("queueSongaa", songs.toString())
-    Log.d("queueSongc", playerViewModel.currentSongAlbum.value.toString())
-    Log.d("queueSong", queueSongs.toString())
+            val pos = SongPlayer.getCurrentPosition()
+            songProgress = pos.toFloat()
+            songProgressText = if (pos < 0) "0:00" else playerViewModel.formatDuration(pos)
 
-    LaunchedEffect(key1 = songPlayingState) {
-
-            while (songPlayingState) {
-
-                    songProgress = SongPlayer.getCurrentPosition().toFloat()
-                    songProgressText = playerViewModel.formatDuration(songProgress.toLong())
-
-//                if (songProgress >= songDuration ) {
-//                    if (playerViewModel.repeatState.value){
-//                        SongPlayer.seekTo(0) // Restart the song
-//                    }
-//                }
-
-
-                delay(300L) // update every .0 second
+            if (songPlayingState) {
+                delay(300L)
+            } else {
+                if (dur > 0) {
+                    delay(2000L)
+                } else {
+                    delay(300L)
+                }
             }
+        }
     }
 
 
