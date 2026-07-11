@@ -141,23 +141,27 @@ fun LibraryScreen(navController: NavController) {
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp, 0.dp, 16.dp, 4.dp)
+                .padding(16.dp, 0.dp, 16.dp, 8.dp)
         ) {
             Spacer(modifier = Modifier.weight(1f))
-            Icon(
-                painter = painterResource(if (gridView) R.drawable.ic_view_list else R.drawable.ic_view_grid),
-                contentDescription = if (gridView) "Show as list" else "Show as grid",
-                tint = Color.White,
+            Box(
                 modifier = Modifier
-                    .size(18.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) {
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF2A2A2A))
+                    .clickable {
                         gridView = !gridView
                         setLibraryGridView(context, gridView)
-                    }
-            )
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(if (gridView) R.drawable.ic_view_list else R.drawable.ic_view_grid),
+                    contentDescription = if (gridView) "Show as list" else "Show as grid",
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
 
         val followedArtists by libraryViewModel.followedArtists.collectAsState()
