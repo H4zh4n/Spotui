@@ -223,7 +223,7 @@ class PlaybackService : MediaLibraryService() {
                 .setIconResId(R.drawable.ic_close)
                 .build()
 
-            // ponytail: push close button to the right by adding an empty spacer button first
+            // push close button to the right by adding an empty spacer button first
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(sessionCommands)
                 .setCustomLayout(ImmutableList.of(emptyButton, closeButton))

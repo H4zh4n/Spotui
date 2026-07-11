@@ -101,7 +101,7 @@ fun DownloadsScreen(navController: NavController) {
     }
 
     var searchQuery by remember { mutableStateOf("") }
-    // ponytail: filter downloads by simple title/singer string match
+    // filter downloads by simple title/singer string match
     val displayedSongs = remember(songs, searchQuery) {
         if (searchQuery.isBlank()) {
             songs
