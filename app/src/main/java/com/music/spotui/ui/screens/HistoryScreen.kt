@@ -21,10 +21,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,9 +54,14 @@ import com.music.spotui.data.preferences.HistoryEntry
 import com.music.spotui.data.preferences.clearListeningHistory
 import com.music.spotui.data.preferences.getListeningHistory
 import com.music.spotui.data.preferences.removeListeningHistory
+import com.music.spotui.data.entity.SongsModel
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.theme.GridBackground
+import com.music.spotui.di.SongPlayer
+import com.music.spotui.ui.navigation.artistRoute
+import com.music.spotui.ui.viewmodel.PlayerViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import java.text.DateFormat
 import java.util.Date
 
@@ -67,7 +74,27 @@ private val MutedText = Color(0xFFB3B3B3)
 @Composable
 fun HistoryScreen(navController: NavController) {
     val context = LocalContext.current
+    val playerViewModel: PlayerViewModel = hiltViewModel()
     var history by remember { mutableStateOf(getListeningHistory(context)) }
+    var showClearDialog by remember { mutableStateOf(false) }
+
+    fun playEntry(entry: HistoryEntry) {
+        if (entry.url.isBlank()) return
+        playerViewModel.updateQueue(listOf(
+            SongsModel(
+                id = entry.songId,
+                title = entry.title,
+                album = entry.album,
+                singer = entry.singer,
+                coverUri = entry.image,
+                url = entry.url,
+            ),
+        ))
+        SongPlayer.playSong(entry.url, context)
+        playerViewModel.updateSongState(
+            entry.image, entry.title, entry.singer, true, entry.songId, 0, entry.album,
+        )
+    }
 
     val topArtists = remember(history) {
         history.groupingBy { it.singer.substringBefore(",").trim() }
@@ -125,10 +152,7 @@ fun HistoryScreen(navController: NavController) {
                             modifier = Modifier.clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
-                            ) {
-                                clearListeningHistory(context)
-                                history = emptyList()
-                            },
+                            ) { showClearDialog = true },
                         )
                     }
                 }
@@ -222,7 +246,9 @@ fun HistoryScreen(navController: NavController) {
                             plays = entry.value,
                             progress = entry.value.toFloat() / maxArtistPlays,
                             imageUrl = artistImage,
-                        )
+                        ) {
+                            navController.navigate(artistRoute(entry.key))
+                        }
                     }
                 }
 
@@ -254,7 +280,12 @@ fun HistoryScreen(navController: NavController) {
                             plays = entry.value,
                             progress = entry.value.toFloat() / maxTrackPlays,
                             imageUrl = trackImage,
-                        )
+                        ) {
+                            val latest = history.lastOrNull {
+                                "${it.title} — ${it.singer}" == entry.key
+                            }
+                            if (latest != null) playEntry(latest)
+                        }
                     }
                 }
 
@@ -270,14 +301,43 @@ fun HistoryScreen(navController: NavController) {
                 }
                 items(history.size) { i ->
                     val entry = history[i]
-                    HistoryRow(entry) {
-                        removeListeningHistory(context, entry)
-                        history = getListeningHistory(context)
-                    }
+                    HistoryRow(
+                        entry = entry,
+                        onRemove = {
+                            removeListeningHistory(context, entry)
+                            history = getListeningHistory(context)
+                        },
+                        onClick = { playEntry(entry) },
+                    )
                 }
             }
             item { Spacer(Modifier.height(140.dp)) }
         }
+    }
+
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("Clear listening history?", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = { Text("This will remove all ${history.size} plays. This action cannot be undone.", color = MutedText) },
+            confirmButton = {
+                TextButton(onClick = {
+                    clearListeningHistory(context)
+                    history = emptyList()
+                    showClearDialog = false
+                }) {
+                    Text("Clear", color = Color(0xFFE57373))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) {
+                    Text("Cancel", color = Color.White)
+                }
+            },
+            containerColor = Color(0xFF1A1A1A),
+            titleContentColor = Color.White,
+            textContentColor = MutedText,
+        )
     }
 }
 
@@ -297,6 +357,7 @@ private fun TopArtistRow(
     plays: Int,
     progress: Float,
     imageUrl: String,
+    onClick: () -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -305,6 +366,10 @@ private fun TopArtistRow(
             .padding(horizontal = 16.dp, vertical = 6.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(CardBg)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) { onClick() }
             .padding(12.dp),
     ) {
         Text(
@@ -367,6 +432,7 @@ private fun TopTrackRow(
     plays: Int,
     progress: Float,
     imageUrl: String,
+    onClick: () -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -375,6 +441,10 @@ private fun TopTrackRow(
             .padding(horizontal = 16.dp, vertical = 6.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(CardBg)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) { onClick() }
             .padding(12.dp),
     ) {
         Text(
@@ -439,12 +509,17 @@ private fun TopTrackRow(
 
 @OptIn(ExperimentalGlideComposeApi::class)
 @Composable
-private fun HistoryRow(entry: HistoryEntry, onRemove: () -> Unit) {
+private fun HistoryRow(entry: HistoryEntry, onRemove: () -> Unit, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp, 6.dp),
+            .padding(16.dp, 6.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) { onClick() },
     ) {
         GlideImage(
             modifier = Modifier

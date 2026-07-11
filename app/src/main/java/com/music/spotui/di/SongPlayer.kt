@@ -208,6 +208,8 @@ object SongPlayer {
         appCtx = appContext
         currentRequest = song
         playWhenResolved = true
+        // Remember the play-query so history can replay this track on tap.
+        boundState?.setSongUrl(song)
         // A manual play (tap / next / prev) supersedes any in-flight crossfade.
         cancelCrossfade()
         // Do not clear the media items while resolving the next song in the background.

@@ -16,6 +16,7 @@ data class HistoryEntry(
     val singer: String,
     val album: String = "",
     val image: String = "",
+    val url: String = "",
 )
 
 private const val PREF = "ListeningHistory"
@@ -25,11 +26,13 @@ private const val MAX_ENTRIES = 500
 private fun HistoryEntry.toJson() = JSONObject().apply {
     put("ts", ts); put("songId", songId); put("title", title)
     put("singer", singer); put("album", album); put("image", image)
+    put("url", url)
 }
 
 private fun JSONObject.toEntry() = HistoryEntry(
     ts = optLong("ts"), songId = optInt("songId", -1), title = optString("title"),
     singer = optString("singer"), album = optString("album"), image = optString("image"),
+    url = optString("url"),
 )
 
 fun getListeningHistory(context: Context): List<HistoryEntry> {

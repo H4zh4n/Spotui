@@ -36,6 +36,11 @@ class CurrentSongState @Inject constructor() {
     private val _songId: MutableState<Int> = mutableStateOf(0)
     val songId : State<Int> get() = _songId
 
+    private val _songUrl: MutableState<String> = mutableStateOf("")
+    val songUrl: State<String> get() = _songUrl
+
+    fun setSongUrl(url: String) { _songUrl.value = url }
+
     // The actual list the user is playing (album tracks, search results, liked
     // songs…). Next/previous operate on THIS, not on a re-derived global feed.
     private val _queue: MutableState<List<SongsModel>> = mutableStateOf(emptyList())
@@ -196,6 +201,11 @@ class CurrentSongState @Inject constructor() {
         // time the user opens the player / scrolls to the lyrics card.
         if (playingState && title.isNotBlank()) {
             com.music.spotui.data.api.LyricsApi.prefetch(title, singer, album)
+            // Resolve the play-query URL for this track so tapping it in history
+            // can re-play it.  Falls back to the stored URL (set by SongPlayer)
+            // or an empty string for tracks played before this field was added.
+            val trackUrl = _queue.value.firstOrNull { it.id == songId }?.url
+                ?: _songUrl.value
             // Log the play into the local listening history (History & stats screen).
             com.music.spotui.data.preferences.addListeningHistory(
                 com.music.spotui.MyApplication.instance,
@@ -206,6 +216,7 @@ class CurrentSongState @Inject constructor() {
                     singer = singer,
                     album = album,
                     image = coverUri,
+                    url = trackUrl,
                 ),
             )
         }
