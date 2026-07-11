@@ -34,8 +34,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -97,6 +99,8 @@ fun DownloadsScreen(navController: NavController) {
     }
 
     val accent = Color(0xFF1DB954)
+    val scope = rememberCoroutineScope()
+    var exporting by remember { mutableStateOf(false) }
 
     Surface(
         modifier = Modifier
@@ -175,6 +179,63 @@ fun DownloadsScreen(navController: NavController) {
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium
                     )
+                }
+
+                // ── Export / Clear actions ──
+                if (songs.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp, 4.dp, 20.dp, 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(
+                            text = if (exporting) "Exporting…" else "Export to Music",
+                            color = Color.Black,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(50))
+                                .background(accent)
+                                .clickable(enabled = !exporting) {
+                                    exporting = true
+                                    scope.launch {
+                                        val (count, dest) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                            com.music.spotui.data.preferences.exportDownloads(context)
+                                        }
+                                        exporting = false
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            if (count > 0) "Exported $count to $dest" else dest,
+                                            android.widget.Toast.LENGTH_LONG,
+                                        ).show()
+                                    }
+                                }
+                                .padding(vertical = 12.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                        Text(
+                            text = "Clear all",
+                            color = Color(0xFFE57373),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(50))
+                                .background(Color(0xFF1A1A20))
+                                .clickable {
+                                    val n = com.music.spotui.data.preferences.clearAllDownloads(context)
+                                    songs = getDownloadedSongs(context)
+                                    android.widget.Toast.makeText(
+                                        context, "Removed $n download${if (n == 1) "" else "s"}",
+                                        android.widget.Toast.LENGTH_SHORT,
+                                    ).show()
+                                }
+                                .padding(vertical = 12.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        )
+                    }
                 }
 
                 // ── In-progress downloads (with live progress bar) ──
