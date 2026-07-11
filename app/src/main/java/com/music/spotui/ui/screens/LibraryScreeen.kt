@@ -12,10 +12,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.LazyColumn
@@ -30,14 +29,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -63,8 +58,6 @@ import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.bumptech.glide.integration.compose.GlideImage
 import com.music.spotui.data.api.Api
 import com.music.spotui.data.api.Response
-import com.music.spotui.data.api.SpotifySession
-import com.music.spotui.data.entity.AccountModel
 import com.music.spotui.R
 import com.music.spotui.data.entity.LibraryEntry
 import com.music.spotui.data.preferences.isLibraryGridView
@@ -85,18 +78,9 @@ fun LibraryScreen(navController: NavController) {
     val libraryViewModel: LibraryViewModel = hiltViewModel()
     val entries by libraryViewModel.entries.collectAsState()
     val account by libraryViewModel.account.collectAsState()
-    var showAccount by remember { mutableStateOf(false) }
     val context = LocalContext.current
     // Spotify-style layout toggle: rows or a 3-column grid, persisted across runs.
-    var gridView by remember { mutableStateOf(isLibraryGridView(context)) }
-
-    if (showAccount) {
-        AccountSheet(
-            account = (account as? Response.Success)?.data ?: AccountModel(),
-            navController = navController,
-            onDismiss = { showAccount = false },
-        )
-    }
+    var gridView by remember { mutableStateOf(isLibraryGridView(context))     }
 
     Column(
         modifier = Modifier
@@ -124,7 +108,7 @@ fun LibraryScreen(navController: NavController) {
                     .size(34.dp)
                     .clip(CircleShape)
                     .background(Color(0xFF3A3A3A))
-                    .clickable { showAccount = true },
+                    .clickable { navController.navigate(Routes.Settings.route) },
                 contentAlignment = Alignment.Center
             ) {
                 val avatar = (account as? Response.Success)?.data?.imageUrl.orEmpty()
@@ -454,60 +438,6 @@ private fun LibrarySkeleton(padding: PaddingValues) {
                     Box(modifier = Modifier.height(11.dp).width(90.dp).clip(RoundedCornerShape(3.dp)).background(Color(0xFF1E1E1E)))
                 }
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AccountSheet(
-    account: AccountModel,
-    navController: NavController,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val context = LocalContext.current
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = Color(0xFF1A1A1A),
-    ) {
-        Column(modifier = Modifier.navigationBarsPadding()) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(16.dp, 4.dp, 16.dp, 16.dp)
-            ) {
-                Box(
-                    modifier = Modifier.size(56.dp).clip(CircleShape).background(Color(0xFF3A3A3A)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (account.imageUrl.isNotBlank()) AccountAvatar(account.imageUrl, 56.dp)
-                    else Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(30.dp))
-                }
-                Spacer(modifier = Modifier.width(14.dp))
-                Column {
-                    Text(account.name.ifBlank { "Spotify user" }, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (account.email.isNotBlank()) Text(account.email, color = Color.Gray, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (account.plan.isNotBlank()) Text("Spotify ${account.plan}", color = Color(0xFF1DB954), fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                }
-            }
-            HorizontalDivider(color = Color(0xFF2A2A2A))
-
-            AccountRow("Account") { onDismiss() }
-            AccountRow("Listening history") {
-                onDismiss()
-                navController.navigate(Routes.History.route)
-            }
-            HorizontalDivider(color = Color(0xFF2A2A2A))
-            AccountRow("Log out", tint = Color(0xFFE57373)) {
-                SpotifySession.setSpDc(context, "")
-                Api.HomeCache.clear()
-                onDismiss()
-                navController.navigate(Routes.Login.route) {
-                    popUpTo(0) { inclusive = true }
-                }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
         }
     }
 }
