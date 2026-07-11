@@ -1165,7 +1165,7 @@ fun PlayerFull(
                 Icon(
                     modifier = Modifier.size(20.dp),
                     tint = if (repeat != RepeatMode.OFF) {
-                        Color(AppPalette.toArgb())
+                        Color(0xFF1ED760)
                     } else {
                         Color.White
                     },
@@ -1175,7 +1175,7 @@ fun PlayerFull(
                 if (repeat == RepeatMode.ONE) {
                     Text(
                         text = "1",
-                        color = Color(AppPalette.toArgb()),
+                        color = Color(0xFF1ED760),
                         fontSize = 8.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.offset(y = (-1).dp)
@@ -1187,7 +1187,7 @@ fun PlayerFull(
                 Box(
                     modifier = Modifier
                         .size(4.dp)
-                        .background(Color(AppPalette.toArgb()), shape = CircleShape)
+                        .background(Color(0xFF1ED760), shape = CircleShape)
                 )
             } else {
                 Spacer(modifier = Modifier.height(6.dp))

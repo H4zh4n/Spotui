@@ -262,9 +262,12 @@ object SongPlayer {
                     // Tell the user instead of silently leaving the request on.
                     if (currentRequest == song) withContext(Dispatchers.Main) {
                         android.widget.Toast.makeText(
-                            appContext, "Couldn't find a playable stream for this track",
+                            appContext, "No stream found",
                             android.widget.Toast.LENGTH_SHORT,
                         ).show()
+                    }
+                    if (boundState?.resolveError?.value == null) {
+                        boundState?.updateResolveError("No stream found")
                     }
                     updateResolveStatus(false)
                     return@launch
@@ -294,6 +297,7 @@ object SongPlayer {
                 startPositionWatch()
             } catch (e: Exception) {
                 Log.e(TAG, "playSong failed for query: $song", e)
+                boundState?.updateResolveError(e.message ?: "Playback failed")
                 updateResolveStatus(false)
             }
         }
