@@ -149,6 +149,14 @@ class CurrentSongState @Inject constructor() {
                 com.music.spotui.data.preferences.saveLastPlayback(
                     com.music.spotui.MyApplication.instance, track)
             }
+            // Prefetch the next track in the queue to make transitions seamless.
+            val q = _queue.value
+            if (q.isNotEmpty() && songIndex >= 0) {
+                val nextIdx = songIndex + 1
+                if (nextIdx < q.size) {
+                    SongPlayer.prefetch(q[nextIdx].url, com.music.spotui.MyApplication.instance)
+                }
+            }
         }
         // Warm the lyrics cache in the background so they're already loaded by the
         // time the user opens the player / scrolls to the lyrics card.

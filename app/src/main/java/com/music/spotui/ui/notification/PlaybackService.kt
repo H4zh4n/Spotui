@@ -78,7 +78,7 @@ class PlaybackService : MediaLibraryService() {
                 if (p != null) {
                     val duration = p.duration
                     val position = p.currentPosition
-                    if (duration <= 0 || position < duration - 1000) {
+                    if (duration <= 0 || position < duration - 6000) {
                         // Spurious STATE_ENDED event (e.g. player cleared/reset or ended prematurely before loading)! Ignore it!
                         return
                     }

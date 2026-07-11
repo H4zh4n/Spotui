@@ -129,6 +129,8 @@ object SongPlayer {
     // Tracks which query is the latest play request so a slow resolve for an old
     // tap doesn't clobber a newer one (fast switching).
     @Volatile private var currentRequest: String = ""
+    @Volatile private var loadedQuery: String? = null
+    @Volatile private var playWhenResolved = true
 
     // Latest track metadata (title / artist / cover URL) so the MediaItem we build
     // carries it into the system media notification. Set via [setNowPlayingMeta]
@@ -189,17 +191,15 @@ object SongPlayer {
         val appContext = context.applicationContext
         appCtx = appContext
         currentRequest = song
+        playWhenResolved = true
         // A manual play (tap / next / prev) supersedes any in-flight crossfade.
         cancelCrossfade()
-        // Update the player with a placeholder MediaItem containing the new metadata immediately,
-        // so Media3 keeps the notification/foreground service alive and displays the new track info
-        // with a loading spinner while we resolve the stream URL in the background!
+        // Do not clear the media items while resolving the next song in the background.
+        // Keeping the player paused with the previous track active keeps the Media3
+        // foreground service and lockscreen notification alive, avoiding background start bans.
         runCatching {
             ensurePlayer(appContext)
             player?.pause()
-            val placeholderMediaItem = buildMediaItem("", streamMimeType(""))
-            player?.setMediaItem(placeholderMediaItem)
-            player?.prepare() // Transitions to STATE_BUFFERING, keeping session active!
         }
 
         // Podcast episodes are encoded as "episode:<id>" queries — play them via the
@@ -259,7 +259,8 @@ object SongPlayer {
                         player!!.seekTo(restorePositionMs)
                     }
                     restoreQuery = null
-                    player!!.playWhenReady = true
+                    player!!.playWhenReady = playWhenResolved
+                    loadedQuery = song
                 }
                 startPositionWatch()
             } catch (e: Exception) {
@@ -380,7 +381,7 @@ object SongPlayer {
     // prefetch of upcoming tracks doesn't clobber the current source badge (a
     // prefetch resolving the NEXT track via YouTube was flipping the badge to
     // "YouTube" while the current track streamed from Spotify).
-    private suspend fun resolveStreamUrl(song: String, appContext: Context, forPlayback: Boolean = false): String? {
+    internal suspend fun resolveStreamUrl(song: String, appContext: Context, forPlayback: Boolean = false): String? {
         alternativeStreamForPlayback(song, appContext)?.let { alt ->
             invalidateResolvedStream(song)
             return when {
@@ -1070,17 +1071,18 @@ object SongPlayer {
                 val best = transferScored.maxByOrNull { it.score }
                 Log.w(
                     TAG,
-                    "resolveVideoId: rejecting weak YouTube match for '$searchText' " +
+                    "resolveVideoId: no acceptable YouTube match for '$searchText' " +
                         "(best='${best?.item?.title}' score=${"%.2f".format(best?.score ?: 0.0)} " +
                         "title=${"%.2f".format(best?.titleScore ?: 0.0)} " +
                         "artist=${"%.2f".format(best?.artistEvidenceScore ?: 0.0)} " +
                         "duration=${"%.2f".format(best?.durationScore ?: 0.0)} " +
                         "album=${"%.2f".format(best?.albumScore ?: 0.0)} " +
-                        "alt=${best?.unexpectedAlternates.orEmpty().joinToString("/")})",
+                        "alt=${best?.unexpectedAlternates.orEmpty().joinToString("/")}), falling back to best-effort",
                 )
-                return emptyList()
+                transferScored.sortedByDescending { it.score }.map { it.item }
+            } else {
+                accepted.distinctBy { it.id }
             }
-            accepted.distinctBy { it.id }
         } else {
             // Legacy/plain queries without registered Spotify metadata: keep the
             // old best-effort ordering.
@@ -1254,10 +1256,17 @@ object SongPlayer {
         if (query.isBlank()) return
         restoreQuery = query
         restorePositionMs = positionMs.coerceAtLeast(0L)
+        loadedQuery = query
     }
 
     fun play() {
         if (webPlaybackActive()) { SpotifyWebPlayer.resume(); return }
+        playWhenResolved = true
+        if (currentRequest.isNotBlank() && currentRequest != loadedQuery) {
+            // We are currently resolving a new track in the background.
+            // Do not play the old track (loadedQuery).
+            return
+        }
         // Fresh launch: nothing loaded yet — resume the restored session track.
         if ((player?.mediaItemCount ?: 0) == 0) {
             val q = restoreQuery
@@ -1269,6 +1278,7 @@ object SongPlayer {
 
     fun pause() {
         cancelCrossfade()
+        playWhenResolved = false
         if (webPlaybackActive()) { SpotifyWebPlayer.pause(); return }
         player?.let {
             it.playWhenReady = false
@@ -1283,6 +1293,8 @@ object SongPlayer {
     fun stop() {
         cancelCrossfade()
         player?.stop()
+        loadedQuery = null
+        currentRequest = ""
     }
 
     fun seekTo(position: Long) {
@@ -1296,6 +1308,8 @@ object SongPlayer {
         cancelCrossfade()
         player?.release()
         player = null
+        loadedQuery = null
+        currentRequest = ""
     }
 
     fun getDuration(): Long {
