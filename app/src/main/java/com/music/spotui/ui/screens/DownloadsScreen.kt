@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -475,20 +477,22 @@ fun DownloadsScreen(navController: NavController) {
                 if (showSortSheet) {
                     ModalBottomSheet(
                         onDismissRequest = { showSortSheet = false },
-                        containerColor = Color(0xFF1A1A20)
+                        containerColor = Color(0xFF1A1A1A)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 32.dp)
+                                .navigationBarsPadding()
                         ) {
                             Text(
                                 text = "Sort by",
                                 color = Color.White,
-                                fontSize = 20.sp,
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(20.dp, 16.dp, 20.dp, 8.dp)
+                                modifier = Modifier.padding(16.dp, 12.dp, 16.dp, 12.dp)
                             )
+                            HorizontalDivider(color = Color(0xFF2A2A2A))
+                            Spacer(modifier = Modifier.height(4.dp))
                             DownloadSortOption.entries.forEach { option ->
                                 val isSelected = option == currentSort
                                 val icon = when (option) {
@@ -510,21 +514,20 @@ fun DownloadsScreen(navController: NavController) {
                                             setDownloadsSortOption(context, currentSort, isDescending)
                                             showSortSheet = false
                                         }
-                                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                                        .padding(16.dp, 14.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
                                         imageVector = icon,
                                         contentDescription = null,
-                                        tint = if (isSelected) Color(AppPalette.toArgb()) else Color.LightGray,
-                                        modifier = Modifier.size(24.dp)
+                                        tint = if (isSelected) Color(AppPalette.toArgb()) else Color.White,
+                                        modifier = Modifier.size(22.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Spacer(modifier = Modifier.width(18.dp))
                                     Text(
                                         text = if (isSelected) option.getDescriptiveLabel(isDescending) else option.getDescriptiveLabel(option == DownloadSortOption.DATE),
                                         color = if (isSelected) Color(AppPalette.toArgb()) else Color.White,
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Medium,
+                                        fontSize = 15.sp,
                                         modifier = Modifier.weight(1f)
                                     )
                                     if (isSelected) {
@@ -537,6 +540,7 @@ fun DownloadsScreen(navController: NavController) {
                                     }
                                 }
                             }
+                            Spacer(modifier = Modifier.height(12.dp))
                         }
                     }
                 }
