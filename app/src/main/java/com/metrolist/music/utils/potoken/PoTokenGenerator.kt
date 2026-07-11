@@ -7,10 +7,17 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import timber.log.Timber
 
 class PoTokenGenerator {
     private val TAG = "PoTokenGenerator"
+    /** Max time to wait for WebView-based PoToken generation before giving up.
+     *  In the background the WebView's evaluateJavascript() may never call back,
+     *  so an indefinite wait would stall the entire stream resolution pipeline. */
+    private companion object {
+        const val POTOKEN_TIMEOUT_MS = 12_000L
+    }
 
     private val webViewSupported by lazy { runCatching { CookieManager.getInstance() }.isSuccess }
     private var webViewBadImpl = false // whether the system has a bad WebView implementation
@@ -30,13 +37,21 @@ class PoTokenGenerator {
 
         return try {
             Timber.tag(TAG).d("Calling runBlocking to generate poToken...")
-            runBlocking { getWebClientPoToken(videoId, sessionId, forceRecreate = false) }
+            runBlocking {
+                withTimeout(POTOKEN_TIMEOUT_MS) {
+                    getWebClientPoToken(videoId, sessionId, forceRecreate = false)
+                }
+            }
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "poToken generation exception: ${e.javaClass.simpleName}: ${e.message}")
             when (e) {
                 is BadWebViewException -> {
                     Timber.tag(TAG).e(e, "Could not obtain poToken because WebView is broken")
                     webViewBadImpl = true
+                    null
+                }
+                is kotlinx.coroutines.TimeoutCancellationException -> {
+                    Timber.tag(TAG).w("PoToken generation timed out for videoId=$videoId")
                     null
                 }
                 else -> throw e // includes PoTokenException

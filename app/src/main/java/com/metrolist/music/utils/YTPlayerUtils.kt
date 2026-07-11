@@ -40,6 +40,10 @@ import java.util.concurrent.TimeUnit
 object YTPlayerUtils {
     private const val logTag = "YTPlayerUtils"
     private const val TAG = "YTPlayerUtils"
+    /** Max seconds to wait for signature-timestamp resolution before giving up. */
+    private const val SIG_FUTURE_TIMEOUT_SEC = 10L
+    /** Max seconds to wait for PoToken generation before giving up. */
+    private const val POT_FUTURE_TIMEOUT_SEC = 14L
 
     private val httpClient = OkHttpClient.Builder()
         .proxy(YouTube.proxy)
@@ -124,9 +128,23 @@ object YTPlayerUtils {
                 }
             } else null
 
-        val signatureTimestamp = sigFuture.get()
+        // Both signature-timestamp and PoToken generation can hang indefinitely when
+        // the app is in the background (WebView JS may never call back, or NewPipe
+        // extraction may stall). Use bounded waits so the resolution pipeline can
+        // still fall through to clients that don't require these tokens.
+        val signatureTimestamp = try {
+            sigFuture.get(SIG_FUTURE_TIMEOUT_SEC, java.util.concurrent.TimeUnit.SECONDS)
+        } catch (e: Exception) {
+            Timber.tag(logTag).w("Signature timestamp timed out or failed: ${e.message}")
+            SignatureTimestampResult(null, isAgeRestricted = false)
+        }
         Timber.tag(logTag).d("Signature timestamp: ${signatureTimestamp.timestamp}")
-        var poToken: PoTokenResult? = potFuture?.get()
+        var poToken: PoTokenResult? = try {
+            potFuture?.get(POT_FUTURE_TIMEOUT_SEC, java.util.concurrent.TimeUnit.SECONDS)
+        } catch (e: Exception) {
+            Timber.tag(logTag).w("PoToken timed out or failed: ${e.message}")
+            null
+        }
 
         // If MAIN_CLIENT needs a PoToken but we couldn't get one (WebView missing, JS
         // blocked, network hostile), WEB_REMIX will return streams that 403 on play.
