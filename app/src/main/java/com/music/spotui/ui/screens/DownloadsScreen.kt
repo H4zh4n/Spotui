@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -29,10 +30,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -94,6 +98,19 @@ fun DownloadsScreen(navController: NavController) {
             context = context,
             onDismiss = { menuSong = null },
         )
+    }
+
+    var searchQuery by remember { mutableStateOf("") }
+    // ponytail: filter downloads by simple title/singer string match
+    val displayedSongs = remember(songs, searchQuery) {
+        if (searchQuery.isBlank()) {
+            songs
+        } else {
+            songs.filter {
+                it.title.contains(searchQuery, ignoreCase = true) ||
+                it.singer.contains(searchQuery, ignoreCase = true)
+            }
+        }
     }
 
     val accent = Color(0xFF1DB954)
@@ -177,8 +194,65 @@ fun DownloadsScreen(navController: NavController) {
                     )
                 }
 
+                // ── Search bar for downloads ──
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp, 8.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .height(55.dp)
+                        .background(Color.White)
+                        .padding(10.dp, 0.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_search_big),
+                        tint = Color.Black,
+                        contentDescription = "Search",
+                        modifier = Modifier.size(24.dp)
+                    )
+
+                    TextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.weight(1f),
+                        textStyle = TextStyle.Default.copy(fontSize = 16.sp, color = Color.Black, fontWeight = FontWeight(500)),
+                        colors = TextFieldDefaults.colors(
+                            unfocusedContainerColor = Color.Transparent,
+                            disabledContainerColor = Color.Transparent,
+                            focusedContainerColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            cursorColor = Color.Black
+                        ),
+                        singleLine = true,
+                        placeholder = {
+                            Text(
+                                text = "Search downloaded songs",
+                                color = Color.Gray,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    )
+
+                    if (searchQuery.isNotEmpty()) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Clear",
+                            tint = Color.Black,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { searchQuery = "" }
+                        )
+                    }
+                }
+
                 // ── Clear all action (per-song Export lives in the ⋯ menu) ──
-                if (songs.isNotEmpty()) {
+                if (songs.isNotEmpty() && searchQuery.isBlank()) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(20.dp, 0.dp, 20.dp, 8.dp),
                         horizontalArrangement = Arrangement.End,
@@ -251,9 +325,16 @@ fun DownloadsScreen(navController: NavController) {
                         fontSize = 14.sp,
                         modifier = Modifier.padding(20.dp),
                     )
+                } else if (displayedSongs.isEmpty() && inProgress.isEmpty()) {
+                    Text(
+                        text = "No matches found for \"$searchQuery\"",
+                        color = Color.Gray,
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(20.dp),
+                    )
                 } else {
-                    repeat(songs.size) { index ->
-                        val song = songs[index]
+                    repeat(displayedSongs.size) { index ->
+                        val song = displayedSongs[index]
                         val currentColor = if (song.id == playerViewModel.currentSongId.value)
                             Color(AppPalette.toArgb()) else Color.White
 
@@ -268,7 +349,7 @@ fun DownloadsScreen(navController: NavController) {
                                     indication = null,
                                     onLongClick = { menuSong = song },
                                     onClick = {
-                                        playerViewModel.updateQueue(songs)
+                                        playerViewModel.updateQueue(displayedSongs)
                                         SongPlayer.playSong(song.url, context)
                                         playerViewModel.updateSongState(
                                             song.coverUri, song.title, song.singer,
