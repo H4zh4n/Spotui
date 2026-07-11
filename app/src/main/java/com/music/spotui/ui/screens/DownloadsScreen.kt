@@ -22,34 +22,46 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Person
+
+import androidx.compose.material.icons.filled.List
+
+
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.vectorResource
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,14 +71,22 @@ import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.bumptech.glide.integration.compose.GlideImage
 import com.bumptech.glide.integration.compose.placeholder
 import com.music.spotui.R
+import com.music.spotui.data.preferences.DownloadSortOption
 import com.music.spotui.data.preferences.getDownloadedSongs
+import com.music.spotui.data.preferences.getDownloadsSortOption
+import com.music.spotui.data.preferences.isDownloadsSortDescending
+import com.music.spotui.data.preferences.setDownloadsSortOption
 import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.PlayerViewModel
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalGlideComposeApi::class, ExperimentalFoundationApi::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalGlideComposeApi::class,
+    ExperimentalFoundationApi::class
+)
 @Composable
 fun DownloadsScreen(navController: NavController) {
 
@@ -80,6 +100,15 @@ fun DownloadsScreen(navController: NavController) {
     var inProgress by remember {
         mutableStateOf(com.music.spotui.di.SongPlayer.downloadingSnapshot())
     }
+    var showSortSheet by remember { mutableStateOf(false) }
+    var showClearConfirmDialog by remember { mutableStateOf(false) }
+    var currentSort by remember { mutableStateOf(getDownloadsSortOption(context)) }
+    var isDescending by remember { mutableStateOf(isDownloadsSortDescending(context)) }
+
+    androidx.compose.runtime.LaunchedEffect(currentSort, isDescending) {
+        songs = getDownloadedSongs(context)
+    }
+
     androidx.compose.runtime.LaunchedEffect(Unit) {
         while (true) {
             val snap = com.music.spotui.di.SongPlayer.downloadingSnapshot()
@@ -108,7 +137,7 @@ fun DownloadsScreen(navController: NavController) {
         } else {
             songs.filter {
                 it.title.contains(searchQuery, ignoreCase = true) ||
-                it.singer.contains(searchQuery, ignoreCase = true)
+                        it.singer.contains(searchQuery, ignoreCase = true)
             }
         }
     }
@@ -155,7 +184,10 @@ fun DownloadsScreen(navController: NavController) {
                         .height(360.dp)
                         .background(
                             brush = Brush.verticalGradient(
-                                colors = listOf(accent.copy(alpha = 0.5f), Color(AppBackground.toArgb())),
+                                colors = listOf(
+                                    accent.copy(alpha = 0.5f),
+                                    Color(AppBackground.toArgb())
+                                ),
                                 startY = -100f,
                             ),
                         ),
@@ -216,7 +248,11 @@ fun DownloadsScreen(navController: NavController) {
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         modifier = Modifier.weight(1f),
-                        textStyle = TextStyle.Default.copy(fontSize = 16.sp, color = Color.Black, fontWeight = FontWeight(500)),
+                        textStyle = TextStyle.Default.copy(
+                            fontSize = 16.sp,
+                            color = Color.Black,
+                            fontWeight = FontWeight(500)
+                        ),
                         colors = TextFieldDefaults.colors(
                             unfocusedContainerColor = Color.Transparent,
                             disabledContainerColor = Color.Transparent,
@@ -251,12 +287,43 @@ fun DownloadsScreen(navController: NavController) {
                     }
                 }
 
-                // ── Clear all action (per-song Export lives in the ⋯ menu) ──
-                if (songs.isNotEmpty() && searchQuery.isBlank()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(20.dp, 0.dp, 20.dp, 8.dp),
-                        horizontalArrangement = Arrangement.End,
-                    ) {
+                // ── Sort and Clear all action ──
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp, 0.dp, 20.dp, 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (songs.isNotEmpty()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(Color(0xFF2A2A30))
+                                .clickable { showSortSheet = true }
+                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = currentSort.label,
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Sort Options",
+                                tint = Color.White,
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .padding(start = 4.dp)
+                            )
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.width(1.dp))
+                    }
+
+                    if (songs.isNotEmpty() && searchQuery.isBlank()) {
                         Text(
                             text = "Clear all",
                             color = Color(0xFFE57373),
@@ -266,12 +333,7 @@ fun DownloadsScreen(navController: NavController) {
                                 .clip(RoundedCornerShape(50))
                                 .background(Color(0xFF1A1A20))
                                 .clickable {
-                                    val n = com.music.spotui.data.preferences.clearAllDownloads(context)
-                                    songs = getDownloadedSongs(context)
-                                    android.widget.Toast.makeText(
-                                        context, "Removed $n download${if (n == 1) "" else "s"}",
-                                        android.widget.Toast.LENGTH_SHORT,
-                                    ).show()
+                                    showClearConfirmDialog = true
                                 }
                                 .padding(horizontal = 18.dp, vertical = 10.dp),
                         )
@@ -295,8 +357,18 @@ fun DownloadsScreen(navController: NavController) {
                             contentScale = ContentScale.Crop,
                             contentDescription = "",
                         )
-                        Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
-                            Text(text = song.title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                        Column(
+                            modifier = Modifier
+                                .padding(start = 12.dp)
+                                .weight(1f)
+                        ) {
+                            Text(
+                                text = song.title,
+                                color = Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1
+                            )
                             Spacer(modifier = Modifier.height(4.dp))
                             androidx.compose.material3.LinearProgressIndicator(
                                 progress = { (pct.coerceIn(0, 100)) / 100f },
@@ -367,15 +439,125 @@ fun DownloadsScreen(navController: NavController) {
                                 contentScale = ContentScale.Crop,
                                 contentDescription = ""
                             )
-                            Column(modifier = Modifier.padding(start = 12.dp).width(280.dp)) {
-                                Text(text = song.title, color = currentColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-                                Text(text = song.singer, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                            Column(
+                                modifier = Modifier
+                                    .padding(start = 12.dp)
+                                    .width(280.dp)
+                            ) {
+                                Text(
+                                    text = song.title,
+                                    color = currentColor,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = song.singer,
+                                    color = Color.Gray,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1
+                                )
                             }
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.padding(80.dp))
+                if (showSortSheet) {
+                    ModalBottomSheet(
+                        onDismissRequest = { showSortSheet = false },
+                        containerColor = Color(0xFF1A1A20)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 32.dp)
+                        ) {
+                            Text(
+                                text = "Sort by",
+                                color = Color.White,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(20.dp, 16.dp, 20.dp, 8.dp)
+                            )
+                            DownloadSortOption.entries.forEach { option ->
+                                val isSelected = option == currentSort
+                                val icon = when (option) {
+                                    DownloadSortOption.DATE -> Icons.Default.DateRange
+                                    DownloadSortOption.TITLE -> Icons.Default.List
+                                    DownloadSortOption.ARTIST -> Icons.Default.Person
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            if (currentSort == option) {
+                                                isDescending = !isDescending
+                                            } else {
+                                                currentSort = option
+                                                isDescending = (option == DownloadSortOption.DATE)
+                                            }
+                                            setDownloadsSortOption(context, currentSort, isDescending)
+                                            showSortSheet = false
+                                        }
+                                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        tint = if (isSelected) Color(AppPalette.toArgb()) else Color.LightGray,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Text(
+                                        text = option.label,
+                                        color = if (isSelected) Color(AppPalette.toArgb()) else Color.White,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = if (isDescending) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                                            contentDescription = null,
+                                            tint = Color(AppPalette.toArgb()),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (showClearConfirmDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showClearConfirmDialog = false },
+                        title = { Text(text = "Clear all downloads") },
+                        text = { Text(text = "Are you sure you want to remove all downloaded songs?") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                val n =
+                                    com.music.spotui.data.preferences.clearAllDownloads(context)
+                                songs = getDownloadedSongs(context)
+                                showClearConfirmDialog = false
+                                android.widget.Toast.makeText(
+                                    context, "Removed $n download${if (n == 1) "" else "s"}",
+                                    android.widget.Toast.LENGTH_SHORT,
+                                ).show()
+                            }) {
+                                Text("Clear")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showClearConfirmDialog = false }) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
             }
         }
     }
