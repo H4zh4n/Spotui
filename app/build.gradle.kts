@@ -45,6 +45,8 @@ android {
             signingConfig = signingConfigs.getByName("sharedDebug")
         }
         debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
             signingConfig = signingConfigs.getByName("sharedDebug")
         }
     }
