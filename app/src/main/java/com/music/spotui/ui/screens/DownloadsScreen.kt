@@ -81,6 +81,14 @@ import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.PlayerViewModel
 
+fun DownloadSortOption.getDescriptiveLabel(isDescending: Boolean): String {
+    return when (this) {
+        DownloadSortOption.DATE -> if (isDescending) "Date added (newest to oldest)" else "Date added (oldest to newest)"
+        DownloadSortOption.TITLE -> if (isDescending) "Title (Z to A)" else "Title (A to Z)"
+        DownloadSortOption.ARTIST -> if (isDescending) "Artist (Z to A)" else "Artist (A to Z)"
+    }
+}
+
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -305,7 +313,7 @@ fun DownloadsScreen(navController: NavController) {
                                 .padding(horizontal = 14.dp, vertical = 8.dp)
                         ) {
                             Text(
-                                text = currentSort.label,
+                                text = currentSort.getDescriptiveLabel(isDescending),
                                 color = Color.White,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold
@@ -513,7 +521,7 @@ fun DownloadsScreen(navController: NavController) {
                                     )
                                     Spacer(modifier = Modifier.width(16.dp))
                                     Text(
-                                        text = option.label,
+                                        text = if (isSelected) option.getDescriptiveLabel(isDescending) else option.getDescriptiveLabel(option == DownloadSortOption.DATE),
                                         color = if (isSelected) Color(AppPalette.toArgb()) else Color.White,
                                         fontSize = 16.sp,
                                         fontWeight = FontWeight.Medium,
