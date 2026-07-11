@@ -154,7 +154,7 @@ fun LibraryScreen(navController: NavController) {
                 Text(
                     text = "Hazhan Salih",
                     color = Color.White,
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.clickable {
                         uriHandler.openUri("https://github.com/H4zh4n/Spotui/")
