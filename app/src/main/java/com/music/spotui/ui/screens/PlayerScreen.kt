@@ -1141,10 +1141,11 @@ fun PlayerFull(
             tint = Color.White,
             painter = painterResource(id = R.drawable.ic_player_skip),
             contentDescription = "")
-        Box(
-            contentAlignment = Alignment.Center,
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
             modifier = Modifier
-                .size(32.dp)
+                .size(width = 32.dp, height = 40.dp)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
@@ -1157,32 +1158,39 @@ fun PlayerFull(
                     playerViewModel.updateRepeatState(nextRepeat)
                 }
         ) {
-            Icon(
-                modifier = Modifier.size(20.dp),
-                tint = if (repeat != RepeatMode.OFF) {
-                    Color(AppPalette.toArgb())
-                } else {
-                    Color.White
-                },
-                painter = painterResource(id = R.drawable.ic_repeat),
-                contentDescription = "Repeat"
-            )
-            if (repeat == RepeatMode.ONE) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .offset(x = (-2).dp, y = 2.dp)
-                        .size(10.dp)
-                        .background(Color(AppPalette.toArgb()), shape = CircleShape)
-                ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(
+                    modifier = Modifier.size(20.dp),
+                    tint = if (repeat != RepeatMode.OFF) {
+                        Color(AppPalette.toArgb())
+                    } else {
+                        Color.White
+                    },
+                    painter = painterResource(id = R.drawable.ic_repeat),
+                    contentDescription = "Repeat"
+                )
+                if (repeat == RepeatMode.ONE) {
                     Text(
                         text = "1",
-                        color = Color.Black,
-                        fontSize = 7.sp,
+                        color = Color(AppPalette.toArgb()),
+                        fontSize = 8.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.align(Alignment.Center)
+                        modifier = Modifier.offset(y = (-1).dp)
                     )
                 }
+            }
+            if (repeat != RepeatMode.OFF) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Box(
+                    modifier = Modifier
+                        .size(4.dp)
+                        .background(Color(AppPalette.toArgb()), shape = CircleShape)
+                )
+            } else {
+                Spacer(modifier = Modifier.height(6.dp))
             }
         }
     }
