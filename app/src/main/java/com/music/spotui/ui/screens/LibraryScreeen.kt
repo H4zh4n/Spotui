@@ -143,6 +143,24 @@ fun LibraryScreen(navController: NavController) {
                 .fillMaxWidth()
                 .padding(16.dp, 0.dp, 16.dp, 8.dp)
         ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Maintained with ♥ by ",
+                    color = Color.Gray,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                Text(
+                    text = "Hazhan Salih",
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable {
+                        uriHandler.openUri("https://github.com/H4zh4n/Spotui/")
+                    }
+                )
+            }
             Spacer(modifier = Modifier.weight(1f))
             Box(
                 modifier = Modifier
