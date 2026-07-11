@@ -24,6 +24,15 @@ android {
         }
     }
 
+    signingConfigs {
+        create("sharedDebug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "hazhan"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -31,9 +40,19 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // Sign release with the debug key so the APK is installable via sideload
+            // Sign release with the shared debug key so the APK is installable via sideload
             // and upgrades the existing (debug-signed) install in place.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("sharedDebug")
+        }
+        debug {
+            signingConfig = signingConfigs.getByName("sharedDebug")
+        }
+    }
+
+    applicationVariants.all {
+        outputs.all {
+            val output = this as com.android.build.gradle.internal.api.ApkVariantOutputImpl
+            output.outputFileName = "Spotui_v${versionName}.apk"
         }
     }
     compileOptions {
