@@ -1,1 +1,0 @@
--keep,allowobfuscation,allowshrinking class com.music.spotui.ui.viewmodel.PlayerViewModel
