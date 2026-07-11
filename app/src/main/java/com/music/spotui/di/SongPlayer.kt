@@ -185,6 +185,11 @@ object SongPlayer {
         streamCache.remove(song)
         sourceCache.remove(song)
         qualityCache.remove(song)
+        videoCandidatesCache.remove("$song|FILTER_SONG")
+        videoCandidatesCache.remove("$song|FILTER_VIDEO")
+        appCtx?.let { ctx ->
+            com.music.spotui.data.preferences.clearCachedVideoId(ctx, song)
+        }
     }
 
     fun playSong(song: String, context: Context) {
@@ -1009,6 +1014,12 @@ object SongPlayer {
     ): List<String> {
         val cacheKey = "$query|${filter.value}"
         videoCandidatesCache[cacheKey]?.let { return it }
+        appCtx?.let { ctx ->
+            com.music.spotui.data.preferences.getCachedVideoIds(ctx, cacheKey)?.let { cached ->
+                videoCandidatesCache[cacheKey] = cached
+                return cached
+            }
+        }
         val searchText = searchTextForPlayback(query)
         // A raw YouTube videoId is 11 chars with no spaces — accept it directly.
         if (searchText.length == 11 && !searchText.contains(' ')) return listOf(searchText)
@@ -1119,6 +1130,9 @@ object SongPlayer {
         val resolvedIds = ordered.map { it.id }.distinct()
         if (resolvedIds.isNotEmpty()) {
             videoCandidatesCache[cacheKey] = resolvedIds
+            appCtx?.let { ctx ->
+                com.music.spotui.data.preferences.setCachedVideoIds(ctx, cacheKey, resolvedIds)
+            }
         }
         return resolvedIds
     }
