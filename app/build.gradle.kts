@@ -139,6 +139,9 @@ dependencies {
     implementation(libs.timber)
     implementation(libs.kotlinx.serialization.json)
 
+    // ML Kit on-device translation (free, no API key, works offline after model download)
+    implementation(libs.mlkit.translate)
+
     //core library desugaring (required by :innertube)
     coreLibraryDesugaring(libs.desugaring)
 }

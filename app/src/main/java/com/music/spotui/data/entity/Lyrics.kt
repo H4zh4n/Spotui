@@ -4,6 +4,7 @@ package com.music.spotui.data.entity
 data class LyricLine(
     val timeMs: Long,
     val text: String,
+    val translatedText: String? = null,
 )
 
 /**

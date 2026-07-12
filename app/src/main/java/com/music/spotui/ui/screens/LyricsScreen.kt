@@ -19,7 +19,11 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,6 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.music.spotui.data.api.TranslationApi
 import com.music.spotui.data.entity.Lyrics
 import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.viewmodel.LyricsViewModel
@@ -83,6 +88,7 @@ fun LyricsScreen(
 ) {
     val vm: LyricsViewModel = hiltViewModel()
     LaunchedEffect(title, artist) {
+        if (vm.state.value is LyricsViewModel.State.Loaded) return@LaunchedEffect
         val durationSec = (SongPlayer.getDuration() / 1000).toInt()
         vm.load(title, artist, album, durationSec)
     }
@@ -113,17 +119,45 @@ fun LyricsScreen(
                 Text("Lyrics", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Icon(
-                imageVector = Icons.Default.KeyboardArrowDown,
-                contentDescription = "Close",
-                tint = Color.White,
-                modifier = Modifier
-                    .size(30.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) { onClose() }
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Translate,
+                    contentDescription = "Translate",
+                    tint = if (vm.showLanguageBar) Color.White else Color.White.copy(alpha = 0.45f),
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { vm.toggleLanguageBar() }
+                )
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Close",
+                    tint = Color.White,
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { onClose() }
+                )
+            }
+        }
+
+        // Language selection bar — visible when the translate icon is active.
+        if (vm.showLanguageBar) {
+            TranslationBar(vm = vm)
+            vm.translationError?.let { error ->
+                Text(
+                    text = error,
+                    color = Color(0xFFFF6B6B),
+                    fontSize = 12.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 2.dp),
+                )
+            }
         }
 
         when (val s = state) {
@@ -139,6 +173,8 @@ fun LyricsScreen(
                 val lyrics = s.lyrics
                 val activeIndex = activeIndexFor(lyrics, positionMs)
                 val listState = rememberLazyListState()
+                val translated = vm.translatedLines
+                val showTranslations = vm.translationsVisible
                 LaunchedEffect(activeIndex) {
                     if (activeIndex >= 0) {
                         listState.animateScrollToItem(activeIndex.coerceAtLeast(0), scrollOffset = -260)
@@ -157,6 +193,7 @@ fun LyricsScreen(
                             synced = lyrics.synced,
                             fontSize = 24.sp,
                             onTap = if (lyrics.synced) ({ jumpTo(line.timeMs) }) else null,
+                            translatedText = if (showTranslations && translated != null && index < translated.size) translated[index].translatedText else null,
                         )
                     }
                 }
@@ -219,14 +256,18 @@ fun InlineLyrics(
                 val windowStart =
                     if (lyrics.synced) activeIndex.coerceIn(0, (lyrics.lines.size - PREVIEW_LINE_COUNT).coerceAtLeast(0))
                     else 0
+                val translated = vm.translatedLines
+                val showTranslations = vm.translationsVisible
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     lyrics.lines.drop(windowStart).take(PREVIEW_LINE_COUNT).forEachIndexed { i, line ->
+                        val globalIndex = windowStart + i
                         LyricLineText(
                             text = line.text,
-                            isActive = windowStart + i == activeIndex,
+                            isActive = globalIndex == activeIndex,
                             synced = lyrics.synced,
                             fontSize = 22.sp,
                             onTap = if (lyrics.synced) ({ jumpTo(line.timeMs) }) else null,
+                            translatedText = if (showTranslations && translated != null && globalIndex < translated.size) translated[globalIndex].translatedText else null,
                         )
                     }
                 }
@@ -247,6 +288,168 @@ fun InlineLyrics(
     }
 }
 
+/**
+ * Language-selection bar:  [Source ▾]  →  [Target ▾]  [Translate]
+ * Each side opens a dropdown menu; the Translate button triggers the fetch.
+ */
+@Composable
+private fun TranslationBar(vm: LyricsViewModel) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 4.dp)
+    ) {
+        LangChip(
+            code = vm.sourceLanguage,
+            label = TranslationApi.displayName(vm.sourceLanguage),
+            onClick = { vm.chooseSourceLanguage(it) },
+            languages = vm.availableLanguages,
+        )
+        Text(
+            text = "  \u2192  ",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) { vm.swapLanguages() }
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+        )
+        LangChip(
+            code = vm.targetLanguage,
+            label = TranslationApi.displayName(vm.targetLanguage),
+            onClick = { vm.chooseTargetLanguage(it) },
+            languages = vm.availableLanguages,
+        )
+
+        when {
+            vm.translationsLoading && vm.modelState is LyricsViewModel.ModelState.Downloading -> {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .padding(start = 10.dp)
+                        .background(Color.White.copy(alpha = 0.15f), shape = androidx.compose.foundation.shape.RoundedCornerShape(50))
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                ) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Text(
+                        text = "  Downloading\u2026",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                }
+            }
+            vm.translationsLoading -> {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .padding(start = 10.dp)
+                        .background(Color.White.copy(alpha = 0.15f), shape = androidx.compose.foundation.shape.RoundedCornerShape(50))
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                ) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Text(
+                        text = "  Translating\u2026",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                    )
+                }
+            }
+            else -> {
+                Box(
+                    modifier = Modifier
+                        .padding(start = 10.dp)
+                        .background(Color.White, shape = androidx.compose.foundation.shape.RoundedCornerShape(50))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { vm.startTranslation() }
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    Text("Translate", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+            }
+        }
+    }
+}
+
+/** A single tappable language chip that opens a [DropdownMenu]. */
+@Composable
+private fun LangChip(
+    code: String,
+    label: String,
+    onClick: (String) -> Unit,
+    languages: List<Pair<String, String>>,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .background(Color.White.copy(alpha = 0.12f), shape = androidx.compose.foundation.shape.RoundedCornerShape(50))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) { expanded = true }
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = label,
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(Color(0xFF282828)),
+        ) {
+            languages.forEachIndexed { i, (codeLang, name) ->
+                if (i > 0) {
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+                }
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = name,
+                            color = if (codeLang == code) Color.White else Color.White.copy(alpha = 0.7f),
+                            fontWeight = if (codeLang == code) FontWeight.Bold else FontWeight.Normal,
+                            fontSize = 14.sp,
+                        )
+                    },
+                    onClick = {
+                        onClick(codeLang)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun LyricLineText(
     text: String,
@@ -254,6 +457,7 @@ private fun LyricLineText(
     synced: Boolean,
     fontSize: androidx.compose.ui.unit.TextUnit,
     onTap: (() -> Unit)?,
+    translatedText: String? = null,
 ) {
     if (text.isBlank()) {
         Box(modifier = Modifier.size(1.dp))
@@ -265,14 +469,34 @@ private fun LyricLineText(
         else -> Color.White.copy(alpha = 0.45f)
     }
     val color by animateColorAsState(targetValue = target, label = "lyricColor")
-    Text(
-        text = text,
-        color = color,
-        fontSize = fontSize,
-        fontWeight = FontWeight.Bold,
-        modifier = if (onTap != null) Modifier.clickable(
-            interactionSource = remember { MutableInteractionSource() },
-            indication = null,
-        ) { onTap() } else Modifier,
-    )
+    val clickModifier = if (onTap != null) Modifier.clickable(
+        interactionSource = remember { MutableInteractionSource() },
+        indication = null,
+    ) { onTap() } else Modifier
+
+    if (translatedText != null) {
+        Column(modifier = clickModifier) {
+            Text(
+                text = text,
+                color = color,
+                fontSize = fontSize,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = translatedText,
+                color = color.copy(alpha = 0.6f),
+                fontSize = (fontSize.value * 0.7f).sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+    } else {
+        Text(
+            text = text,
+            color = color,
+            fontSize = fontSize,
+            fontWeight = FontWeight.Bold,
+            modifier = clickModifier,
+        )
+    }
 }
