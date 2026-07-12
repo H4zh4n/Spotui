@@ -34,7 +34,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -191,6 +193,16 @@ class PlaybackService : MediaLibraryService() {
         SongPlayer.onPlayerSwapped = { newPlayer ->
             if (!showingWeb) mediaSession?.player = wrap(newPlayer)
             newPlayer.addListener(playerListener)
+        }
+
+        // Keep the notification's repeat icon in sync whenever the repeat mode
+        // changes from ANY source (full-screen UI, notification button, etc.).
+        serviceScope.launch {
+            snapshotFlow { currentSongState.repeat.value }
+                .distinctUntilChanged()
+                .collect { mode ->
+                    mediaSession?.setCustomLayout(buildCustomLayout(mode))
+                }
         }
 
         // As the hidden web player streams, keep the notification in sync and swap
@@ -356,11 +368,11 @@ class PlaybackService : MediaLibraryService() {
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
                 "ACTION_REPEAT" -> {
-                    // Cycle OFF → ONE → ALL → OFF
+                    // Cycle OFF → ALL → ONE → OFF (matches full-screen UI)
                     val next = when (currentSongState.repeat.value) {
-                        RepeatMode.OFF -> RepeatMode.ONE
-                        RepeatMode.ONE -> RepeatMode.ALL
-                        RepeatMode.ALL -> RepeatMode.OFF
+                        RepeatMode.OFF -> RepeatMode.ALL
+                        RepeatMode.ALL -> RepeatMode.ONE
+                        RepeatMode.ONE -> RepeatMode.OFF
                     }
                     currentSongState.updateRepeatState(next)
                     // Update the custom layout so the notification icon reflects the new mode
