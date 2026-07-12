@@ -1,5 +1,6 @@
 package com.music.spotui.ui.viewmodel
 
+import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -10,7 +11,12 @@ import com.music.spotui.data.api.LyricsApi
 import com.music.spotui.data.api.TranslationApi
 import com.music.spotui.data.entity.LyricLine
 import com.music.spotui.data.entity.Lyrics
+import com.music.spotui.data.preferences.getSourceLanguage
+import com.music.spotui.data.preferences.getTargetLanguage
+import com.music.spotui.data.preferences.setSourceLanguage
+import com.music.spotui.data.preferences.setTargetLanguage
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,7 +26,9 @@ import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
-class LyricsViewModel @Inject constructor() : ViewModel() {
+class LyricsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+) : ViewModel() {
 
     sealed class State {
         object Loading : State()
@@ -53,9 +61,9 @@ class LyricsViewModel @Inject constructor() : ViewModel() {
     var modelState by mutableStateOf<ModelState>(ModelState.Idle)
         private set
 
-    var sourceLanguage by mutableStateOf("en")
+    var sourceLanguage by mutableStateOf(getSourceLanguage(context, "en"))
         private set
-    var targetLanguage by mutableStateOf(Locale.getDefault().language)
+    var targetLanguage by mutableStateOf(getTargetLanguage(context, Locale.getDefault().language))
         private set
     val availableLanguages: List<Pair<String, String>> = TranslationApi.languages
 
@@ -149,6 +157,7 @@ class LyricsViewModel @Inject constructor() : ViewModel() {
     fun chooseSourceLanguage(langCode: String) {
         if (langCode == sourceLanguage) return
         sourceLanguage = langCode
+        setSourceLanguage(context, langCode)
         translationError = null
         translatedLines = null
     }
@@ -156,6 +165,7 @@ class LyricsViewModel @Inject constructor() : ViewModel() {
     fun chooseTargetLanguage(langCode: String) {
         if (langCode == targetLanguage) return
         targetLanguage = langCode
+        setTargetLanguage(context, langCode)
         translationError = null
         translatedLines = null
     }
@@ -164,6 +174,8 @@ class LyricsViewModel @Inject constructor() : ViewModel() {
         val tmp = sourceLanguage
         sourceLanguage = targetLanguage
         targetLanguage = tmp
+        setSourceLanguage(context, sourceLanguage)
+        setTargetLanguage(context, targetLanguage)
         translationError = null
         translatedLines = null
     }
@@ -174,8 +186,6 @@ class LyricsViewModel @Inject constructor() : ViewModel() {
         translatedLines = null
         translationError = null
         modelState = ModelState.Idle
-        sourceLanguage = "en"
-        targetLanguage = Locale.getDefault().language
     }
 
     companion object {
