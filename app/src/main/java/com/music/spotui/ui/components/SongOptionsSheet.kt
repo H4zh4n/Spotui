@@ -132,12 +132,12 @@ fun SongOptionsSheet(
             }
             HorizontalDivider(color = Color(0xFF2A2A2A))
 
-            SongMenuRow(Icons.Default.PlayArrow, "Play next") {
-                playerViewModel.playNext(song)
-                onDismiss()
-            }
             SongMenuRow(Icons.AutoMirrored.Filled.List, "Add to queue") {
                 playerViewModel.addToQueue(song)
+                onDismiss()
+            }
+            SongMenuRow(Icons.Default.PlayArrow, "Play next") {
+                playerViewModel.playNext(song)
                 onDismiss()
             }
             SongMenuRow(

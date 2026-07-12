@@ -291,6 +291,26 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                                 mutableStateOf(songs.isNotEmpty() && SongPlayer.allDownloaded(songs, context))
                             }
                             if (songs.isNotEmpty()) {
+                                // Add all playlist tracks to the queue.
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.List,
+                                    tint = Color.White,
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                        ) {
+                                            playlistViewModel.addAllToQueue(filteredSongs)
+                                            android.widget.Toast.makeText(
+                                                context,
+                                                "${filteredSongs.size} track(s) added to queue",
+                                                android.widget.Toast.LENGTH_SHORT,
+                                            ).show()
+                                        },
+                                    contentDescription = "Add to queue",
+                                )
+                                Spacer(modifier = Modifier.width(16.dp))
                                 Icon(
                                     imageVector = if (playlistDownloaded)
                                         Icons.Default.CheckCircle else ImageVector.vectorResource(R.drawable.ic_download),
