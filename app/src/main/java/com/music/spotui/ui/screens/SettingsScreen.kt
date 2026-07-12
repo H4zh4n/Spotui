@@ -33,6 +33,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -180,6 +181,24 @@ fun SettingsScreen(navController: NavController) {
                 title = "Download quality",
                 selected = dlQ,
             ) { dlQ = it; setDownloadQuality(context, it) }
+
+            // Live lossless-server status (spotbye). Lossless only resolves when a
+            // server is up; otherwise playback goes straight to YouTube.
+            var losslessStatus by remember { mutableStateOf("Lossless servers: checking…") }
+            LaunchedEffect(Unit) {
+                val up = runCatching { com.metrolist.spotify.SpotiFlac.upLosslessProviders() }.getOrNull()
+                losslessStatus = when {
+                    up == null -> "Lossless servers: status unavailable"
+                    up.isEmpty() -> "Lossless servers: 0/3 up — streaming (YouTube)"
+                    else -> "Lossless servers: ${up.size}/3 up (${up.sorted().joinToString(", ")})"
+                }
+            }
+            Text(
+                losslessStatus,
+                color = Color(0xFFB3B3B3),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(start = 4.dp, top = 6.dp),
+            )
 
             Spacer(Modifier.height(12.dp))
             SectionTitle("Matching")

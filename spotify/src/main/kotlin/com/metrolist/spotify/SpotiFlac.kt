@@ -153,6 +153,36 @@ object SpotiFlac {
         }
     }
 
+    // ── Live server status (spotbye.qzz.io/api/status → "spotiflac" section) ──
+    private const val STATUS_URL = "https://spotbye.qzz.io/api/status"
+    private val allProviders = setOf("tidal", "qobuz", "amazon")
+    @Volatile private var upProvidersCache: Set<String>? = null
+    @Volatile private var upProvidersAt = 0L
+
+    /**
+     * Which SpotiFLAC (not "next") providers are currently up, per the status API.
+     * Cached 60s. Fail-open: if the status endpoint itself is unreachable we return
+     * all providers so lossless still gets a chance rather than being wrongly blocked.
+     */
+    suspend fun upLosslessProviders(): Set<String> {
+        upProvidersCache?.let { if (System.currentTimeMillis() - upProvidersAt < 60_000L) return it }
+        val up = runCatching {
+            val r = client.get(STATUS_URL) { header("User-Agent", UA) }
+            if (r.status.value !in 200..299) return@runCatching null
+            json.parseToJsonElement(r.bodyAsText()).jsonObject["spotiflac"]
+                ?.jsonObject?.get("status")?.jsonObject
+                ?.filterValues { it.jsonPrimitive.contentOrNull.equals("up", true) }
+                ?.keys?.toSet()
+        }.getOrNull()
+        val result = up ?: allProviders // unreachable status API → don't block lossless
+        upProvidersCache = result
+        upProvidersAt = System.currentTimeMillis()
+        return result
+    }
+
+    /** True if any SpotiFLAC lossless server is up — gate lossless attempts on this. */
+    suspend fun anyLosslessServerUp(): Boolean = upLosslessProviders().isNotEmpty()
+
     /**
      * Resolve a lossless FLAC URL for a Spotify track.
      * @param isrc the track's ISRC (used for Qobuz matching); may be null.
@@ -163,6 +193,12 @@ object SpotiFlac {
         isrc: String?,
         preferHiRes: Boolean = true,
     ): Result {
+        val upProviders = upLosslessProviders()
+        // All lossless servers down → don't waste time; caller falls back to YouTube.
+        if (upProviders.isEmpty()) {
+            log("D", "all lossless servers down — skipping lossless")
+            return Result.NotFound
+        }
         val quality = if (preferHiRes) "24" else "16"
         val ids = runCatching { resolveProviderIds(spotifyTrackId, isrc) }
             .getOrElse {
@@ -193,6 +229,7 @@ object SpotiFlac {
         )
         for ((provider, base, id) in attempts) {
             if (id.isNullOrBlank()) continue
+            if (provider !in upProviders) continue // skip providers the status API reports down
             sawMatch = true
             when (val r = communityDownload(provider, base, id, quality)) {
                 is Result.Success -> return r
