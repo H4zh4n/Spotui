@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -59,7 +59,7 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
                 contentAlignment = Alignment.BottomCenter,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(130.dp)
+                    .height(160.dp)
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
@@ -82,11 +82,10 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
                         }
                     )
 
-
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     NavigationBar(
                         modifier = Modifier
-                            .offset(y = 10.dp)
                             .padding(30.dp, 0.dp)
                             .fillMaxWidth(),
                         containerColor = Color.Transparent,

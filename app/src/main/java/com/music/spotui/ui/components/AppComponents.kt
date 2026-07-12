@@ -160,7 +160,6 @@ fun MiniPlayer(navController: NavHostController) {
             .clip(RoundedCornerShape(8.dp))
             .background(darkVibrantColor)
             .padding(8.dp, 0.dp)
-            .clipToBounds()
 
     ) {
         Row(horizontalArrangement = Arrangement.SpaceBetween,
@@ -265,55 +264,54 @@ fun MiniPlayer(navController: NavHostController) {
 
 
                 val isLocatingOrBuffering = miniPlayerViewModel.isResolving.value || miniPlayerViewModel.isBuffering.value
-                if (isLocatingOrBuffering) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .padding(5.dp, 0.dp),
-                        color = Color.White,
-                        strokeWidth = 2.5.dp
-                    )
-                } else {
-                    Icon(
-                        painter = if (songPlayingState)
-                            painterResource(id = R.drawable.ic_playing)
-                        else
-                            painterResource(id = R.drawable.play_svgrepo_com)
-                        ,
-                        contentDescription = "",
-                        tint = Color.White,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .padding(5.dp, 0.dp)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) {
-                                if (songPlayingState) {
-                                    SongPlayer.pause()
-                                    miniPlayerViewModel.updateSongState(
-                                        songCoverUri,
-                                        songTitle,
-                                        songSinger,
-                                        false,
-                                        songId,
-                                        songIndex,
-                                        songAlbum
-                                    )
-                                } else {
-                                    SongPlayer.play()
-                                    miniPlayerViewModel.updateSongState(
-                                        songCoverUri,
-                                        songTitle,
-                                        songSinger,
-                                        true,
-                                        songId,
-                                        songIndex,
-                                        songAlbum
-                                    )
+                Box(modifier = Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                    if (isLocatingOrBuffering) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(28.dp),
+                            color = Color.White,
+                            strokeWidth = 2.5.dp
+                        )
+                    } else {
+                        Icon(
+                            painter = if (songPlayingState)
+                                painterResource(id = R.drawable.ic_playing)
+                            else
+                                painterResource(id = R.drawable.play_svgrepo_com)
+                            ,
+                            contentDescription = "",
+                            tint = Color.White,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    if (songPlayingState) {
+                                        SongPlayer.pause()
+                                        miniPlayerViewModel.updateSongState(
+                                            songCoverUri,
+                                            songTitle,
+                                            songSinger,
+                                            false,
+                                            songId,
+                                            songIndex,
+                                            songAlbum
+                                        )
+                                    } else {
+                                        SongPlayer.play()
+                                        miniPlayerViewModel.updateSongState(
+                                            songCoverUri,
+                                            songTitle,
+                                            songSinger,
+                                            true,
+                                            songId,
+                                            songIndex,
+                                            songAlbum
+                                        )
+                                    }
                                 }
-                            }
-                    )
+                        )
+                    }
                 }
             }
 
