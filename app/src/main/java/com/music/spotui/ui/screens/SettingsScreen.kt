@@ -170,34 +170,19 @@ fun SettingsScreen(navController: NavController) {
             QualityPicker(
                 title = "Streaming over Wi-Fi",
                 selected = wifiQ,
+                showFlacWarning = wifiQ == StreamQuality.LOSSLESS,
             ) { wifiQ = it; setWifiQuality(context, it) }
 
             QualityPicker(
                 title = "Streaming over cellular",
                 selected = cellQ,
+                showFlacWarning = cellQ == StreamQuality.LOSSLESS,
             ) { cellQ = it; setCellularQuality(context, it) }
 
             QualityPicker(
                 title = "Download quality",
                 selected = dlQ,
             ) { dlQ = it; setDownloadQuality(context, it) }
-
-            // Warn about FLAC when any quality is set to Lossless.
-            val anyLossless = wifiQ == StreamQuality.LOSSLESS || cellQ == StreamQuality.LOSSLESS || dlQ == StreamQuality.LOSSLESS
-            if (anyLossless) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "Lossless streams are resolved per-session and aren't cached to disk, which may add a few seconds of loading time when playing music.",
-                    color = Color(0xFFFFB74D),
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0x33FFB74D))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                )
-            }
 
             // Live lossless-server status (spotbye). Lossless only resolves when a
             // server is up; otherwise playback goes straight to YouTube.
@@ -374,6 +359,7 @@ private fun SettingsSwitchRow(
 private fun QualityPicker(
     title: String,
     selected: StreamQuality,
+    showFlacWarning: Boolean = false,
     onSelect: (StreamQuality) -> Unit
 ) {
     Column(modifier = Modifier.padding(vertical = 8.dp)) {
@@ -381,25 +367,41 @@ private fun QualityPicker(
         Spacer(Modifier.height(8.dp))
         StreamQuality.values().forEach { q ->
             val isSel = q == selected
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable { onSelect(q) }
-                    .background(if (isSel) Color(0xFF1A1A20) else Color.Transparent)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(q.label, color = Color.White, fontSize = 15.sp)
-                    Text(q.detail, color = Color(0xFFB3B3B3), fontSize = 12.sp)
+            Column {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onSelect(q) }
+                        .background(if (isSel) Color(0xFF1A1A20) else Color.Transparent)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(q.label, color = Color.White, fontSize = 15.sp)
+                        Text(q.detail, color = Color(0xFFB3B3B3), fontSize = 12.sp)
+                    }
+                    if (isSel) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = "Selected",
+                            tint = AppPalette,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
-                if (isSel) {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = "Selected",
-                        tint = AppPalette,
-                        modifier = Modifier.size(20.dp)
+                if (isSel && q == StreamQuality.LOSSLESS && showFlacWarning) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "Lossless streams are resolved per-session and aren't cached to disk, which may add a few seconds of loading time when playing music.",
+                        color = Color(0xFFFFB74D),
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x33FFB74D))
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                     )
                 }
             }
