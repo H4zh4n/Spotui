@@ -14,6 +14,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
@@ -505,61 +507,88 @@ object SongPlayer {
         }
         // Quality for the current network (Wi-Fi vs cellular), from Settings.
         val quality = com.music.spotui.data.preferences.currentStreamingQuality(appContext)
-        // FLAC providers are slow community proxies. Only try them when the user
-        // explicitly picked Lossless; normal/high quality should stream YouTube
-        // immediately.
-        // Only attempt lossless when a SpotiFLAC server is actually up (status is
-        // cached ~60s), so playback isn't delayed probing dead servers — it goes
-        // straight to YouTube instead.
-        if (losslessStreaming && quality.lossless && System.currentTimeMillis() >= losslessCooldownUntil && com.metrolist.spotify.SpotiFlac.anyLosslessServerUp()) {
-            (trackIdRegistry[song] ?: spotifyTrackIdForPlayback(song))?.let { spotifyId ->
-                if (forPlayback) {
-                    updateResolveStatus(true, "Locating Lossless source...")
+        // ── Parallel resolution ──
+        // FLAC community proxies are slow and unreliable. Instead of blocking on
+        // FLAC first then starting YouTube after it fails, we launch both in
+        // parallel. If FLAC wins, we cancel YouTube. If FLAC loses (timeout/
+        // cooldown/miss), YouTube is already resolved — no wait.
+        //
+        // The candidates/search step of resolveYtPlayback also runs in this scope;
+        // if FLAC succeeds, that search result is just discarded.
+        val shouldTryFlac = losslessStreaming && quality.lossless &&
+            System.currentTimeMillis() >= losslessCooldownUntil &&
+            com.metrolist.spotify.SpotiFlac.anyLosslessServerUp()
+        val shouldTryYoutube = youtubeEnabled
+
+        if (!shouldTryFlac && !shouldTryYoutube) {
+            Log.w(TAG, "no stream source available for: $song")
+            if (forPlayback) updateResolveStatus(false)
+            return null
+        }
+
+        val flacDeferred = if (shouldTryFlac) {
+            scope.async {
+                val flacSpotifyId = trackIdRegistry[song] ?: spotifyTrackIdForPlayback(song)
+                if (flacSpotifyId == null) {
+                    return@async null
                 }
-                val r = kotlinx.coroutines.withTimeoutOrNull(4_000) {
+                kotlinx.coroutines.withTimeoutOrNull(4_000) {
                     com.metrolist.spotify.SpotiFlac.resolve(
-                        spotifyId,
+                        flacSpotifyId,
                         isrc = null,
                         preferHiRes = losslessHiRes,
                     )
                 }
-                when (r) {
-                    is com.metrolist.spotify.SpotiFlac.Result.Success -> {
-                        Log.d(TAG, "lossless ${r.track.provider} ${r.track.quality}-bit for: $song")
-                        val flacQuality = "FLAC ${r.track.quality}-bit"
-                        // SpotiFLAC pulls from Tidal/Qobuz/Amazon — not Spotify.
-                        if (forPlayback) {
-                            currentSource = "Lossless • ${r.track.provider}"
-                            currentQuality = flacQuality
-                            updateResolveStatus(false)
-                        }
-                        streamCache[song] = r.track.url
-                        sourceCache[song] = "Lossless • ${r.track.provider}"
-                        qualityCache[song] = flacQuality
-                        return r.track.url
-                    }
-                    is com.metrolist.spotify.SpotiFlac.Result.Cooldown -> {
-                        losslessCooldownUntil = System.currentTimeMillis() + 60_000L
-                        Log.d(TAG, "lossless on cooldown (skipping for 60s), using YouTube for: $song")
-                    }
-                    null -> Log.w(TAG, "lossless timed out, using YouTube for: $song")
-                    else -> Log.w(TAG, "lossless miss ($r), using YouTube for: $song")
+            }
+        } else null
+
+        val ytDeferred = if (shouldTryYoutube) {
+            scope.async {
+                if (forPlayback) {
+                    currentSource = "YouTube"
+                    currentQuality = ""
+                    updateResolveStatus(true, "Locating YouTube source...")
                 }
+                resolveYtPlayback(song, quality.audioQuality, appContext, forPlayback = forPlayback)
+            }
+        } else null
+
+        // Check FLAC first
+        if (flacDeferred != null) {
+            val flacResult = flacDeferred.await()
+            when (flacResult) {
+                is com.metrolist.spotify.SpotiFlac.Result.Success -> {
+                    Log.d(TAG, "lossless ${flacResult.track.provider} ${flacResult.track.quality}-bit for: $song")
+                    val flacQuality = "FLAC ${flacResult.track.quality}-bit"
+                    if (forPlayback) {
+                        currentSource = "Lossless • ${flacResult.track.provider}"
+                        currentQuality = flacQuality
+                        updateResolveStatus(false)
+                    }
+                    streamCache[song] = flacResult.track.url
+                    sourceCache[song] = "Lossless • ${flacResult.track.provider}"
+                    qualityCache[song] = flacQuality
+                    ytDeferred?.cancelAndJoin()
+                    return flacResult.track.url
+                }
+                is com.metrolist.spotify.SpotiFlac.Result.Cooldown -> {
+                    losslessCooldownUntil = System.currentTimeMillis() + 60_000L
+                    Log.d(TAG, "lossless on cooldown (skipping for 60s), using YouTube for: $song")
+                }
+                null -> Log.w(TAG, "lossless timed out, using YouTube for: $song")
+                else -> Log.w(TAG, "lossless miss ($flacResult), using YouTube for: $song")
             }
         }
-        if (!youtubeEnabled) {
+
+        // FLAC didn't work — use YouTube (already resolving in parallel).
+        if (!shouldTryYoutube) {
             Log.w(TAG, "YouTube fallback disabled — no stream for: $song")
             if (forPlayback) updateResolveStatus(false)
             return null
         }
-        if (forPlayback) {
-            currentSource = "YouTube"
-            // Clear the previous track's quality so a failed resolve can't leave
-            // a stale "FLAC 24-bit" badge on a YouTube stream.
-            currentQuality = ""
-            updateResolveStatus(true, "Locating YouTube source...")
-        }
-        val playback = resolveYtPlayback(song, quality.audioQuality, appContext, forPlayback = forPlayback) ?: run {
+
+        val playback = ytDeferred!!.await()
+        if (playback == null) {
             if (forPlayback) {
                 val cacheKey = "$song|${com.metrolist.innertube.YouTube.SearchFilter.FILTER_SONG.value}"
                 val cachedCandidates = videoCandidatesCache[cacheKey]
