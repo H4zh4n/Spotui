@@ -13,9 +13,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,10 +36,13 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.MoreVert
@@ -59,6 +64,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
@@ -1406,6 +1412,8 @@ fun PlayerOptionsSheet(
     var showSleep by remember { mutableStateOf(false) }
     var showSavedIn by remember { mutableStateOf(false) }
     var showAlternativeStream by remember { mutableStateOf(false) }
+    var showYouTubeSearch by remember { mutableStateOf(false) }
+    val altSearchViewModel: com.music.spotui.ui.viewmodel.AlternativeSearchViewModel = hiltViewModel()
 
     val title = playerViewModel.currentSongTitle.value
     val singer = playerViewModel.currentSongSinger.value
@@ -1458,7 +1466,23 @@ fun PlayerOptionsSheet(
                 .navigationBarsPadding()
                 .padding(bottom = 12.dp)
         ) {
-            if (showAlternativeStream) {
+            if (showYouTubeSearch) {
+                YouTubeSearchView(
+                    viewModel = altSearchViewModel,
+                    songTitle = title,
+                    songArtist = singer,
+                    enabled = currentSong != null,
+                    onBack = { showYouTubeSearch = false },
+                    onUseVideoId = { videoId ->
+                        val song = currentSong ?: return@YouTubeSearchView
+                        setYouTubeAlternativeStream(context, alternativeKey, videoId)
+                        SongPlayer.invalidateResolvedStream(song.url)
+                        currentAlternative = getAlternativeStream(context, alternativeKey)
+                        showYouTubeSearch = false
+                        Toast.makeText(context, "Alternative stream set to YouTube", Toast.LENGTH_SHORT).show()
+                    },
+                )
+            } else if (showAlternativeStream) {
                 AlternativeStreamEditor(
                     currentAlternative = currentAlternative,
                     enabled = currentSong != null,
@@ -1485,6 +1509,7 @@ fun PlayerOptionsSheet(
                         currentAlternative = null
                         Toast.makeText(context, "Alternative stream cleared", Toast.LENGTH_SHORT).show()
                     },
+                    onOpenYouTubeSearch = { showYouTubeSearch = true },
                 )
             } else if (!showSleep) {
                 // ── Now-playing header ──
@@ -1649,6 +1674,7 @@ fun AlternativeStreamEditor(
     onUseYouTube: (String) -> Unit,
     onPickLocal: () -> Unit,
     onClear: () -> Unit,
+    onOpenYouTubeSearch: () -> Unit,
 ) {
     var youtubeText by remember { mutableStateOf("") }
     Column(
@@ -1705,6 +1731,14 @@ fun AlternativeStreamEditor(
             }
         }
         PlayerMenuRow(
+            icon = Icons.Default.Search,
+            label = "Search YouTube",
+            enabled = enabled,
+            trailingArrow = true,
+        ) {
+            onOpenYouTubeSearch()
+        }
+        PlayerMenuRow(
             icon = Icons.Default.Add,
             label = "Use local audio file",
             enabled = enabled,
@@ -1719,6 +1753,206 @@ fun AlternativeStreamEditor(
         ) {
             onClear()
         }
+    }
+}
+
+@OptIn(ExperimentalGlideComposeApi::class)
+@Composable
+fun YouTubeSearchView(
+    viewModel: com.music.spotui.ui.viewmodel.AlternativeSearchViewModel,
+    songTitle: String,
+    songArtist: String,
+    enabled: Boolean,
+    onBack: () -> Unit,
+    onUseVideoId: (String) -> Unit,
+) {
+    LaunchedEffect(songTitle, songArtist) {
+        viewModel.initQuery(songTitle, songArtist)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { viewModel.stopPreview() }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowDown,
+                tint = Color.White,
+                modifier = Modifier
+                    .size(24.dp)
+                    .clickable { viewModel.stopPreview(); onBack() },
+                contentDescription = null,
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                "Search YouTube",
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Spacer(Modifier.height(14.dp))
+        OutlinedTextField(
+            value = viewModel.searchQuery,
+            onValueChange = { viewModel.updateQuery(it) },
+            enabled = enabled,
+            singleLine = true,
+            textStyle = androidx.compose.ui.text.TextStyle(color = Color.White, fontSize = 14.sp),
+            label = { Text("Search query", color = Color(0xFFB3B3B3)) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
+
+        when {
+            viewModel.isSearching -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        color = AppPalette,
+                        modifier = Modifier.size(32.dp),
+                    )
+                }
+            }
+            viewModel.error != null -> {
+                Text(
+                    text = viewModel.error!!,
+                    color = Color(0xFFE57373),
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+            viewModel.searchResults.isEmpty() && viewModel.searchQuery.isNotBlank() -> {
+                Text(
+                    text = "No results found",
+                    color = Color(0xFFB3B3B3),
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+            else -> {
+                androidx.compose.foundation.lazy.LazyColumn(
+                    modifier = Modifier.heightIn(max = 360.dp),
+                ) {
+                    items(
+                        count = viewModel.searchResults.size,
+                        key = { viewModel.searchResults[it].id },
+                    ) { index ->
+                        val song = viewModel.searchResults[index]
+                        YouTubeSearchResultRow(
+                            song = song,
+                            isPreviewing = viewModel.previewingVideoId == song.id,
+                            isResolving = viewModel.previewingVideoId == song.id && viewModel.isResolvingPreview,
+                            enabled = enabled,
+                            onPreview = { viewModel.preview(song) },
+                            onSelect = {
+                                viewModel.stopPreview()
+                                onUseVideoId(song.id)
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalGlideComposeApi::class)
+@Composable
+private fun YouTubeSearchResultRow(
+    song: com.metrolist.innertube.models.SongItem,
+    isPreviewing: Boolean,
+    isResolving: Boolean = false,
+    enabled: Boolean,
+    onPreview: () -> Unit,
+    onSelect: () -> Unit,
+) {
+    val durationText = song.duration?.let { dur ->
+        val min = dur / 60
+        val sec = dur % 60
+        "%d:%02d".format(min, sec)
+    }.orEmpty()
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+    ) {
+        GlideImage(
+            model = song.thumbnail,
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(4.dp)),
+            contentScale = ContentScale.Crop,
+            contentDescription = null,
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = song.title,
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = song.artists.joinToString(", ") { it.name },
+                    color = Color(0xFFB3B3B3),
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (durationText.isNotBlank()) {
+                    Text(
+                        text = " · $durationText",
+                        color = Color(0xFFB3B3B3),
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.width(4.dp))
+        if (isResolving) {
+            androidx.compose.material3.CircularProgressIndicator(
+                color = AppPalette,
+                modifier = Modifier
+                    .size(28.dp)
+                    .padding(4.dp),
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Icon(
+                imageVector = if (isPreviewing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                tint = if (isPreviewing) AppPalette else Color(0xFFB3B3B3),
+                modifier = Modifier
+                    .size(32.dp)
+                    .clickable(enabled = enabled) { onPreview() }
+                    .padding(4.dp),
+                contentDescription = "Preview",
+            )
+        }
+        Spacer(Modifier.width(2.dp))
+        Icon(
+            imageVector = Icons.Default.Check,
+            tint = Color(0xFFB3B3B3),
+            modifier = Modifier
+                .size(32.dp)
+                .clickable(enabled = enabled) { onSelect() }
+                .padding(4.dp),
+            contentDescription = "Use this",
+        )
     }
 }
 
