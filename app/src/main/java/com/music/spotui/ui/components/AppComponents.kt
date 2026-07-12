@@ -66,6 +66,11 @@ import com.music.spotui.ui.viewmodel.PlayerViewModel
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.launch
 
 @Composable
 fun Loader() {
@@ -95,6 +100,8 @@ fun MiniPlayer(navController: NavHostController) {
     val songIndex = miniPlayerViewModel.currentSongIndex.value
     val songAlbum = miniPlayerViewModel.currentSongAlbum.value
 
+    var swipeOffsetY by remember { mutableFloatStateOf(0f) }
+    val coroutineScope = rememberCoroutineScope()
 
     var songProgress by remember { mutableFloatStateOf(0f) }
 
@@ -157,6 +164,10 @@ fun MiniPlayer(navController: NavHostController) {
         modifier = Modifier
 
             .padding(13.dp, 0.dp)
+            .graphicsLayer {
+                translationY = swipeOffsetY
+                alpha = (1f + swipeOffsetY / 150f).coerceIn(0f, 1f)
+            }
             .clip(RoundedCornerShape(8.dp))
             .background(darkVibrantColor)
             .padding(8.dp, 0.dp)
@@ -175,20 +186,65 @@ fun MiniPlayer(navController: NavHostController) {
                     navController.navigate(Routes.Player.route)
                 }
                 .pointerInput(Unit) {
-                    var dragThresholdPassed = false
-                    var totalDragY = 0f
-                    val dragThreshold = 15.dp.toPx()
+                    var navigated = false
+                    var lastEventTimeMs = 0L
+                    val distThreshold = 20.dp.toPx()
+                    val velThreshold = 1500f // px/s upward
                     detectDragGestures(
                         onDragStart = {
-                            dragThresholdPassed = false
-                            totalDragY = 0f
+                            navigated = false
+                            lastEventTimeMs = 0L
+                        },
+                        onDragEnd = {
+                            if (!navigated) {
+                                // Snap back with spring animation
+                                coroutineScope.launch {
+                                    val anim = Animatable(swipeOffsetY)
+                                    anim.animateTo(
+                                        targetValue = 0f,
+                                        animationSpec = spring(
+                                            dampingRatio = 0.7f,
+                                            stiffness = 400f
+                                        )
+                                    ) { swipeOffsetY = value }
+                                }
+                            } else {
+                            // Continue upward + fade out while full player slides in
+                            coroutineScope.launch {
+                                val anim = Animatable(swipeOffsetY)
+                                anim.animateTo(
+                                    targetValue = -300f,
+                                    animationSpec = tween(280)
+                                ) { swipeOffsetY = value }
+                                swipeOffsetY = 0f
+                            }
                         }
+                        },
+                        onDragCancel = {
+                            coroutineScope.launch {
+                                val anim = Animatable(swipeOffsetY)
+                                anim.animateTo(
+                                    targetValue = 0f,
+                                    animationSpec = spring(
+                                        dampingRatio = 0.7f,
+                                        stiffness = 400f
+                                    )
+                                ) { swipeOffsetY = value }
+                            }
+                        },
                     ) { change, dragAmount ->
                         change.consume()
-                        totalDragY += dragAmount.y
-                        if (totalDragY < -dragThreshold && !dragThresholdPassed) {
-                            dragThresholdPassed = true
-                            navController.navigate(Routes.Player.route)
+                        swipeOffsetY = (swipeOffsetY + dragAmount.y).coerceAtMost(0f)
+                        if (!navigated) {
+                            // Velocity detection for quick flicks
+                            val now = change.uptimeMillis
+                            val dtMs = if (lastEventTimeMs > 0L) now - lastEventTimeMs else 0L
+                            lastEventTimeMs = now
+                            val velocityPxPerSec = if (dtMs > 5) dragAmount.y / dtMs * 1000f else 0f
+                            if (swipeOffsetY < -distThreshold || velocityPxPerSec < -velThreshold) {
+                                navigated = true
+                                navController.navigate(Routes.Player.route)
+                            }
                         }
                     }
                 }

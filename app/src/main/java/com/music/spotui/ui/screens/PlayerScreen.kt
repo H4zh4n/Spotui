@@ -161,7 +161,7 @@ fun PlayerScreen(navController: NavController) {
                 targetValue = targetValue,
                 initialVelocity = velocity,
                 animationSpec = if (targetValue == 0f || targetValue == screenHeight)
-                    tween(350) else spring()
+                    tween(300) else spring()
             ) {
                 offsetY = this.value
             }
@@ -243,6 +243,8 @@ fun PlayerScreen(navController: NavController) {
 
     // Animate the player sliding up when first opened
     LaunchedEffect(Unit) {
+        // Start closer to final position for a snappier entrance feel
+        offsetY = screenHeight * 0.85f
         slideTo(0f)
         hasAppeared = true
     }
