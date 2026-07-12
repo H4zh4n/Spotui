@@ -293,7 +293,7 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                             if (songs.isNotEmpty()) {
                                 // Add all playlist tracks to the queue.
                                 Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.List,
+                                    painter = painterResource(id = R.drawable.ic_queue_add),
                                     tint = Color.White,
                                     modifier = Modifier
                                         .size(24.dp)

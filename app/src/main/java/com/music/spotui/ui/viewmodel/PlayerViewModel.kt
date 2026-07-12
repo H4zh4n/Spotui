@@ -222,10 +222,6 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
         }
     }
 
-    fun goToArtistByName(artistName: String, artistId: String, navigate: (route: String) -> Unit) {
-        navigate(artistRoute(artistName, artistId))
-    }
-
     @Volatile private var awaitingRadioContinue = false
 
     /** Waits (max ~10s) for the autoplay radio to extend the queue past

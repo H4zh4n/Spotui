@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -360,6 +361,7 @@ fun PlayerScreen(navController: NavController) {
     var showMenu by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
     var showSavedIn by remember { mutableStateOf(false) }
+    var showArtistSheet by remember { mutableStateOf(false) }
 
     if (showMenu) {
         PlayerOptionsSheet(
@@ -380,6 +382,16 @@ fun PlayerScreen(navController: NavController) {
                 onLikedChanged = { isLiked.value = it },
             )
         } ?: run { showSavedIn = false }
+    }
+
+    if (showArtistSheet) {
+        ArtistsSheet(
+            artistNames = songSinger.split(",").map { it.trim() }.filter { it.isNotBlank() },
+            artistIds = playerViewModel.currentArtistIds.value.split(",").map { it.trim() },
+            context = context,
+            onDismiss = { showArtistSheet = false },
+            navController = navController,
+        )
     }
 
 
@@ -640,17 +652,13 @@ fun PlayerScreen(navController: NavController) {
                 // Reads each 300ms tick (songProgress recomposition) so it reflects
                 // the current engine — Spotify vs Lossless (SpotiFLAC) vs YouTube.
                 PlayerInfo(
-                    songTitle, songSinger, playerViewModel.currentArtistIds.value, songId, context, isLiked,
+                    songTitle, songSinger, songId, context, isLiked,
                     source = SongPlayer.currentSource,
                     quality = SongPlayer.currentQuality,
                     isResolving = playerViewModel.isResolving.value,
                     resolveStatus = playerViewModel.resolveStatus.value,
                     resolveError = playerViewModel.resolveError.value,
-                    onArtistClick = { name, id ->
-                        playerViewModel.goToArtistByName(name, id) { route ->
-                            navController.navigate(route)
-                        }
-                    },
+                    onArtistClick = { showArtistSheet = true },
                     spotifyTrackId = queueSongs.firstOrNull { it.id == songId }?.spotifyTrackId.orEmpty(),
                     onShowSavedIn = { showSavedIn = true },
                 )
@@ -829,7 +837,6 @@ fun PlayerTopBar(
 fun PlayerInfo(
     songTitle: String,
     songSinger: String,
-    artistIds: String,
     songId: Int,
     context: Context,
     isLiked: MutableState<Boolean>,
@@ -838,7 +845,7 @@ fun PlayerInfo(
     isResolving: Boolean = false,
     resolveStatus: String = "",
     resolveError: String? = null,
-    onArtistClick: ((name: String, id: String) -> Unit)? = null,
+    onArtistClick: (() -> Unit)? = null,
     spotifyTrackId: String = "",
     onShowSavedIn: (() -> Unit)? = null,
 ) {
@@ -890,33 +897,18 @@ fun PlayerInfo(
                     maxLines = 1,
                     softWrap = false,
                 )
-                // Render each artist as a separate clickable text so tapping a
-                // specific artist on a multi-artist track navigates to that artist.
-                val artistNames = songSinger.split(",").map { it.trim() }.filter { it.isNotBlank() }
-                val artistIdList = artistIds.split(",").map { it.trim() }
-                Row {
-                    artistNames.forEachIndexed { index, name ->
-                        val aId = artistIdList.getOrElse(index) { "" }
-                        Text(
-                            text = name,
-                            color = Color.Gray,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = if (onArtistClick != null) Modifier.clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) { onArtistClick(name, aId) } else Modifier,
-                        )
-                        if (index < artistNames.size - 1) {
-                            Text(
-                                text = ", ",
-                                color = Color.Gray,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                            )
-                        }
-                    }
-                }
+                Text(
+                    text = songSinger,
+                    color = Color.Gray,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = if (onArtistClick != null) Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { onArtistClick() } else Modifier,
+                )
                 val isResolvingState = isResolving && resolveStatus.isNotBlank()
                 val hasError = !resolveError.isNullOrBlank()
                 val displaySource = if (isResolvingState) "Resolving" else if (hasError) "Error" else source
@@ -1411,6 +1403,99 @@ fun PlayerConnectRow(
                     ) { navController.navigate(Routes.Queue.route) },
                 contentDescription = "Queue",
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ArtistsSheet(
+    artistNames: List<String>,
+    artistIds: List<String>,
+    context: Context,
+    onDismiss: () -> Unit,
+    navController: NavController,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF1A1A1A),
+        dragHandle = null,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(bottom = 12.dp)
+        ) {
+            Text(
+                text = "Artists",
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+            )
+            artistNames.forEachIndexed { index, name ->
+                val aId = artistIds.getOrElse(index) { "" }
+                var following by remember(aId) {
+                    mutableStateOf(
+                        aId.isNotBlank() && com.music.spotui.data.preferences.isArtistFollowed(context, aId)
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onDismiss()
+                            navController.navigate(
+                                com.music.spotui.ui.navigation.artistRoute(name, aId)
+                            )
+                        }
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                ) {
+                    Text(
+                        text = name,
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .border(
+                                1.dp,
+                                if (following) Color.Transparent else Color.Gray,
+                                RoundedCornerShape(20.dp),
+                            )
+                            .background(
+                                if (following) Color(0xFF1DB954) else Color.Transparent,
+                                RoundedCornerShape(20.dp),
+                            )
+                            .clickable {
+                                if (aId.isBlank()) return@clickable
+                                following = !following
+                                if (following) {
+                                    com.music.spotui.data.preferences.addFollowedArtist(context, aId, name)
+                                } else {
+                                    com.music.spotui.data.preferences.removeFollowedArtist(context, aId)
+                                }
+                                com.music.spotui.data.api.SpotifySync.setArtistFollowed(context, aId, following)
+                            }
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            text = if (following) "Following" else "Follow",
+                            color = if (following) Color(0xFF191414) else Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                }
+            }
         }
     }
 }
