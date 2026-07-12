@@ -135,7 +135,7 @@ class PlaybackService : MediaLibraryService() {
         super.onCreate()
         SongPlayer.ensureCreated(this)
 
-        // explicitly order notification buttons to put the close button on the right
+        // Order notification buttons: [repeat | prev | play/pause | next | close]
         val notificationProvider = object : DefaultMediaNotificationProvider(this) {
             override fun getMediaButtons(
                 session: MediaSession,
@@ -143,14 +143,19 @@ class PlaybackService : MediaLibraryService() {
                 customLayout: ImmutableList<CommandButton>,
                 showPauseButton: Boolean
             ): ImmutableList<CommandButton> {
-                val buttons = super.getMediaButtons(session, playerCommands, customLayout, showPauseButton)
-                val closeBtn = buttons.find { it.sessionCommand?.customAction == "ACTION_CLOSE" }
-                return if (closeBtn != null) {
-                    val filtered = buttons.filter { it != closeBtn }
-                    ImmutableList.builder<CommandButton>().addAll(filtered).add(closeBtn).build()
-                } else {
-                    buttons
+                val base = super.getMediaButtons(session, playerCommands, customLayout, showPauseButton)
+                val repeatBtn = base.find { it.sessionCommand?.customAction == "ACTION_REPEAT" }
+                val closeBtn  = base.find { it.sessionCommand?.customAction == "ACTION_CLOSE" }
+                val transport = base.filter {
+                    it.sessionCommand?.customAction != "ACTION_REPEAT" &&
+                    it.sessionCommand?.customAction != "ACTION_CLOSE" &&
+                    it.sessionCommand?.customAction != "ACTION_NONE"
                 }
+                return ImmutableList.builder<CommandButton>()
+                    .apply { repeatBtn?.let { add(it) } }
+                    .addAll(transport)
+                    .apply { closeBtn?.let { add(it) } }
+                    .build()
             }
         }
         setMediaNotificationProvider(notificationProvider)
@@ -284,6 +289,36 @@ class PlaybackService : MediaLibraryService() {
         const val NODE_ALBUMS = "albums"
     }
 
+    /**
+     * Builds the notification custom layout: [repeat button | close button].
+     * The repeat button icon reflects the current [mode].
+     */
+    private fun buildCustomLayout(mode: RepeatMode): ImmutableList<CommandButton> {
+        val repeatIconRes = when (mode) {
+            RepeatMode.OFF -> R.drawable.ic_repeat_off  // slashed arrows = disabled
+            RepeatMode.ONE -> R.drawable.ic_repeat_one  // arrows + "1"
+            RepeatMode.ALL -> R.drawable.ic_repeat      // plain arrows = loop all
+        }
+        val repeatLabel = when (mode) {
+            RepeatMode.OFF -> "Repeat off"
+            RepeatMode.ONE -> "Repeat one"
+            RepeatMode.ALL -> "Repeat all"
+        }
+        val repeatButton = CommandButton.Builder()
+            .setDisplayName(repeatLabel)
+            .setSessionCommand(SessionCommand("ACTION_REPEAT", Bundle.EMPTY))
+            .setIconResId(repeatIconRes)
+            .build()
+
+        val closeButton = CommandButton.Builder()
+            .setDisplayName("Close")
+            .setSessionCommand(SessionCommand("ACTION_CLOSE", Bundle.EMPTY))
+            .setIconResId(R.drawable.ic_close)
+            .build()
+
+        return ImmutableList.of(repeatButton, closeButton)
+    }
+
     private inner class LibraryCallback : MediaLibrarySession.Callback {
 
         override fun onConnect(
@@ -292,26 +327,12 @@ class PlaybackService : MediaLibraryService() {
         ): MediaSession.ConnectionResult {
             val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
                 .add(SessionCommand("ACTION_CLOSE", Bundle.EMPTY))
-                .add(SessionCommand("ACTION_NONE", Bundle.EMPTY))
+                .add(SessionCommand("ACTION_REPEAT", Bundle.EMPTY))
                 .build()
 
-            val emptyButton = CommandButton.Builder()
-                .setDisplayName(" ")
-                .setSessionCommand(SessionCommand("ACTION_NONE", Bundle.EMPTY))
-                .setIconResId(R.drawable.ic_transparent)
-                .setEnabled(false)
-                .build()
-
-            val closeButton = CommandButton.Builder()
-                .setDisplayName("Close")
-                .setSessionCommand(SessionCommand("ACTION_CLOSE", Bundle.EMPTY))
-                .setIconResId(R.drawable.ic_close)
-                .build()
-
-            // push close button to the right by adding an empty spacer button first
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(sessionCommands)
-                .setCustomLayout(ImmutableList.of(emptyButton, closeButton))
+                .setCustomLayout(buildCustomLayout(currentSongState.repeat.value))
                 .build()
         }
 
@@ -321,11 +342,26 @@ class PlaybackService : MediaLibraryService() {
             customCommand: SessionCommand,
             args: Bundle
         ): ListenableFuture<SessionResult> {
-            if (customCommand.customAction == "ACTION_CLOSE") {
-                // exit the player and kill the process directly to terminate the app cleanly
-                SongPlayer.pause()
-                android.os.Process.killProcess(android.os.Process.myPid())
-                return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+            when (customCommand.customAction) {
+                "ACTION_CLOSE" -> {
+                    // exit the player and kill the process directly to terminate the app cleanly
+                    SongPlayer.pause()
+                    android.os.Process.killProcess(android.os.Process.myPid())
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                "ACTION_REPEAT" -> {
+                    // Cycle OFF → ONE → ALL → OFF
+                    val next = when (currentSongState.repeat.value) {
+                        RepeatMode.OFF -> RepeatMode.ONE
+                        RepeatMode.ONE -> RepeatMode.ALL
+                        RepeatMode.ALL -> RepeatMode.OFF
+                    }
+                    currentSongState.updateRepeatState(next)
+                    // Update the custom layout so the notification icon reflects the new mode
+                    val newLayout = buildCustomLayout(next)
+                    mediaSession?.setCustomLayout(newLayout)
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
             }
             return super.onCustomCommand(session, controller, customCommand, args)
         }
