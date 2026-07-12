@@ -1,8 +1,10 @@
 package com.music.spotui.data.api
 
 import android.util.Log
+import com.music.spotui.MyApplication
 import com.music.spotui.data.entity.LyricLine
 import com.music.spotui.data.entity.Lyrics
+import com.music.spotui.data.preferences.LyricsCachePref
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import org.json.JSONArray
@@ -64,9 +66,15 @@ object LyricsApi {
     /** Warm the cache for a track in the background (call when playback starts). */
     fun prefetch(title: String, artist: String, album: String, durationSec: Int = 0) {
         if (title.isBlank()) return
-        val cached = cache[cacheKey(title, artist)]
+        val key = cacheKey(title, artist)
+        val cached = cache[key]
         if (cached is Lyrics) return
         if (cached is Miss && System.currentTimeMillis() - cached.at < MISS_RETRY_MS) return
+        // Disk cache is already warm — populate in-memory cache without network.
+        LyricsCachePref.get(MyApplication.instance, key)?.let { disk ->
+            cache[key] = disk
+            return
+        }
         prefetchScope.launch { runCatching { fetch(title, artist, album, durationSec) } }
     }
 
@@ -75,6 +83,14 @@ object LyricsApi {
         when (val cached = cache[key]) {
             is Lyrics -> return cached
             is Miss -> if (System.currentTimeMillis() - cached.at < MISS_RETRY_MS) return null
+        }
+
+        // 2nd-level cache: disk (survives process death). No expiry — lyrics are
+        // static content that never change for a given song.
+        val ctx = MyApplication.instance
+        LyricsCachePref.get(ctx, key)?.let { disk ->
+            cache[key] = disk
+            return disk
         }
 
         val primaryArtist = artist.substringBefore(",").trim()
@@ -96,6 +112,11 @@ object LyricsApi {
                 ?: searchTitleOnly(cleaned, primaryArtist, durationSec)
         }
         cache[key] = result ?: Miss()
+        // Persist successful results to disk so the next launch (or an offline
+        // downloaded track) can serve lyrics without a network round-trip.
+        if (result != null) {
+            LyricsCachePref.put(ctx, key, result)
+        }
         return result
     }
 

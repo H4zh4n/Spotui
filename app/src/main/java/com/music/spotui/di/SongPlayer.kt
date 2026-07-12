@@ -10,6 +10,7 @@ import com.metrolist.innertube.models.SongItem
 import com.metrolist.innertube.utils.YouTubeUrlParser
 import com.metrolist.music.constants.AudioQuality
 import com.metrolist.music.utils.YTPlayerUtils
+import com.music.spotui.data.api.LyricsApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
@@ -853,6 +854,8 @@ object SongPlayer {
             return false
         }
         com.music.spotui.data.preferences.addDownload(appContext, song, outFile.absolutePath)
+        // Eagerly cache lyrics so offline playback doesn't need a network round-trip.
+        runCatching { LyricsApi.fetch(song.title, song.singer, song.album, song.durationMs / 1000) }
         return true
     }
 
@@ -901,6 +904,8 @@ object SongPlayer {
             return false
         }
         com.music.spotui.data.preferences.addDownload(appContext, song, outFile.absolutePath)
+        // Eagerly cache lyrics so offline playback doesn't need a network round-trip.
+        runCatching { LyricsApi.fetch(song.title, song.singer, song.album, song.durationMs / 1000) }
         Log.d(TAG, "FLAC downloaded (${flac.provider} ${flac.quality}-bit): ${song.title}")
         return true
     }
