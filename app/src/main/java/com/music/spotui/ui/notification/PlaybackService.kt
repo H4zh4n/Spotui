@@ -119,6 +119,12 @@ class PlaybackService : MediaLibraryService() {
             }
         }
 
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            // Mirror ExoPlayer's real play/pause state into the in-app UI so the
+            // on-screen play button stays in sync when the notification controls are used.
+            if (!showingWeb) currentSongState.updatePlayingState(isPlaying)
+        }
+
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
             android.util.Log.e("PlaybackService", "Player error during playback: ${error.message}", error)
             val queue = currentSongState.queue.value
