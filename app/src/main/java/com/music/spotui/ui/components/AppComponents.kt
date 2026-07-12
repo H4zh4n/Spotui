@@ -16,12 +16,15 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderColors
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,8 +43,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -320,18 +324,12 @@ fun MiniPlayer(navController: NavHostController) {
         CustomSlider(
             value = songProgress,
             onValueChange = { newValue ->
-                SongPlayer.seekTo((newValue * SongPlayer.getDuration()).toLong())
+                val dur = SongPlayer.getDuration()
+                if (dur > 0) SongPlayer.seekTo((newValue * dur).toLong())
             },
             valueRange = 0f..1f,
             steps = 0,
-            modifier = Modifier
-                .fillMaxWidth()
-            ,
-            colors = SliderDefaults.colors(
-                thumbColor = Color.White,
-                activeTrackColor = Color.White,
-                inactiveTrackColor = Color.Gray
-            )
+            modifier = Modifier.fillMaxWidth()
         )
     }
 
@@ -340,7 +338,6 @@ fun MiniPlayer(navController: NavHostController) {
 }
 
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomSlider(
     modifier: Modifier = Modifier,
@@ -348,31 +345,54 @@ fun CustomSlider(
     onValueChange: (Float) -> Unit,
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
     steps: Int = 0,
-    colors: SliderColors = SliderDefaults.colors(),
+    colors: Any? = null, // kept for API compat; unused
 ) {
+    val fraction = ((value - valueRange.start) / (valueRange.endInclusive - valueRange.start))
+        .coerceIn(0f, 1f)
+    val density = LocalDensity.current
+
     Box(
-        //contentAlignment = Alignment.BottomEnd,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(0.dp)
-
-    ) {
-
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            valueRange = valueRange,
-            steps = steps,
-            colors = colors,
-            thumb = {
-                SliderDefaults.Thumb( //androidx.compose.material3.SliderDefaults
-                    interactionSource = remember { MutableInteractionSource() },
-                    modifier = Modifier.align(Alignment.Center),
-                    colors = colors,
-                    thumbSize = DpSize(4.dp, 4.dp)
-                )
+        modifier = modifier
+            .height(20.dp) // generous touch target
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    val newFraction = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
+                    val mapped = valueRange.start + newFraction * (valueRange.endInclusive - valueRange.start)
+                    onValueChange(mapped)
+                }
             }
-        )
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures { change, _ ->
+                    change.consume()
+                    val newFraction = (change.position.x / size.width.toFloat()).coerceIn(0f, 1f)
+                    val mapped = valueRange.start + newFraction * (valueRange.endInclusive - valueRange.start)
+                    onValueChange(mapped)
+                }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxWidth().height(2.dp)) {
+            val trackHeightPx = with(density) { 2.dp.toPx() }
+            val trackY = size.height / 2f
+            val thumbX = fraction * size.width
+
+            // Inactive track
+            drawLine(
+                color = Color(0xFF535353),
+                start = Offset(0f, trackY),
+                end = Offset(size.width, trackY),
+                strokeWidth = trackHeightPx,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+            // Active track
+            drawLine(
+                color = Color.White,
+                start = Offset(0f, trackY),
+                end = Offset(thumbX, trackY),
+                strokeWidth = trackHeightPx,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+        }
     }
 }
 

@@ -51,9 +51,12 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderColors
-import androidx.compose.material3.SliderDefaults
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -81,7 +84,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -641,7 +644,8 @@ fun PlayerScreen(navController: NavController) {
                         dragValue = newValue
                     },
                     onValueChangeFinished = {
-                        SongPlayer.seekTo((dragValue * SongPlayer.getDuration()).toLong())
+                        val dur = SongPlayer.getDuration()
+                        if (dur > 0) SongPlayer.seekTo((dragValue * dur).toLong())
                         isDragging = false
                         if (!songPlayingState) {
                             SongPlayer.play()
@@ -661,11 +665,7 @@ fun PlayerScreen(navController: NavController) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp, 20.dp, 16.dp, 0.dp),
-                    colors = SliderDefaults.colors(
-                        thumbColor = Color.White,
-                        activeTrackColor = Color.White,
-                        inactiveTrackColor = Color.Gray
-                    )
+                    colors = null
                 )
 
                 Row(
@@ -678,9 +678,10 @@ fun PlayerScreen(navController: NavController) {
                 ) {
                     Text(
                         // While scrubbing, show the dragged time so the label tracks the finger.
-                        text = if (isDragging)
-                            playerViewModel.formatDuration((dragValue * SongPlayer.getDuration()).toLong())
-                        else songProgressText,
+                        text = if (isDragging) {
+                            val dur = SongPlayer.getDuration()
+                            if (dur > 0) playerViewModel.formatDuration((dragValue * dur).toLong()) else "0:00"
+                        } else songProgressText,
                         color = Color.Gray,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium
@@ -968,7 +969,6 @@ fun PlayerInfo(
 
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomSlider(
     modifier: Modifier = Modifier,
@@ -977,25 +977,92 @@ fun CustomSlider(
     onValueChangeFinished: (() -> Unit)? = null,
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
     steps: Int = 0,
-    colors: SliderColors = SliderDefaults.colors(),
+    colors: Any? = null, // kept for API compat; unused
 ) {
-    Box(modifier = modifier.height(10.dp)) {
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            onValueChangeFinished = onValueChangeFinished,
-            valueRange = valueRange,
-            steps = steps,
-            colors = colors,
-            thumb = {
-                SliderDefaults.Thumb( //androidx.compose.material3.SliderDefaults
-                    interactionSource = remember { MutableInteractionSource() },
-                    modifier = Modifier.align(Alignment.Center),
-                    colors = colors,
-                    thumbSize = DpSize(9.dp, 9.dp)
+    var isDragging by remember { mutableStateOf(false) }
+
+    // Track height grows slightly while dragging (Spotify micro-animation)
+    val trackHeight by animateDpAsState(
+        targetValue = if (isDragging) 5.dp else 3.dp,
+        animationSpec = tween(durationMillis = 150),
+        label = "trackHeight"
+    )
+    // Thumb alpha: invisible at rest, pops in when dragging
+    val thumbAlpha by animateFloatAsState(
+        targetValue = if (isDragging) 1f else 0f,
+        animationSpec = tween(durationMillis = 150),
+        label = "thumbAlpha"
+    )
+
+    val fraction = ((value - valueRange.start) / (valueRange.endInclusive - valueRange.start))
+        .coerceIn(0f, 1f)
+
+    val density = LocalDensity.current
+
+    Box(
+        modifier = modifier
+            .height(36.dp) // generous vertical touch target
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    val newFraction = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
+                    val mapped = valueRange.start + newFraction * (valueRange.endInclusive - valueRange.start)
+                    onValueChange(mapped)
+                    onValueChangeFinished?.invoke()
+                }
+            }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { isDragging = true },
+                    onDragEnd = {
+                        isDragging = false
+                        onValueChangeFinished?.invoke()
+                    },
+                    onDragCancel = {
+                        isDragging = false
+                        onValueChangeFinished?.invoke()
+                    },
+                    onHorizontalDrag = { change, _ ->
+                        change.consume()
+                        val newFraction = (change.position.x / size.width.toFloat()).coerceIn(0f, 1f)
+                        val mapped = valueRange.start + newFraction * (valueRange.endInclusive - valueRange.start)
+                        onValueChange(mapped)
+                    }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        val trackHeightPx = with(density) { trackHeight.toPx() }
+        val thumbRadiusPx = with(density) { 6.dp.toPx() }
+
+        Canvas(modifier = Modifier.fillMaxWidth().height(trackHeight)) {
+            val trackY = size.height / 2f
+            val thumbX = fraction * size.width
+
+            // Inactive (background) track
+            drawLine(
+                color = Color(0xFF535353),
+                start = Offset(0f, trackY),
+                end = Offset(size.width, trackY),
+                strokeWidth = trackHeightPx,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+            // Active (played) track
+            drawLine(
+                color = Color.White,
+                start = Offset(0f, trackY),
+                end = Offset(thumbX, trackY),
+                strokeWidth = trackHeightPx,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+            // Thumb dot — only visible while dragging
+            if (thumbAlpha > 0f) {
+                drawCircle(
+                    color = Color.White.copy(alpha = thumbAlpha),
+                    radius = thumbRadiusPx,
+                    center = Offset(thumbX, trackY)
                 )
             }
-        )
+        }
     }
 }
 
