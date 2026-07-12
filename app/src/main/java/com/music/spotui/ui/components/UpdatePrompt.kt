@@ -114,7 +114,8 @@ private fun RenderMarkdown(markdown: String) {
             trimmed.isEmpty() -> {
                 Spacer(modifier = Modifier.height(6.dp))
             }
-            trimmed == "---" || trimmed == "***" || trimmed == "___" -> {
+            trimmed == "---" || trimmed == "***" || trimmed == "___"
+                || (trimmed.length >= 3 && trimmed.all { it == '_' || it == '-' || it == '*' }) -> {
                 HorizontalDivider(
                     color = Color(0xFF2A2A2A),
                     modifier = Modifier.padding(vertical = 8.dp),
