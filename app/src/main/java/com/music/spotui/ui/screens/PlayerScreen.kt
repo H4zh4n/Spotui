@@ -1557,7 +1557,7 @@ fun PlayerOptionsSheet(
                     icon = if (downloaded) Icons.Default.CheckCircle else ImageVector.vectorResource(R.drawable.ic_download),
                     iconTint = if (downloaded) Color(AppPalette.toArgb()) else Color.White,
                     label = when {
-                        downloaded -> "Downloaded — remove"
+                        downloaded -> "Remove download"
                         downloadingNow -> "Downloading…"
                         else -> "Download"
                     },
@@ -2040,6 +2040,8 @@ fun PlayerMenuRow(
             text = label,
             color = if (enabled) Color.White else Color.Gray,
             fontSize = 15.sp,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
         if (trailingArrow) {

@@ -160,7 +160,7 @@ fun SongOptionsSheet(
             SongMenuRow(
                 icon = if (downloaded) Icons.Default.CheckCircle else ImageVector.vectorResource(R.drawable.ic_download),
                 label = when {
-                    downloaded -> "Downloaded — remove"
+                    downloaded -> "Remove download"
                     downloadingNow -> if (downloadPct in 1..99) "Downloading… $downloadPct%" else "Downloading…"
                     else -> "Download"
                 },
@@ -257,6 +257,8 @@ private fun SongMenuRow(
             text = label,
             color = if (enabled) Color.White else Color.Gray.copy(alpha = 0.4f),
             fontSize = 15.sp,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
         if (trailingArrow) {
