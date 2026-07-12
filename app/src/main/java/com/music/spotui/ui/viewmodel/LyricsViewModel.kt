@@ -47,6 +47,7 @@ class LyricsViewModel @Inject constructor(
     val state: StateFlow<State> = _state
 
     private var loadedKey: String? = null
+    private var loadJob: kotlinx.coroutines.Job? = null
 
     var showLanguageBar by mutableStateOf(false)
         private set
@@ -75,7 +76,8 @@ class LyricsViewModel @Inject constructor(
         loadedKey = key
         _state.value = State.Loading
         resetTranslationState()
-        viewModelScope.launch(Dispatchers.IO) {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch(Dispatchers.IO) {
             val lyrics = LyricsApi.fetch(title, artist, album, durationSec)
             withContext(Dispatchers.Main) {
                 _state.value = if (lyrics == null || lyrics.isEmpty) State.NotFound

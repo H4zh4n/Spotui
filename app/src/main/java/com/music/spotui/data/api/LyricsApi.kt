@@ -111,7 +111,10 @@ object LyricsApi {
                 ?: fuzzy.await()
                 ?: searchTitleOnly(cleaned, primaryArtist, durationSec)
         }
-        cache[key] = result ?: Miss()
+        cache[key] = result ?: when (cache[key]) {
+            is Lyrics -> return cache[key] as Lyrics
+            else -> Miss()
+        }
         // Persist successful results to disk so the next launch (or an offline
         // downloaded track) can serve lyrics without a network round-trip.
         if (result != null) {
