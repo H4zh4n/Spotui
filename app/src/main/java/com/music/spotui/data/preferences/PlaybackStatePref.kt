@@ -2,6 +2,7 @@ package com.music.spotui.data.preferences
 
 import android.content.Context
 import com.music.spotui.data.entity.SongsModel
+import com.music.spotui.di.RepeatMode
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -12,6 +13,7 @@ private const val PREF = "PlaybackState"
 private const val KEY_SONG = "song"
 private const val KEY_POSITION = "positionMs"
 private const val KEY_QUEUE = "queue"
+private const val KEY_REPEAT_MODE = "repeat_mode"
 
 private fun songToJson(song: SongsModel): JSONObject {
     return JSONObject().apply {
@@ -101,4 +103,17 @@ fun loadLastQueue(context: Context): List<SongsModel> {
         }
         list
     }.getOrNull() ?: emptyList()
+}
+
+/** Persists the current repeat mode. */
+fun saveRepeatMode(context: Context, mode: RepeatMode) {
+    context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        .edit().putString(KEY_REPEAT_MODE, mode.name).apply()
+}
+
+/** Loads the persisted repeat mode, defaulting to [RepeatMode.OFF]. */
+fun loadRepeatMode(context: Context): RepeatMode {
+    val raw = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        .getString(KEY_REPEAT_MODE, null)
+    return runCatching { RepeatMode.valueOf(raw!!) }.getOrNull() ?: RepeatMode.OFF
 }

@@ -77,7 +77,9 @@ class CurrentSongState @Inject constructor() {
     }
 
     val shuffle = mutableStateOf(false)
-    val repeat = mutableStateOf(RepeatMode.OFF)
+    val repeat = mutableStateOf(
+        com.music.spotui.data.preferences.loadRepeatMode(com.music.spotui.MyApplication.instance)
+    )
     val likeState = mutableStateOf(false)
 
     // Original queue order, kept while shuffle is on so turning it off restores
@@ -135,6 +137,7 @@ class CurrentSongState @Inject constructor() {
     }
     fun updateRepeatState(newRepeatState : RepeatMode){
         repeat.value = newRepeatState
+        com.music.spotui.data.preferences.saveRepeatMode(com.music.spotui.MyApplication.instance, newRepeatState)
     }
 
     private val _isResolving: MutableState<Boolean> = mutableStateOf(false)
