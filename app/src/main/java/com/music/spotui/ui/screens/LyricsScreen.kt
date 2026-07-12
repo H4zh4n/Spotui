@@ -2,6 +2,9 @@ package com.music.spotui.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -32,28 +35,38 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.compose.ui.unit.Velocity
 import com.music.spotui.data.api.TranslationApi
 import com.music.spotui.data.entity.Lyrics
 import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.viewmodel.LyricsViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** Polls ExoPlayer's position every 250ms so the active lyric line tracks the music. */
 @Composable
@@ -93,19 +106,122 @@ fun LyricsScreen(
     onClose: () -> Unit,
 ) {
     val vm: LyricsViewModel = hiltViewModel()
+    val density = LocalDensity.current
+    val screenHeight = with(density) {
+        val dpHeight = LocalConfiguration.current.screenHeightDp.dp
+        if (dpHeight.value > 0f) dpHeight.toPx() else 2000f
+    }
+    val coroutineScope = rememberCoroutineScope()
 
-    // Hardware back press closes only lyrics, not the player underneath.
-    BackHandler(onBack = onClose)
+    var offsetY by remember { mutableFloatStateOf(0f) }
+    val animatable = remember { Animatable(0f) }
+    var animationJob by remember { mutableStateOf<Job?>(null) }
+    var hasAppeared by remember { mutableStateOf(false) }
 
-    // Let scroll pass through to the LazyColumn (onPreScroll = no consumption),
-    // but swallow any leftover scroll in onPostScroll so it doesn't reach the
-    // PlayerScreen's nested scroll connection (which would dismiss the player).
-    val consumeScroll = remember {
+    suspend fun slideTo(targetValue: Float, velocity: Float = 0f) {
+        try {
+            animatable.snapTo(offsetY)
+            animatable.animateTo(
+                targetValue = targetValue,
+                initialVelocity = velocity,
+                animationSpec = if (targetValue == 0f || targetValue == screenHeight)
+                    tween(300) else spring()
+            ) { offsetY = this.value }
+        } catch (_: CancellationException) { }
+    }
+
+    fun cancelRunningAnimation() {
+        animationJob?.cancel()
+        animationJob = null
+    }
+
+    fun launchAnimation(targetValue: Float, velocity: Float = 0f) {
+        cancelRunningAnimation()
+        animationJob = coroutineScope.launch { slideTo(targetValue, velocity) }
+    }
+
+    val dismissLyrics = {
+        launchAnimation(screenHeight)
+    }
+
+    // Entrance animation: slide up from the bottom
+    LaunchedEffect(Unit) {
+        offsetY = screenHeight
+        slideTo(0f)
+        hasAppeared = true
+    }
+
+    // Safety net: when fully dismissed, remove the overlay
+    LaunchedEffect(offsetY) {
+        if (hasAppeared && offsetY >= screenHeight - 1f) {
+            onClose()
+        }
+    }
+
+    // Hardware back press dismisses with animation
+    BackHandler(onBack = dismissLyrics)
+
+    // Swipe-down-to-dismiss nested scroll (same pattern as PlayerScreen)
+    val nestedScrollConnection = remember(screenHeight) {
         object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset = Offset.Zero
-            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset = available
-            override suspend fun onPreFling(available: Velocity): Velocity = Velocity.Zero
-            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity = available
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val delta = available.y
+                if (source == NestedScrollSource.Drag) {
+                    cancelRunningAnimation()
+                }
+                if (offsetY > 0f && delta < 0f) {
+                    val newOffset = (offsetY + delta).coerceIn(0f, screenHeight)
+                    offsetY = newOffset
+                    return Offset(0f, delta)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                val delta = available.y
+                if (source == NestedScrollSource.Drag) {
+                    cancelRunningAnimation()
+                }
+                if (delta > 0f && (source == NestedScrollSource.Drag || offsetY > 0f)) {
+                    offsetY = (offsetY + delta).coerceIn(0f, screenHeight)
+                    return Offset(0f, delta)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (offsetY > 0f) {
+                    val targetValue = when {
+                        available.y < -500f -> 0f
+                        available.y > 500f -> screenHeight
+                        else -> if (offsetY > screenHeight * 0.25f) screenHeight else 0f
+                    }
+                    val job = coroutineScope.launch {
+                        slideTo(targetValue, available.y)
+                    }
+                    animationJob = job
+                    try { job.join() } catch (_: Exception) { }
+                    return available
+                }
+                return Velocity.Zero
+            }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                if (offsetY > 0f) {
+                    val targetValue = if (offsetY > screenHeight * 0.25f) screenHeight else 0f
+                    val job = coroutineScope.launch {
+                        slideTo(targetValue, available.y)
+                    }
+                    animationJob = job
+                    try { job.join() } catch (_: Exception) { }
+                    return available
+                }
+                return Velocity.Zero
+            }
         }
     }
 
@@ -120,9 +236,22 @@ fun LyricsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .nestedScroll(consumeScroll)
-            // Solid base first — the gradient's translucent middle stop let the
-            // player screen bleed through, making the lyrics page look transparent.
+            .nestedScroll(nestedScrollConnection)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val anyPressed = event.changes.any { it.pressed }
+                        if (anyPressed) {
+                            cancelRunningAnimation()
+                        }
+                    }
+                }
+            }
+            .graphicsLayer {
+                translationY = offsetY
+                alpha = (1f - (offsetY / screenHeight)).coerceIn(0f, 1f)
+            }
             .background(Color(0xFF121212))
             .background(
                 Brush.verticalGradient(
@@ -163,7 +292,7 @@ fun LyricsScreen(
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                        ) { onClose() }
+                        ) { dismissLyrics() }
                 )
             }
         }
