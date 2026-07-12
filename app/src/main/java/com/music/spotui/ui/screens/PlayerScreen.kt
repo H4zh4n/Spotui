@@ -287,9 +287,12 @@ fun PlayerScreen(navController: NavController) {
                 if (source == NestedScrollSource.Drag) {
                     cancelRunningAnimation()
                 }
-                // Unconsumed downward scroll (delta > 0) because the list is at
-                // the top — translate the player screen down.
-                if (delta > 0f) {
+                // Unconsumed downward scroll (delta > 0) — translate the sheet
+                // down ONLY when the user is physically dragging OR the sheet is
+                // already partially offset.  During a fling, if the list just
+                // reached its top, the leftover velocity must NOT start dragging
+                // the sheet — it should stop here.
+                if (delta > 0f && (source == NestedScrollSource.Drag || offsetY > 0f)) {
                     offsetY = (offsetY + delta).coerceIn(0f, screenHeight)
                     return Offset(0f, delta)
                 }
@@ -312,6 +315,22 @@ fun PlayerScreen(navController: NavController) {
                     try {
                         job.join()
                     } catch (_: Exception) { }
+                    return available
+                }
+                return Velocity.Zero
+            }
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
+                // After the fling fully completes, if the sheet ended up partially
+                // offset (e.g. a drag-then-fling that didn't trigger onPreFling's
+                // snap logic), settle it now.
+                if (offsetY > 0f) {
+                    val targetValue = if (offsetY > screenHeight * 0.25f) screenHeight else 0f
+                    val job = coroutineScope.launch {
+                        slideTo(targetValue, available.y)
+                    }
+                    animationJob = job
+                    try { job.join() } catch (_: Exception) { }
                     return available
                 }
                 return Velocity.Zero
