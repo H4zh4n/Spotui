@@ -178,7 +178,7 @@ fun MiniPlayer(navController: NavHostController) {
             modifier = Modifier
                 .fillMaxWidth()
                 //.background(Color.Green)
-                .padding(0.dp, 4.dp)
+                .padding(0.dp, 2.dp)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
@@ -407,7 +407,7 @@ fun CustomSlider(
 
     Box(
         modifier = modifier
-            .height(20.dp) // generous touch target
+            .height(14.dp) // compact touch target
             .pointerInput(Unit) {
                 detectTapGestures { offset ->
                     val newFraction = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
