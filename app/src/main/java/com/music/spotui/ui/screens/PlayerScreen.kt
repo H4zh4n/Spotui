@@ -5,94 +5,103 @@ import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.vectorResource
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.vectorResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -106,41 +115,27 @@ import com.music.spotui.data.preferences.addLikedSongId
 import com.music.spotui.data.preferences.alternativeStreamKey
 import com.music.spotui.data.preferences.clearAlternativeStream
 import com.music.spotui.data.preferences.getAlternativeStream
-import com.music.spotui.data.preferences.getLikedSongIds
-import com.music.spotui.data.preferences.getSongsByIds
 import com.music.spotui.data.preferences.isSongLiked
 import com.music.spotui.data.preferences.removeLikedSongId
 import com.music.spotui.data.preferences.setLocalAlternativeStream
 import com.music.spotui.data.preferences.setYouTubeAlternativeStream
 import com.music.spotui.di.Palette
-import com.music.spotui.di.SongPlayer
 import com.music.spotui.di.RepeatMode
+import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.components.Snackbar
 import com.music.spotui.ui.navigation.Routes
 import com.music.spotui.ui.navigation.albumRoute
-import com.music.spotui.ui.navigation.artistRoute
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.PlayerViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.unit.Velocity
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
-
-@OptIn(ExperimentalGlideComposeApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(
+    ExperimentalGlideComposeApi::class,
+    androidx.compose.foundation.ExperimentalFoundationApi::class
+)
 @Composable
 fun PlayerScreen(navController: NavController) {
     val density = LocalDensity.current
@@ -324,7 +319,8 @@ fun PlayerScreen(navController: NavController) {
                     animationJob = job
                     try {
                         job.join()
-                    } catch (_: Exception) { }
+                    } catch (_: Exception) {
+                    }
                     return available
                 }
                 return Velocity.Zero
@@ -340,7 +336,10 @@ fun PlayerScreen(navController: NavController) {
                         slideTo(targetValue, available.y)
                     }
                     animationJob = job
-                    try { job.join() } catch (_: Exception) { }
+                    try {
+                        job.join()
+                    } catch (_: Exception) {
+                    }
                     return available
                 }
                 return Velocity.Zero
@@ -348,7 +347,7 @@ fun PlayerScreen(navController: NavController) {
         }
     }
 
-    val playerViewModel : PlayerViewModel = hiltViewModel()
+    val playerViewModel: PlayerViewModel = hiltViewModel()
     val songTitle = playerViewModel.currentSongTitle.value
     val songSinger = playerViewModel.currentSongSinger.value
     val songCoverUri = playerViewModel.currentSongCoverUri.value
@@ -395,20 +394,25 @@ fun PlayerScreen(navController: NavController) {
     }
 
 
-    var songProgress by remember { mutableStateOf(maxOf(0f, SongPlayer.getCurrentPosition().toFloat())) }
+    var songProgress by remember {
+        mutableStateOf(
+            maxOf(
+                0f,
+                SongPlayer.getCurrentPosition().toFloat()
+            )
+        )
+    }
     var songDurationText by remember { mutableStateOf("0") }
     var songProgressText by remember { mutableStateOf("") }
 
-    songDurationText = if (SongPlayer.getDuration() < 0){
+    songDurationText = if (SongPlayer.getDuration() < 0) {
         "0:00"
-    }
-    else{
+    } else {
         playerViewModel.formatDuration(SongPlayer.getDuration())
     }
-    songProgressText = if (SongPlayer.getCurrentPosition() < 0){
+    songProgressText = if (SongPlayer.getCurrentPosition() < 0) {
         "0:00"
-    }
-    else{
+    } else {
         playerViewModel.formatDuration(SongPlayer.getCurrentPosition())
     }
 
@@ -417,11 +421,10 @@ fun PlayerScreen(navController: NavController) {
     //playerViewModel.updateSongState(songCoverUri, songTitle, songSinger, songPlayingState)
 
 
-
     var dominentColor by remember {
         mutableStateOf(Color(AppBackground.toArgb()))
     }
-    Palette().extractSecondColorFromCoverUrl(context = context, songCoverUri){ color ->
+    Palette().extractSecondColorFromCoverUrl(context = context, songCoverUri) { color ->
         dominentColor = color
     }
 
@@ -429,7 +432,7 @@ fun PlayerScreen(navController: NavController) {
     val shuffle = playerViewModel.shuffleState.value
     val repeat = playerViewModel.repeatState.value
 
-    val songs = if (songsResponse is Response.Success){
+    val songs = if (songsResponse is Response.Success) {
         (songsResponse as Response.Success).data
     } else {
         emptyList<SongsModel>()
@@ -514,13 +517,6 @@ fun PlayerScreen(navController: NavController) {
     }
 
 
-
-
-
-
-
-
-
     val canvasUrl = playerViewModel.canvasUrl.value
     Box(
         modifier = Modifier
@@ -578,182 +574,192 @@ fun PlayerScreen(navController: NavController) {
                 .fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-        item {
-        Column(
-            verticalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier
-                .fillParentMaxHeight()
-                .fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Spacer(modifier = Modifier.statusBarsPadding())
-            PlayerTopBar(
-                navController = navController,
-                onMenuClick = { showMenu = true },
-                contextName = playerViewModel.currentSongAlbum.value,
-                onBackClick = { dismissPlayer() }
-            )
-            //Spacer(modifier = Modifier.padding(16.dp))
-            // Swipe the artwork left/right to skip to the next/previous track. Using a
-            // HorizontalPager makes the artwork follow the finger and snap, syncing the
-            // change with the track (Spotify's now-playing gesture) instead of an abrupt
-            // swipe-then-switch. When the queue is empty fall back to a static image.
-            // When a Canvas is playing it fills the screen behind this column, so the
-            // artwork is hidden (alpha 0) rather than removed — the pager stays in
-            // the layout so the swipe-to-skip gesture keeps working over the video.
-            // The artwork is the FLEXIBLE part of the screen (weight), capped at its
-            // old 385dp size. On short/scaled displays the fixed-size version pushed
-            // the slider and playback buttons off the bottom of the screen; now the
-            // artwork shrinks instead and the controls always fit.
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-            ) {
-                if (queueSongs.isEmpty()) {
-                    GlideImage(
+            item {
+                Column(
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillParentMaxHeight()
+                        .fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Spacer(modifier = Modifier.statusBarsPadding())
+                    PlayerTopBar(
+                        navController = navController,
+                        onMenuClick = { showMenu = true },
+                        contextName = playerViewModel.currentSongAlbum.value,
+                        onBackClick = { dismissPlayer() }
+                    )
+                    //Spacer(modifier = Modifier.padding(16.dp))
+                    // Swipe the artwork left/right to skip to the next/previous track. Using a
+                    // HorizontalPager makes the artwork follow the finger and snap, syncing the
+                    // change with the track (Spotify's now-playing gesture) instead of an abrupt
+                    // swipe-then-switch. When the queue is empty fall back to a static image.
+                    // When a Canvas is playing it fills the screen behind this column, so the
+                    // artwork is hidden (alpha 0) rather than removed — the pager stays in
+                    // the layout so the swipe-to-skip gesture keeps working over the video.
+                    // The artwork is the FLEXIBLE part of the screen (weight), capped at its
+                    // old 385dp size. On short/scaled displays the fixed-size version pushed
+                    // the slider and playback buttons off the bottom of the screen; now the
+                    // artwork shrinks instead and the controls always fit.
+                    Box(
+                        contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .sizeIn(maxWidth = 385.dp, maxHeight = 385.dp)
-                            .aspectRatio(1f)
-                            .padding(20.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .alpha(if (canvasUrl != null) 0f else 1f),
-                        model = songCoverUri,
-                        contentScale = ContentScale.Crop,
-                        contentDescription = "")
-                } else {
-                    HorizontalPager(
-                        state = artworkPagerState,
-                        modifier = Modifier
-                            .sizeIn(maxWidth = 385.dp, maxHeight = 385.dp)
-                            .aspectRatio(1f),
-                    ) { page ->
-                        GlideImage(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(20.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .alpha(if (canvasUrl != null) 0f else 1f),
-                            model = queueSongs.getOrNull(page)?.coverUri ?: songCoverUri,
-                            contentScale = ContentScale.Crop,
-                            contentDescription = "")
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        if (queueSongs.isEmpty()) {
+                            GlideImage(
+                                modifier = Modifier
+                                    .sizeIn(maxWidth = 385.dp, maxHeight = 385.dp)
+                                    .aspectRatio(1f)
+                                    .padding(20.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .alpha(if (canvasUrl != null) 0f else 1f),
+                                model = songCoverUri,
+                                contentScale = ContentScale.Crop,
+                                contentDescription = ""
+                            )
+                        } else {
+                            HorizontalPager(
+                                state = artworkPagerState,
+                                modifier = Modifier
+                                    .sizeIn(maxWidth = 385.dp, maxHeight = 385.dp)
+                                    .aspectRatio(1f),
+                            ) { page ->
+                                GlideImage(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(20.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .alpha(if (canvasUrl != null) 0f else 1f),
+                                    model = queueSongs.getOrNull(page)?.coverUri ?: songCoverUri,
+                                    contentScale = ContentScale.Crop,
+                                    contentDescription = ""
+                                )
+                            }
+                        }
                     }
-                }
-            }
-            //Spacer(modifier = Modifier.padding(30.dp))
+                    //Spacer(modifier = Modifier.padding(30.dp))
 
-            Column(
-                verticalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier
-                    .height(300.dp)
-                    .padding(0.dp, 0.dp, 0.dp, 50.dp)
-            ){
-                // Reads each 300ms tick (songProgress recomposition) so it reflects
-                // the current engine — Spotify vs Lossless (SpotiFLAC) vs YouTube.
-                PlayerInfo(
-                    songTitle, songSinger, songId, context, isLiked,
-                    source = SongPlayer.currentSource,
-                    quality = SongPlayer.currentQuality,
-                    isResolving = playerViewModel.isResolving.value,
-                    resolveStatus = playerViewModel.resolveStatus.value,
-                    resolveError = playerViewModel.resolveError.value,
-                    onArtistClick = { showArtistSheet = true },
-                    spotifyTrackId = queueSongs.firstOrNull { it.id == songId }?.spotifyTrackId.orEmpty(),
-                    onShowSavedIn = { showSavedIn = true },
-                )
+                    Column(
+                        verticalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier
+                            .height(300.dp)
+                            .padding(0.dp, 0.dp, 0.dp, 50.dp)
+                    ) {
+                        // Reads each 300ms tick (songProgress recomposition) so it reflects
+                        // the current engine — Spotify vs Lossless (SpotiFLAC) vs YouTube.
+                        PlayerInfo(
+                            songTitle, songSinger, songId, context, isLiked,
+                            source = SongPlayer.currentSource,
+                            quality = SongPlayer.currentQuality,
+                            isResolving = playerViewModel.isResolving.value,
+                            resolveStatus = playerViewModel.resolveStatus.value,
+                            resolveError = playerViewModel.resolveError.value,
+                            onArtistClick = { showArtistSheet = true },
+                            spotifyTrackId = queueSongs.firstOrNull { it.id == songId }?.spotifyTrackId.orEmpty(),
+                            onShowSavedIn = { showSavedIn = true },
+                        )
 
-                // Smooth scrubbing: while dragging, the thumb follows the finger
-                // locally (no seek per delta — that fired a web seek on every pixel
-                // and fought the polled position, making it jerky). We seek ONCE on
-                // release.
-                var isDragging by remember { mutableStateOf(false) }
-                var dragValue by remember { mutableStateOf(0f) }
-                val liveFraction = SongPlayer.getDuration().toFloat().let { dur ->
-                    if (dur > 0f) (SongPlayer.getCurrentPosition().toFloat() / dur).coerceIn(0f, 1f) else 0f
-                }
-                CustomSlider(
-                    value = if (isDragging) dragValue else liveFraction,
-                    onValueChange = { newValue ->
-                        isDragging = true
-                        dragValue = newValue
-                    },
-                    onValueChangeFinished = {
-                        val dur = SongPlayer.getDuration()
-                        if (dur > 0) SongPlayer.seekTo((dragValue * dur).toLong())
-                        isDragging = false
-                        if (!songPlayingState) {
-                            SongPlayer.play()
-                            playerViewModel.updateSongState(
-                                playerViewModel.currentSongCoverUri.value,
-                                playerViewModel.currentSongTitle.value,
-                                playerViewModel.currentSongSinger.value,
-                                true,
-                                playerViewModel.currentSongId.value,
-                                playerViewModel.currentSongIndex.value,
-                                playerViewModel.currentSongAlbum.value
+                        // Smooth scrubbing: while dragging, the thumb follows the finger
+                        // locally (no seek per delta — that fired a web seek on every pixel
+                        // and fought the polled position, making it jerky). We seek ONCE on
+                        // release.
+                        var isDragging by remember { mutableStateOf(false) }
+                        var dragValue by remember { mutableStateOf(0f) }
+                        val liveFraction = SongPlayer.getDuration().toFloat().let { dur ->
+                            if (dur > 0f) (SongPlayer.getCurrentPosition()
+                                .toFloat() / dur).coerceIn(0f, 1f) else 0f
+                        }
+                        CustomSlider(
+                            value = if (isDragging) dragValue else liveFraction,
+                            onValueChange = { newValue ->
+                                isDragging = true
+                                dragValue = newValue
+                            },
+                            onValueChangeFinished = {
+                                val dur = SongPlayer.getDuration()
+                                if (dur > 0) SongPlayer.seekTo((dragValue * dur).toLong())
+                                isDragging = false
+                                if (!songPlayingState) {
+                                    SongPlayer.play()
+                                    playerViewModel.updateSongState(
+                                        playerViewModel.currentSongCoverUri.value,
+                                        playerViewModel.currentSongTitle.value,
+                                        playerViewModel.currentSongSinger.value,
+                                        true,
+                                        playerViewModel.currentSongId.value,
+                                        playerViewModel.currentSongIndex.value,
+                                        playerViewModel.currentSongAlbum.value
+                                    )
+                                }
+                            },
+                            valueRange = 0f..1f,
+                            steps = 0,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp, 20.dp, 16.dp, 0.dp),
+                            colors = null
+                        )
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(25.dp, 0.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                // While scrubbing, show the dragged time so the label tracks the finger.
+                                text = if (isDragging) {
+                                    val dur = SongPlayer.getDuration()
+                                    if (dur > 0) playerViewModel.formatDuration((dragValue * dur).toLong()) else "0:00"
+                                } else songProgressText,
+                                color = Color.Gray,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = songDurationText,
+                                color = Color.Gray,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
-                    },
-                    valueRange = 0f..1f,
-                    steps = 0,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp, 20.dp, 16.dp, 0.dp),
-                    colors = null
-                )
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(25.dp, 0.dp)
-                    ,
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        // While scrubbing, show the dragged time so the label tracks the finger.
-                        text = if (isDragging) {
-                            val dur = SongPlayer.getDuration()
-                            if (dur > 0) playerViewModel.formatDuration((dragValue * dur).toLong()) else "0:00"
-                        } else songProgressText,
-                        color = Color.Gray,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
+
+                        Spacer(modifier = Modifier.padding(5.dp))
+                        PlayerFull(
+                            songPlayingState,
+                            playerViewModel,
+                            context,
+                            isLiked,
+                            shuffle,
+                            repeat,
+                            queueSongs
+                        )
+                    }
+
+                    // Spotify-style bottom row: current audio device (Connect) on the left,
+                    // share + queue on the right.
+                    PlayerConnectRow(
+                        navController = navController,
+                        context = context,
+                        currentTrack = queueSongs.firstOrNull { it.id == playerViewModel.currentSongId.value },
                     )
-                    Text(
-                        text = songDurationText,
-                        color = Color.Gray,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
-                    )
+
+                    //PlayerEndInfo()
                 }
-
-
-                Spacer(modifier = Modifier.padding(5.dp))
-                PlayerFull(songPlayingState, playerViewModel, context, isLiked, shuffle, repeat, queueSongs)
             }
-
-            // Spotify-style bottom row: current audio device (Connect) on the left,
-            // share + queue on the right.
-            PlayerConnectRow(
-                navController = navController,
-                context = context,
-                currentTrack = queueSongs.firstOrNull { it.id == playerViewModel.currentSongId.value },
-            )
-
-            //PlayerEndInfo()
-        }
-        }
-        item {
-            InlineLyrics(
-                title = songTitle,
-                artist = songSinger,
-                album = playerViewModel.currentSongAlbum.value,
-                accentColor = dominentColor,
-                onExpand = { showLyrics = true },
-            )
-        }
+            item {
+                InlineLyrics(
+                    title = songTitle,
+                    artist = songSinger,
+                    album = playerViewModel.currentSongAlbum.value,
+                    accentColor = dominentColor,
+                    onExpand = { showLyrics = true },
+                )
+            }
         }
 
         if (showLyrics) {
@@ -769,13 +775,6 @@ fun PlayerScreen(navController: NavController) {
 }
 
 
-
-
-
-
-
-
-
 @Composable
 fun PlayerTopBar(
     navController: NavController,
@@ -783,21 +782,24 @@ fun PlayerTopBar(
     contextName: String = "",
     onBackClick: () -> Unit,
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp)
     ) {
-        Icon(modifier = Modifier
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) {
-                       onBackClick()
-            },
+        Icon(
+            modifier = Modifier
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    onBackClick()
+                },
             painter = painterResource(id = R.drawable.ic_down),
             tint = Color.White,
-            contentDescription = "")
+            contentDescription = ""
+        )
 
         // Spotify shows the source context here (album/playlist), not a generic label.
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -827,7 +829,8 @@ fun PlayerTopBar(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) { onMenuClick() },
-                contentDescription = "")
+                contentDescription = ""
+            )
         }
     }
 }
@@ -871,135 +874,135 @@ fun PlayerInfo(
             .padding(25.dp, 10.dp)
     ) {
 
-        if (snackbarVisible){
+        if (snackbarVisible) {
             Snackbar(showMessage = snackbarMessage)
-        }
-        else{
-        Row(
-            horizontalArrangement = Arrangement.Start,
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .width(270.dp)
-        ) {
+        } else {
+            Row(
+                horizontalArrangement = Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .width(270.dp)
+            ) {
 //                        GlideImage(
 //                            modifier = Modifier.size(60.dp),
 //                            model = albumSongs[song].coverUri,
 //                            contentScale = ContentScale.Crop,
 //                            contentDescription = ""
 //                        )
-            Column {
-                Text(
-                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE),
-                    text = songTitle,
-                    color = Color.White,
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    softWrap = false,
-                )
-                Text(
-                    text = songSinger,
-                    color = Color.Gray,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    modifier = if (onArtistClick != null) Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) { onArtistClick() } else Modifier,
-                )
-                val isResolvingState = isResolving && resolveStatus.isNotBlank()
-                val hasError = !resolveError.isNullOrBlank()
-                val displaySource = if (isResolvingState) "Resolving" else if (hasError) "Error" else source
-                if (displaySource.isNotBlank()) {
-                    // Source badge: green = real Spotify; other colors = not Spotify
-                    // (Lossless via SpotiFLAC's Tidal/Qobuz/Amazon mirrors, or YouTube).
-                    val badgeColor = when {
-                        hasError -> Color(0xFFFF6B6B)
-                        isResolvingState -> Color(0xFF3DABFF)
-                        source == "Spotify" -> Color(0xFF1ED760)
-                        source.startsWith("Lossless") -> Color(0xFFFFC862)
-                        source == "Downloaded" -> Color(0xFF9C9C9C)
-                        else -> Color(0xFFFF6B6B)
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 3.dp),
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
-                                .clip(CircleShape)
-                                .background(badgeColor)
-                        )
-                        Text(
-                            // Don't advertise the fallback engine — just "Streamed".
-                            // Append the stream quality (codec/bitrate or FLAC depth)
-                            // so the user can see what they're actually hearing.
-                            text = when {
-                                hasError -> resolveError!!
-                                isResolvingState -> resolveStatus
-                                else -> {
-                                    (if (source == "YouTube") "Streamed" else source) +
-                                        (if (quality.isNotBlank()) " • $quality" else "")
-                                }
-                            },
-                            color = badgeColor,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            modifier = Modifier.padding(start = 5.dp),
-                        )
+                Column {
+                    Text(
+                        modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE),
+                        text = songTitle,
+                        color = Color.White,
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                    Text(
+                        text = songSinger,
+                        color = Color.Gray,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = if (onArtistClick != null) Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { onArtistClick() } else Modifier,
+                    )
+                    val isResolvingState = isResolving && resolveStatus.isNotBlank()
+                    val hasError = !resolveError.isNullOrBlank()
+                    val displaySource =
+                        if (isResolvingState) "Resolving" else if (hasError) "Error" else source
+                    if (displaySource.isNotBlank()) {
+                        // Source badge: green = real Spotify; other colors = not Spotify
+                        // (Lossless via SpotiFLAC's Tidal/Qobuz/Amazon mirrors, or YouTube).
+                        val badgeColor = when {
+                            hasError -> Color(0xFFFF6B6B)
+                            isResolvingState -> Color(0xFF3DABFF)
+                            source == "Spotify" -> Color(0xFF1ED760)
+                            source.startsWith("Lossless") -> Color(0xFFFFC862)
+                            source == "Downloaded" -> Color(0xFF9C9C9C)
+                            else -> Color(0xFFFF6B6B)
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 3.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(badgeColor)
+                            )
+                            Text(
+                                // Don't advertise the fallback engine — just "Streamed".
+                                // Append the stream quality (codec/bitrate or FLAC depth)
+                                // so the user can see what they're actually hearing.
+                                text = when {
+                                    hasError -> resolveError!!
+                                    isResolvingState -> resolveStatus
+                                    else -> {
+                                        (if (source == "YouTube") "Streamed" else source) +
+                                                (if (quality.isNotBlank()) " • $quality" else "")
+                                    }
+                                },
+                                color = badgeColor,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                modifier = Modifier.padding(start = 5.dp),
+                            )
+                        }
                     }
                 }
             }
-        }
 
-        Icon(
-            modifier = Modifier
-                .size(26.dp)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) {
-                    if (isLiked.value && onShowSavedIn != null) {
-                        // Already saved — second tap opens the Spotify-style
-                        // "Saved in" sheet (Liked Songs + playlists) instead of
-                        // silently unliking.
-                        onShowSavedIn()
-                        return@clickable
-                    }
-                    if (isLiked.value) {
-                        removeLikedSongId(context, songId.toString())
-                        snackbarMessage = "Removed from Liked Songs"
-                    } else {
-                        addLikedSongId(context, songId.toString())
-                        snackbarMessage = "Added to Liked Songs"
-                    }
-                    snackbarVisible = true
-                    isLiked.value = isSongLiked(context, songId.toString())
-                    // Mirror the like to the real Spotify account.
-                    com.music.spotui.data.api.SpotifySync.setTrackSaved(context, spotifyTrackId, isLiked.value)
+            Icon(
+                modifier = Modifier
+                    .size(26.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        if (isLiked.value && onShowSavedIn != null) {
+                            // Already saved — second tap opens the Spotify-style
+                            // "Saved in" sheet (Liked Songs + playlists) instead of
+                            // silently unliking.
+                            onShowSavedIn()
+                            return@clickable
+                        }
+                        if (isLiked.value) {
+                            removeLikedSongId(context, songId.toString())
+                            snackbarMessage = "Removed from Liked Songs"
+                        } else {
+                            addLikedSongId(context, songId.toString())
+                            snackbarMessage = "Added to Liked Songs"
+                        }
+                        snackbarVisible = true
+                        isLiked.value = isSongLiked(context, songId.toString())
+                        // Mirror the like to the real Spotify account.
+                        com.music.spotui.data.api.SpotifySync.setTrackSaved(
+                            context,
+                            spotifyTrackId,
+                            isLiked.value
+                        )
+                    },
+                painter = if (isLiked.value) {
+                    painterResource(id = R.drawable.added)
+                } else {
+                    painterResource(id = R.drawable.ic_add)
                 },
-            painter = if (isLiked.value){
-                painterResource(id = R.drawable.added)
-            }
-            else{
-                painterResource(id = R.drawable.ic_add)
-            }
-            ,
-            tint = if (isLiked.value){
-                Color(AppPalette.toArgb())
-            }
-            else{
-                Color.White
-            },
-            contentDescription = ""
-        )
+                tint = if (isLiked.value) {
+                    Color(AppPalette.toArgb())
+                } else {
+                    Color.White
+                },
+                contentDescription = ""
+            )
+        }
     }
-    }
-
 
 
 }
@@ -1040,7 +1043,8 @@ fun CustomSlider(
             .pointerInput(Unit) {
                 detectTapGestures { offset ->
                     val newFraction = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
-                    val mapped = valueRange.start + newFraction * (valueRange.endInclusive - valueRange.start)
+                    val mapped =
+                        valueRange.start + newFraction * (valueRange.endInclusive - valueRange.start)
                     onValueChange(mapped)
                     onValueChangeFinished?.invoke()
                 }
@@ -1058,8 +1062,10 @@ fun CustomSlider(
                     },
                     onHorizontalDrag = { change, _ ->
                         change.consume()
-                        val newFraction = (change.position.x / size.width.toFloat()).coerceIn(0f, 1f)
-                        val mapped = valueRange.start + newFraction * (valueRange.endInclusive - valueRange.start)
+                        val newFraction =
+                            (change.position.x / size.width.toFloat()).coerceIn(0f, 1f)
+                        val mapped =
+                            valueRange.start + newFraction * (valueRange.endInclusive - valueRange.start)
                         onValueChange(mapped)
                     }
                 )
@@ -1069,7 +1075,9 @@ fun CustomSlider(
         val trackHeightPx = with(density) { trackHeight.toPx() }
         val thumbRadiusPx = with(density) { 6.dp.toPx() }
 
-        Canvas(modifier = Modifier.fillMaxWidth().height(trackHeight)) {
+        Canvas(modifier = Modifier
+            .fillMaxWidth()
+            .height(trackHeight)) {
             val trackY = size.height / 2f
             val thumbX = fraction * size.width
 
@@ -1103,23 +1111,27 @@ fun CustomSlider(
 
 @Composable
 fun PlayerEndInfo() {
-    Row(verticalAlignment = Alignment.CenterVertically,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(20.dp)){
+            .padding(20.dp)
+    ) {
         Icon(
             modifier = Modifier
                 .size(22.dp),
             painter = painterResource(id = R.drawable.ic_devices),
             tint = Color.White,
-            contentDescription = "")
+            contentDescription = ""
+        )
         Icon(
             modifier = Modifier
                 .size(16.dp),
             painter = painterResource(id = R.drawable.ic_share),
             tint = Color.White,
-            contentDescription = "")
+            contentDescription = ""
+        )
     }
 }
 
@@ -1135,9 +1147,8 @@ fun PlayerFull(
 ) {
 
 
-
-
-    Row(verticalAlignment = Alignment.CenterVertically,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
         modifier = Modifier
             .fillMaxWidth()
@@ -1156,12 +1167,10 @@ fun PlayerFull(
                         playerViewModel.updateShuffleState(true)
                     }
 
-                }
-            ,
-            tint = if (shuffle){
+                },
+            tint = if (shuffle) {
                 Color(AppPalette.toArgb())
-            }
-            else{
+            } else {
                 Color.White
             },
             painter = painterResource(id = R.drawable.ic_player_shuffle),
@@ -1178,8 +1187,7 @@ fun PlayerFull(
                     playerViewModel.playPreviousSong(queueSongs, context)
                     isLiked.value =
                         isSongLiked(context, playerViewModel.currentSongId.value.toString())
-                }
-            ,
+                },
             tint = Color.White,
             painter = painterResource(id = R.drawable.ic_player_back),
             contentDescription = "")
@@ -1214,11 +1222,11 @@ fun PlayerFull(
                             playerViewModel.currentSongAlbum.value
                         )
                     }
-                }
-            ,
+                },
             contentAlignment = Alignment.Center
         ) {
-            val isLocatingOrBuffering = playerViewModel.isResolving.value || playerViewModel.isBuffering.value
+            val isLocatingOrBuffering =
+                playerViewModel.isResolving.value || playerViewModel.isBuffering.value
             if (isLocatingOrBuffering) {
                 androidx.compose.material3.CircularProgressIndicator(
                     modifier = Modifier.size(30.dp),
@@ -1228,16 +1236,14 @@ fun PlayerFull(
             } else {
                 Icon(
                     modifier = Modifier
-                        .size(30.dp)
-
-                    ,
+                        .size(30.dp),
                     tint = Color.Black,
                     painter = if (songPlayingState)
                         painterResource(id = R.drawable.ic_playing)
                     else
-                        painterResource(id = R.drawable.play_svgrepo_com)
-                    ,
-                    contentDescription = "")
+                        painterResource(id = R.drawable.play_svgrepo_com),
+                    contentDescription = ""
+                )
             }
         }
 
@@ -1252,8 +1258,7 @@ fun PlayerFull(
                     playerViewModel.playNextSongs(queueSongs, context)
                     isLiked.value =
                         isSongLiked(context, playerViewModel.currentSongId.value.toString())
-                }
-            ,
+                },
             tint = Color.White,
             painter = painterResource(id = R.drawable.ic_player_skip),
             contentDescription = "")
@@ -1321,13 +1326,13 @@ private fun currentAudioRoute(context: Context): String {
         val outs = am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
         val bt = outs.firstOrNull {
             it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+                    it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO
         }
         if (bt != null) return bt.productName?.toString()?.takeIf { it.isNotBlank() } ?: "Bluetooth"
         val wired = outs.firstOrNull {
             it.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
-                it.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET ||
-                it.type == android.media.AudioDeviceInfo.TYPE_USB_HEADSET
+                    it.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                    it.type == android.media.AudioDeviceInfo.TYPE_USB_HEADSET
         }
         if (wired != null) "Headphones" else "This device"
     } catch (e: Exception) {
@@ -1407,7 +1412,7 @@ fun PlayerConnectRow(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalGlideComposeApi::class)
 @Composable
 fun ArtistsSheet(
     artistNames: List<String>,
@@ -1417,6 +1422,17 @@ fun ArtistsSheet(
     navController: NavController,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val artistImages = remember { mutableMapOf<String, String>() }
+
+    LaunchedEffect(artistIds) {
+        artistIds.filter { it.isNotBlank() }.forEach { id ->
+            if (id !in artistImages) {
+                com.metrolist.spotify.Spotify.artist(id).getOrNull()?.let { artist ->
+                    artistImages[id] = artist.images.firstOrNull()?.url.orEmpty()
+                }
+            }
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -1439,29 +1455,60 @@ fun ArtistsSheet(
             )
             artistNames.forEachIndexed { index, name ->
                 val aId = artistIds.getOrElse(index) { "" }
+                val imageUrl = aId.let { artistImages[it].orEmpty() }
                 var following by remember(aId) {
                     mutableStateOf(
-                        aId.isNotBlank() && com.music.spotui.data.preferences.isArtistFollowed(context, aId)
+                        aId.isNotBlank() && com.music.spotui.data.preferences.isArtistFollowed(
+                            context,
+                            aId
+                        )
                     )
                 }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable {
-                            onDismiss()
-                            navController.navigate(
-                                com.music.spotui.ui.navigation.artistRoute(name, aId)
+                        .padding(horizontal = 20.dp, vertical = 8.dp)
+                ) {
+                    if (imageUrl.isNotBlank()) {
+                        GlideImage(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape),
+                            model = imageUrl,
+                            contentScale = ContentScale.Crop,
+                            contentDescription = name,
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF333333)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                tint = Color.Gray,
+                                modifier = Modifier.size(24.dp),
+                                contentDescription = name,
                             )
                         }
-                        .padding(horizontal = 20.dp, vertical = 12.dp)
-                ) {
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = name,
                         color = Color.White,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                onDismiss()
+                                navController.navigate(
+                                    com.music.spotui.ui.navigation.artistRoute(name, aId)
+                                )
+                            },
                     )
                     Box(
                         modifier = Modifier
@@ -1475,8 +1522,7 @@ fun ArtistsSheet(
                                 if (following) Color(0xFF1DB954) else Color.Transparent,
                                 RoundedCornerShape(20.dp),
                             )
-                            .clickable {
-                                if (aId.isBlank()) return@clickable
+                            .clickable(enabled = aId.isNotBlank()) {
                                 following = !following
                                 if (following) {
                                     com.music.spotui.data.preferences.addFollowedArtist(context, aId, name)
@@ -1514,7 +1560,8 @@ fun PlayerOptionsSheet(
     var showSavedIn by remember { mutableStateOf(false) }
     var showAlternativeStream by remember { mutableStateOf(false) }
     var showYouTubeSearch by remember { mutableStateOf(false) }
-    val altSearchViewModel: com.music.spotui.ui.viewmodel.AlternativeSearchViewModel = hiltViewModel()
+    val altSearchViewModel: com.music.spotui.ui.viewmodel.AlternativeSearchViewModel =
+        hiltViewModel()
 
     val title = playerViewModel.currentSongTitle.value
     val singer = playerViewModel.currentSongSinger.value
@@ -1524,26 +1571,47 @@ fun PlayerOptionsSheet(
     // The full track model (spotify id, real album, stream url) — the state above
     // only carries display strings, and `album` is the *context* name (playlist…).
     val currentSong = playerViewModel.queue.value.firstOrNull { it.id == songId }
-    var downloaded by remember(songId) { mutableStateOf(com.music.spotui.data.preferences.isDownloaded(context, songId.toString())) }
-    var downloadingNow by remember(songId) { mutableStateOf(currentSong != null && SongPlayer.isDownloading(currentSong.url)) }
+    var downloaded by remember(songId) {
+        mutableStateOf(
+            com.music.spotui.data.preferences.isDownloaded(
+                context,
+                songId.toString()
+            )
+        )
+    }
+    var downloadingNow by remember(songId) {
+        mutableStateOf(
+            currentSong != null && SongPlayer.isDownloading(
+                currentSong.url
+            )
+        )
+    }
     val alternativeKey = currentSong?.let { alternativeStreamKey(it) }.orEmpty()
     var currentAlternative by remember(songId, alternativeKey) {
-        mutableStateOf(alternativeKey.takeIf { it.isNotBlank() }?.let { getAlternativeStream(context, it) })
+        mutableStateOf(alternativeKey.takeIf { it.isNotBlank() }
+            ?.let { getAlternativeStream(context, it) })
     }
-    val localFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        val song = currentSong ?: return@rememberLauncherForActivityResult
-        val picked = uri ?: return@rememberLauncherForActivityResult
-        runCatching {
-            context.contentResolver.takePersistableUriPermission(
+    val localFileLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+            val song = currentSong ?: return@rememberLauncherForActivityResult
+            val picked = uri ?: return@rememberLauncherForActivityResult
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    picked,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            setLocalAlternativeStream(
+                context,
+                alternativeKey,
                 picked,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                picked.lastPathSegment.orEmpty()
             )
+            SongPlayer.invalidateResolvedStream(song.url)
+            currentAlternative = getAlternativeStream(context, alternativeKey)
+            Toast.makeText(context, "Alternative stream set to local file", Toast.LENGTH_SHORT)
+                .show()
         }
-        setLocalAlternativeStream(context, alternativeKey, picked, picked.lastPathSegment.orEmpty())
-        SongPlayer.invalidateResolvedStream(song.url)
-        currentAlternative = getAlternativeStream(context, alternativeKey)
-        Toast.makeText(context, "Alternative stream set to local file", Toast.LENGTH_SHORT).show()
-    }
 
     if (showSavedIn && currentSong != null) {
         com.music.spotui.ui.components.SavedInSheet(
@@ -1581,7 +1649,11 @@ fun PlayerOptionsSheet(
                         currentAlternative = getAlternativeStream(context, alternativeKey)
                         showYouTubeSearch = false
                         showAlternativeStream = false
-                        Toast.makeText(context, "Alternative stream set to YouTube", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            "Alternative stream set to YouTube",
+                            Toast.LENGTH_SHORT
+                        ).show()
                         onDismiss()
                     },
                 )
@@ -1594,12 +1666,20 @@ fun PlayerOptionsSheet(
                         val song = currentSong ?: return@AlternativeStreamEditor
                         val videoId = SongPlayer.videoIdFromYouTubeLink(text)
                         if (videoId == null) {
-                            Toast.makeText(context, "Paste a YouTube video link or video ID", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                "Paste a YouTube video link or video ID",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         } else {
                             setYouTubeAlternativeStream(context, alternativeKey, videoId)
                             SongPlayer.invalidateResolvedStream(song.url)
                             currentAlternative = getAlternativeStream(context, alternativeKey)
-                            Toast.makeText(context, "Alternative stream set to YouTube", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                "Alternative stream set to YouTube",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                     },
                     onPickLocal = {
@@ -1610,7 +1690,8 @@ fun PlayerOptionsSheet(
                         clearAlternativeStream(context, alternativeKey)
                         SongPlayer.invalidateResolvedStream(song.url)
                         currentAlternative = null
-                        Toast.makeText(context, "Alternative stream cleared", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Alternative stream cleared", Toast.LENGTH_SHORT)
+                            .show()
                     },
                     onOpenYouTubeSearch = { showYouTubeSearch = true },
                 )
@@ -1632,8 +1713,21 @@ fun PlayerOptionsSheet(
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text(title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                        Text(singer, color = Color.Gray, fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        Text(
+                            title,
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                        Text(
+                            singer,
+                            color = Color.Gray,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
                     }
                 }
                 androidx.compose.material3.HorizontalDivider(color = Color(0xFF2A2A2A))
@@ -1654,7 +1748,9 @@ fun PlayerOptionsSheet(
                     onDismiss()
                 }
                 PlayerMenuRow(
-                    icon = if (downloaded) Icons.Default.CheckCircle else ImageVector.vectorResource(R.drawable.ic_download),
+                    icon = if (downloaded) Icons.Default.CheckCircle else ImageVector.vectorResource(
+                        R.drawable.ic_download
+                    ),
                     iconTint = if (downloaded) Color(AppPalette.toArgb()) else Color.White,
                     label = when {
                         downloaded -> "Remove download"
@@ -1665,7 +1761,10 @@ fun PlayerOptionsSheet(
                 ) {
                     val song = currentSong ?: return@PlayerMenuRow
                     if (downloaded) {
-                        com.music.spotui.data.preferences.removeDownload(context, song.id.toString())
+                        com.music.spotui.data.preferences.removeDownload(
+                            context,
+                            song.id.toString()
+                        )
                         downloaded = false
                     } else {
                         downloadingNow = true
@@ -1697,7 +1796,8 @@ fun PlayerOptionsSheet(
                     isLiked.value = isSongLiked(context, songId.toString())
                     // Mirror the like to the real Spotify account.
                     com.music.spotui.data.api.SpotifySync.setTrackSaved(
-                        context, currentSong?.spotifyTrackId.orEmpty(), isLiked.value)
+                        context, currentSong?.spotifyTrackId.orEmpty(), isLiked.value
+                    )
                     onDismiss()
                 }
                 PlayerMenuRow(
@@ -1732,7 +1832,10 @@ fun PlayerOptionsSheet(
                     enabled = singer.isNotBlank()
                 ) {
                     onDismiss()
-                    playerViewModel.goToArtist(currentSong?.spotifyTrackId.orEmpty(), singer) { route ->
+                    playerViewModel.goToArtist(
+                        currentSong?.spotifyTrackId.orEmpty(),
+                        singer
+                    ) { route ->
                         navController.navigate(route)
                     }
                 }
@@ -1815,7 +1918,10 @@ fun AlternativeStreamEditor(
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color(0xFF282828))
                     .clickable {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$videoId"))
+                        val intent = Intent(
+                            Intent.ACTION_VIEW,
+                            Uri.parse("https://www.youtube.com/watch?v=$videoId")
+                        )
                         context.startActivity(intent)
                     }
                     .padding(10.dp),
@@ -1881,8 +1987,13 @@ fun AlternativeStreamEditor(
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextButton(enabled = enabled && youtubeText.isNotBlank(), onClick = { onUseYouTube(youtubeText) }) {
-                Text("Use YouTube", color = if (enabled && youtubeText.isNotBlank()) AppPalette else Color.Gray)
+            TextButton(
+                enabled = enabled && youtubeText.isNotBlank(),
+                onClick = { onUseYouTube(youtubeText) }) {
+                Text(
+                    "Use YouTube",
+                    color = if (enabled && youtubeText.isNotBlank()) AppPalette else Color.Gray
+                )
             }
         }
         PlayerMenuRow(
@@ -1979,6 +2090,7 @@ fun YouTubeSearchView(
                     )
                 }
             }
+
             viewModel.error != null -> {
                 Text(
                     text = viewModel.error!!,
@@ -1987,6 +2099,7 @@ fun YouTubeSearchView(
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }
+
             viewModel.searchResults.isEmpty() && viewModel.searchQuery.isNotBlank() -> {
                 Text(
                     text = "No results found",
@@ -1995,6 +2108,7 @@ fun YouTubeSearchView(
                     modifier = Modifier.padding(top = 8.dp),
                 )
             }
+
             else -> {
                 androidx.compose.foundation.lazy.LazyColumn(
                     modifier = Modifier.heightIn(max = 360.dp),
@@ -2154,6 +2268,7 @@ fun PlayerMenuRow(
         }
     }
 }
+
 /**
  * Plays a Spotify Canvas clip: a short, muted, looping video filling the
  * now-playing background. Uses a dedicated ExoPlayer (separate from the audio
