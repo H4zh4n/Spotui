@@ -1,5 +1,6 @@
 package com.music.spotui.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -36,13 +37,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.unit.Velocity
 import com.music.spotui.data.api.TranslationApi
 import com.music.spotui.data.entity.Lyrics
 import com.music.spotui.di.SongPlayer
@@ -87,6 +93,22 @@ fun LyricsScreen(
     onClose: () -> Unit,
 ) {
     val vm: LyricsViewModel = hiltViewModel()
+
+    // Hardware back press closes only lyrics, not the player underneath.
+    BackHandler(onBack = onClose)
+
+    // Consume all vertical scroll/fling so downward swipes on the lyrics
+    // LazyColumn don't propagate to the PlayerScreen's nested scroll
+    // connection (which would dismiss the entire player dialog).
+    val consumeScroll = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset = available
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset = available
+            override suspend fun onPreFling(available: Velocity): Velocity = available
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity = available
+        }
+    }
+
     LaunchedEffect(title, artist) {
         if (vm.state.value is LyricsViewModel.State.Loaded) return@LaunchedEffect
         val durationSec = (SongPlayer.getDuration() / 1000).toInt()
@@ -98,6 +120,7 @@ fun LyricsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .nestedScroll(consumeScroll)
             // Solid base first — the gradient's translucent middle stop let the
             // player screen bleed through, making the lyrics page look transparent.
             .background(Color(0xFF121212))
