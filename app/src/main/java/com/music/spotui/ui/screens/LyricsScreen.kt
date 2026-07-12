@@ -97,14 +97,14 @@ fun LyricsScreen(
     // Hardware back press closes only lyrics, not the player underneath.
     BackHandler(onBack = onClose)
 
-    // Consume all vertical scroll/fling so downward swipes on the lyrics
-    // LazyColumn don't propagate to the PlayerScreen's nested scroll
-    // connection (which would dismiss the entire player dialog).
+    // Let scroll pass through to the LazyColumn (onPreScroll = no consumption),
+    // but swallow any leftover scroll in onPostScroll so it doesn't reach the
+    // PlayerScreen's nested scroll connection (which would dismiss the player).
     val consumeScroll = remember {
         object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset = available
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset = Offset.Zero
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset = available
-            override suspend fun onPreFling(available: Velocity): Velocity = available
+            override suspend fun onPreFling(available: Velocity): Velocity = Velocity.Zero
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity = available
         }
     }
