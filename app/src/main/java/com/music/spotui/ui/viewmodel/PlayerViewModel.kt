@@ -28,6 +28,7 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
 
     val currentSongTitle: State<String> get() = currentSongState.title
     val currentSongSinger: State<String> get() = currentSongState.singer
+    val currentArtistIds: State<String> get() = currentSongState.artistIds
     val currentSongCoverUri: State<String> get() = currentSongState.coverUri
     val currentSongPlayingState: State<Boolean> get() = currentSongState.playingState
     val currentSongIndex : State<Int> get() = currentSongState.songIndex
@@ -219,6 +220,10 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
             }
             navigate(route)
         }
+    }
+
+    fun goToArtistByName(artistName: String, artistId: String, navigate: (route: String) -> Unit) {
+        navigate(artistRoute(artistName, artistId))
     }
 
     @Volatile private var awaitingRadioContinue = false

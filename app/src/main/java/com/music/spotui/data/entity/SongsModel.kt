@@ -15,7 +15,11 @@ data class SongsModel(
     val explicit : Boolean = false,
     // Track length in ms (from Spotify). Used to disambiguate the YouTube match:
     // a same-title-different-artist song almost always has a different duration.
-    val durationMs : Int = 0
+    val durationMs : Int = 0,
+    // Comma-separated artist IDs matching the order of names in [singer].
+    // Populated from Spotify's API so tapping a specific artist in the player
+    // navigates to the correct artist page.
+    val artistIds : String = ""
 ){
     constructor() : this(-1 ,"" ,"" ,"" ,"" ,"", "")
 }

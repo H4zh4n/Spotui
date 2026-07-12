@@ -24,6 +24,9 @@ class CurrentSongState @Inject constructor() {
     private val _singer: MutableState<String> = mutableStateOf("")
     val singer: State<String> get() = _singer
 
+    private val _artistIds: MutableState<String> = mutableStateOf("")
+    val artistIds: State<String> get() = _artistIds
+
     private val _coverUri: MutableState<String> = mutableStateOf("")
     val coverUri: State<String> get() = _coverUri
 
@@ -179,11 +182,12 @@ class CurrentSongState @Inject constructor() {
         likeState.value = newLikeState
     }
 
-    fun updateSongState(coverUri: String, title: String, singer: String, playingState: Boolean, songId : Int, songIndex : Int, album : String) {
+    fun updateSongState(coverUri: String, title: String, singer: String, playingState: Boolean, songId : Int, songIndex : Int, album : String, artistIds: String = "") {
         _coverUri.value = coverUri
         _title.value = title
         _album.value = album
         _singer.value = singer
+        _artistIds.value = artistIds
         _playingState.value = playingState
         _songIndex.value = songIndex
         _songId.value = songId

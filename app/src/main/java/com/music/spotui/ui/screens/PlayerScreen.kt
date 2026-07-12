@@ -640,15 +640,14 @@ fun PlayerScreen(navController: NavController) {
                 // Reads each 300ms tick (songProgress recomposition) so it reflects
                 // the current engine — Spotify vs Lossless (SpotiFLAC) vs YouTube.
                 PlayerInfo(
-                    songTitle, songSinger, songId, context, isLiked,
+                    songTitle, songSinger, playerViewModel.currentArtistIds.value, songId, context, isLiked,
                     source = SongPlayer.currentSource,
                     quality = SongPlayer.currentQuality,
                     isResolving = playerViewModel.isResolving.value,
                     resolveStatus = playerViewModel.resolveStatus.value,
                     resolveError = playerViewModel.resolveError.value,
-                    onArtistClick = {
-                        val track = queueSongs.firstOrNull { it.id == songId }
-                        playerViewModel.goToArtist(track?.spotifyTrackId.orEmpty(), songSinger) { route ->
+                    onArtistClick = { name, id ->
+                        playerViewModel.goToArtistByName(name, id) { route ->
                             navController.navigate(route)
                         }
                     },
@@ -830,6 +829,7 @@ fun PlayerTopBar(
 fun PlayerInfo(
     songTitle: String,
     songSinger: String,
+    artistIds: String,
     songId: Int,
     context: Context,
     isLiked: MutableState<Boolean>,
@@ -838,7 +838,7 @@ fun PlayerInfo(
     isResolving: Boolean = false,
     resolveStatus: String = "",
     resolveError: String? = null,
-    onArtistClick: (() -> Unit)? = null,
+    onArtistClick: ((name: String, id: String) -> Unit)? = null,
     spotifyTrackId: String = "",
     onShowSavedIn: (() -> Unit)? = null,
 ) {
@@ -890,18 +890,33 @@ fun PlayerInfo(
                     maxLines = 1,
                     softWrap = false,
                 )
-                Text(
-                    text = songSinger,
-                    color = Color.Gray,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    modifier = if (onArtistClick != null) Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) { onArtistClick() } else Modifier,
-                )
+                // Render each artist as a separate clickable text so tapping a
+                // specific artist on a multi-artist track navigates to that artist.
+                val artistNames = songSinger.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                val artistIdList = artistIds.split(",").map { it.trim() }
+                Row {
+                    artistNames.forEachIndexed { index, name ->
+                        val aId = artistIdList.getOrElse(index) { "" }
+                        Text(
+                            text = name,
+                            color = Color.Gray,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = if (onArtistClick != null) Modifier.clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { onArtistClick(name, aId) } else Modifier,
+                        )
+                        if (index < artistNames.size - 1) {
+                            Text(
+                                text = ", ",
+                                color = Color.Gray,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                        }
+                    }
+                }
                 val isResolvingState = isResolving && resolveStatus.isNotBlank()
                 val hasError = !resolveError.isNullOrBlank()
                 val displaySource = if (isResolvingState) "Resolving" else if (hasError) "Error" else source

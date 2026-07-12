@@ -76,6 +76,7 @@ class Api @Inject constructor(
             spotifyTrackId = id,
             explicit = explicit,
             durationMs = durationMs,
+            artistIds = artists.joinToString(",") { it.id.orEmpty() },
         )
     }
 
