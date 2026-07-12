@@ -92,12 +92,14 @@ class LyricsViewModel @Inject constructor(
 
     fun toggleLanguageBar() {
         showLanguageBar = !showLanguageBar
-        if (!showLanguageBar) {
-            translatedLines = null
-            translationsLoading = false
-            translationError = null
-            modelState = ModelState.Idle
-        }
+    }
+
+    fun dismissTranslate() {
+        showLanguageBar = false
+        translatedLines = null
+        translationsLoading = false
+        translationError = null
+        modelState = ModelState.Idle
     }
 
     fun clearError() { translationError = null }

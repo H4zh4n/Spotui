@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -24,6 +25,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.CircularProgressIndicator
@@ -235,7 +237,7 @@ fun LyricsScreen(
     val state by vm.state.collectAsState()
     val positionMs by rememberPlaybackPositionMs()
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .nestedScroll(nestedScrollConnection)
@@ -260,104 +262,138 @@ fun LyricsScreen(
                     colors = listOf(accentColor, accentColor.copy(alpha = 0.55f), Color.Black),
                 )
             )
-            .statusBarsPadding()
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp, 8.dp)
-        ) {
-            Column(modifier = Modifier.padding(end = 12.dp)) {
-                Text("Lyrics", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp, 8.dp)
+            ) {
+                Column(modifier = Modifier.padding(end = 12.dp)) {
+                    Text("Lyrics", color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Close",
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { dismissLyrics() }
+                    )
+                }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Translate,
-                    contentDescription = "Translate",
-                    tint = if (vm.showLanguageBar) Color.White else Color.White.copy(alpha = 0.45f),
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                        ) { vm.toggleLanguageBar() }
-                )
-                Icon(
-                    imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = "Close",
-                    tint = Color.White,
-                    modifier = Modifier
-                        .size(30.dp)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                        ) { dismissLyrics() }
-                )
+
+            when (val s = state) {
+                is LyricsViewModel.State.Loading ->
+                    Box(
+                        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(color = Color.White)
+                    }
+                is LyricsViewModel.State.NotFound ->
+                    Box(
+                        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("Couldn't find lyrics for this track", color = Color.White.copy(alpha = 0.7f), fontSize = 15.sp)
+                    }
+                is LyricsViewModel.State.Loaded -> {
+                    val lyrics = s.lyrics
+                    val activeIndex = activeIndexFor(lyrics, positionMs)
+                    val listState = rememberLazyListState()
+                    val translated = vm.translatedLines
+                    val showTranslations = vm.translationsVisible
+                    LaunchedEffect(activeIndex) {
+                        if (activeIndex >= 0) {
+                            listState.animateScrollToItem(activeIndex.coerceAtLeast(0), scrollOffset = -260)
+                        }
+                    }
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(24.dp, 16.dp, 24.dp, 120.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                    ) {
+                        itemsIndexed(lyrics.lines) { index, line ->
+                            LyricLineText(
+                                text = line.text,
+                                isActive = index == activeIndex,
+                                synced = lyrics.synced,
+                                fontSize = 24.sp,
+                                onTap = if (lyrics.synced) ({ jumpTo(line.timeMs) }) else null,
+                                translatedText = if (showTranslations && translated != null && index < translated.size) translated[index].translatedText else null,
+                            )
+                        }
+                    }
+                }
             }
         }
 
-        // Language selection bar — visible when the translate icon is active.
+        TranslateFloatingPanel(vm = vm, modifier = Modifier.align(Alignment.BottomStart))
+    }
+}
+
+@Composable
+private fun TranslateFloatingPanel(vm: LyricsViewModel, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.padding(start = 16.dp, bottom = 24.dp)) {
         if (vm.showLanguageBar) {
-            TranslationBar(vm = vm)
-            vm.translationError?.let { error ->
-                Text(
-                    text = error,
-                    color = Color(0xFFFF6B6B),
-                    fontSize = 12.sp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 2.dp),
-                )
+            Column(
+                modifier = Modifier
+                    .background(Color(0xCC1E1E1E), shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                    .padding(10.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Hide translate",
+                        tint = Color.White.copy(alpha = 0.6f),
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { vm.dismissTranslate() }
+                            .padding(end = 4.dp),
+                    )
+                    TranslationBar(vm = vm)
+                }
+                vm.translationError?.let { error ->
+                    Text(
+                        text = error,
+                        color = Color(0xFFFF6B6B),
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 24.dp, top = 4.dp),
+                    )
+                }
             }
+            Spacer(modifier = Modifier.size(8.dp))
         }
-
-        when (val s = state) {
-            is LyricsViewModel.State.Loading ->
-                Box(
-                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = Color.White)
-                }
-            is LyricsViewModel.State.NotFound ->
-                Box(
-                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("Couldn't find lyrics for this track", color = Color.White.copy(alpha = 0.7f), fontSize = 15.sp)
-                }
-            is LyricsViewModel.State.Loaded -> {
-                val lyrics = s.lyrics
-                val activeIndex = activeIndexFor(lyrics, positionMs)
-                val listState = rememberLazyListState()
-                val translated = vm.translatedLines
-                val showTranslations = vm.translationsVisible
-                LaunchedEffect(activeIndex) {
-                    if (activeIndex >= 0) {
-                        listState.animateScrollToItem(activeIndex.coerceAtLeast(0), scrollOffset = -260)
-                    }
-                }
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(24.dp, 16.dp, 24.dp, 160.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp),
-                ) {
-                    itemsIndexed(lyrics.lines) { index, line ->
-                        LyricLineText(
-                            text = line.text,
-                            isActive = index == activeIndex,
-                            synced = lyrics.synced,
-                            fontSize = 24.sp,
-                            onTap = if (lyrics.synced) ({ jumpTo(line.timeMs) }) else null,
-                            translatedText = if (showTranslations && translated != null && index < translated.size) translated[index].translatedText else null,
-                        )
-                    }
-                }
-            }
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .background(Color(0xCC1E1E1E), shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) { vm.toggleLanguageBar() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Default.Translate,
+                contentDescription = "Translate",
+                tint = if (vm.showLanguageBar) Color(0xFF1DB954) else Color.White,
+                modifier = Modifier.size(24.dp),
+            )
         }
     }
 }
