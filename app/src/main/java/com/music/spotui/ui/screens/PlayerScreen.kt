@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.List
@@ -1479,7 +1480,9 @@ fun PlayerOptionsSheet(
                         SongPlayer.invalidateResolvedStream(song.url)
                         currentAlternative = getAlternativeStream(context, alternativeKey)
                         showYouTubeSearch = false
+                        showAlternativeStream = false
                         Toast.makeText(context, "Alternative stream set to YouTube", Toast.LENGTH_SHORT).show()
+                        onDismiss()
                     },
                 )
             } else if (showAlternativeStream) {
@@ -1666,6 +1669,7 @@ fun PlayerOptionsSheet(
     }
 }
 
+@OptIn(ExperimentalGlideComposeApi::class)
 @Composable
 fun AlternativeStreamEditor(
     currentAlternative: com.music.spotui.data.preferences.AlternativeStream?,
@@ -1700,17 +1704,68 @@ fun AlternativeStreamEditor(
             )
         }
         Spacer(Modifier.height(14.dp))
-        Text(
-            text = when {
-                currentAlternative == null -> "No alternative stream set"
-                currentAlternative.isYouTube -> "Current: YouTube video ${currentAlternative.value}"
-                currentAlternative.isLocal -> "Current: local file ${currentAlternative.label.ifBlank { currentAlternative.value }}"
-                else -> "Current alternative stream"
-            },
-            color = if (currentAlternative == null) Color(0xFFB3B3B3) else Color(AppPalette.toArgb()),
-            fontSize = 13.sp,
-            maxLines = 2,
-        )
+        if (currentAlternative != null && currentAlternative.isYouTube) {
+            val context = LocalContext.current
+            val videoId = currentAlternative.value
+            val thumbnailUrl = "https://img.youtube.com/vi/$videoId/mqdefault.jpg"
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF282828))
+                    .clickable {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$videoId"))
+                        context.startActivity(intent)
+                    }
+                    .padding(10.dp),
+            ) {
+                GlideImage(
+                    model = thumbnailUrl,
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(RoundedCornerShape(6.dp)),
+                    contentScale = ContentScale.Crop,
+                    contentDescription = null,
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "YouTube alternative",
+                        color = Color(AppPalette.toArgb()),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = videoId,
+                        color = Color(0xFFB3B3B3),
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                    tint = Color(0xFFB3B3B3),
+                    modifier = Modifier.size(18.dp),
+                    contentDescription = "Open on YouTube",
+                )
+            }
+        } else if (currentAlternative != null && currentAlternative.isLocal) {
+            Text(
+                text = "Current: local file ${currentAlternative.label.ifBlank { currentAlternative.value }}",
+                color = Color(AppPalette.toArgb()),
+                fontSize = 13.sp,
+                maxLines = 2,
+            )
+        } else {
+            Text(
+                text = "No alternative stream set",
+                color = Color(0xFFB3B3B3),
+                fontSize = 13.sp,
+            )
+        }
         Spacer(Modifier.height(16.dp))
         OutlinedTextField(
             value = youtubeText,
@@ -1773,6 +1828,8 @@ fun YouTubeSearchView(
     DisposableEffect(Unit) {
         onDispose { viewModel.stopPreview() }
     }
+
+    BackHandler { viewModel.stopPreview(); onBack() }
 
     Column(
         modifier = Modifier
