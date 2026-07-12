@@ -182,6 +182,23 @@ fun SettingsScreen(navController: NavController) {
                 selected = dlQ,
             ) { dlQ = it; setDownloadQuality(context, it) }
 
+            // Warn about FLAC when any quality is set to Lossless.
+            val anyLossless = wifiQ == StreamQuality.LOSSLESS || cellQ == StreamQuality.LOSSLESS || dlQ == StreamQuality.LOSSLESS
+            if (anyLossless) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "Lossless streams are resolved per-session and aren't cached to disk, which may add a few seconds of loading time when playing music.",
+                    color = Color(0xFFFFB74D),
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0x33FFB74D))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                )
+            }
+
             // Live lossless-server status (spotbye). Lossless only resolves when a
             // server is up; otherwise playback goes straight to YouTube.
             var losslessStatus by remember { mutableStateOf("Lossless servers: checking…") }
