@@ -855,7 +855,11 @@ object SongPlayer {
         }
         com.music.spotui.data.preferences.addDownload(appContext, song, outFile.absolutePath)
         // Eagerly cache lyrics so offline playback doesn't need a network round-trip.
-        runCatching { LyricsApi.fetch(song.title, song.singer, song.album, song.durationMs / 1000) }
+        LyricsApi.removeFromCache(song.title, song.singer)
+        val lyricsOk = runCatching {
+            LyricsApi.fetch(song.title, song.singer, song.album, song.durationMs / 1000)
+        }.getOrNull() != null
+        if (!lyricsOk) LyricsApi.removeFromCache(song.title, song.singer)
         return true
     }
 
@@ -905,7 +909,11 @@ object SongPlayer {
         }
         com.music.spotui.data.preferences.addDownload(appContext, song, outFile.absolutePath)
         // Eagerly cache lyrics so offline playback doesn't need a network round-trip.
-        runCatching { LyricsApi.fetch(song.title, song.singer, song.album, song.durationMs / 1000) }
+        LyricsApi.removeFromCache(song.title, song.singer)
+        val lyricsOk = runCatching {
+            LyricsApi.fetch(song.title, song.singer, song.album, song.durationMs / 1000)
+        }.getOrNull() != null
+        if (!lyricsOk) LyricsApi.removeFromCache(song.title, song.singer)
         Log.d(TAG, "FLAC downloaded (${flac.provider} ${flac.quality}-bit): ${song.title}")
         return true
     }

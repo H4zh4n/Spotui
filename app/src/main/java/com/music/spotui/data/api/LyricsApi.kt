@@ -63,6 +63,11 @@ object LyricsApi {
         }
     }
 
+    /** Remove any cached entry (hit or miss) so the next fetch starts fresh. */
+    fun removeFromCache(title: String, artist: String) {
+        cache.remove(cacheKey(title, artist))
+    }
+
     /** Warm the cache for a track in the background (call when playback starts). */
     fun prefetch(title: String, artist: String, album: String, durationSec: Int = 0) {
         if (title.isBlank()) return
