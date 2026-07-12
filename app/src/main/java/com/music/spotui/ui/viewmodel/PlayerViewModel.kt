@@ -151,8 +151,11 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
         if (SongPlayer.isCrossfadeActive()) return
         val cur = currentPositionIn(queueSongs)
         // Top up the queue with Spotify recommendations as we approach the end.
-        maybeExtendRadio(queueSongs, cur)
-        if (cur >= queueSongs.size - 1 && autoplayRadioEnabled) {
+        // Don't append radio tracks when repeat-ALL is on — we want to loop the exact queue.
+        if (currentSongState.repeat.value != RepeatMode.ALL) {
+            maybeExtendRadio(queueSongs, cur)
+        }
+        if (cur >= queueSongs.size - 1 && autoplayRadioEnabled && currentSongState.repeat.value != RepeatMode.ALL) {
             // End of the queue (e.g. a single). Don't loop back to the start —
             // wait for the radio fetch kicked off above to append tracks and
             // continue into them, like Spotify's autoplay.
