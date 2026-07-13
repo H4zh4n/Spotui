@@ -79,11 +79,14 @@ class LyricsViewModel @Inject constructor(
         loadJob?.cancel()
         loadJob = viewModelScope.launch(Dispatchers.IO) {
             val lyrics = LyricsApi.fetch(title, artist, album, durationSec)
+            val detectedLanguage = if (lyrics != null && !lyrics.isEmpty) {
+                val allText = lyrics.lines.joinToString(" ") { it.text }
+                TranslationApi.detectLanguage(allText)
+            } else null
             withContext(Dispatchers.Main) {
                 _state.value = if (lyrics == null || lyrics.isEmpty) State.NotFound
                 else {
-                    val allText = lyrics.lines.joinToString(" ") { it.text }
-                    sourceLanguage = TranslationApi.detectLanguage(allText)
+                    if (detectedLanguage != null) sourceLanguage = detectedLanguage
                     State.Loaded(lyrics)
                 }
             }
