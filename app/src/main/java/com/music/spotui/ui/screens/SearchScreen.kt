@@ -76,6 +76,11 @@ import com.music.spotui.ui.navigation.showRoute
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.SearchViewModel
+import com.music.spotui.ui.viewmodel.PlayerViewModel
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material.icons.automirrored.filled.List
 
 
 @RequiresApi(Build.VERSION_CODES.S)
@@ -419,75 +424,107 @@ fun SearchSongRow(
     }
     val likeState = searchViewModel.likeState.value
     LaunchedEffect(likeState) { isLiked = isSongLiked(context, song.id.toString()) }
+    val playerViewModel: PlayerViewModel = hiltViewModel()
     val currentPlayingIndicatorColor =
         if (song.id == searchViewModel.currentSongId.value) Color(AppPalette.toArgb()) else Color.White
 
-    Row(
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp, 8.dp)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-            ) {
-                onPlayed()
-                // Start a radio from the tapped track (queue = this song + Spotify
-                // recommendations) rather than queuing the whole search list.
-                searchViewModel.startRadioFromSong(song)
-                SongPlayer.playSong(song.url, context)
-                searchViewModel.updateSongState(
-                    song.coverUri,
-                    song.title,
-                    song.singer,
-                    true,
-                    song.id,
-                    0,
-                    song.album,
-                )
-            },
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.Start,
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.width(280.dp),
-        ) {
-            GlideImage(
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.StartToEnd) {
+                playerViewModel.addToQueue(song)
+            }
+            false
+        }
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = true,
+        enableDismissFromEndToStart = false,
+        backgroundContent = {
+            Box(
+                contentAlignment = Alignment.CenterStart,
                 modifier = Modifier
-                    .padding(0.dp, 0.dp, 10.dp, 0.dp)
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(6.dp)),
-                model = song.coverUri,
-                contentScale = ContentScale.Crop,
-                failure = placeholder(R.drawable.placeholder),
-                loading = placeholder(R.drawable.placeholder),
-                contentDescription = "",
-            )
-            Column {
-                Text(text = song.title, color = currentPlayingIndicatorColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-                Text(text = "Song • ${song.singer}", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                    .fillMaxSize()
+                    .background(Color(0xFF1DB954)) // Spotify Green
+                    .padding(horizontal = 24.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.List,
+                    contentDescription = "Add to queue",
+                    tint = Color.White
+                )
             }
         }
-
-        Icon(
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .size(20.dp)
-                .combinedClickable(
+                .fillMaxWidth()
+                .background(AppBackground)
+                .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = {
-                        if (isLiked) removeLikedSongId(context, song.id.toString())
-                        else addLikedSongId(context, song.id.toString())
-                        isLiked = isSongLiked(context, song.id.toString())
-                        searchViewModel.updateLikeState(!searchViewModel.likeState.value)
-                    },
-                    onLongClick = { showSavedIn = true },
-                ),
-            painter = if (isLiked) painterResource(id = R.drawable.added) else painterResource(id = R.drawable.ic_add),
-            tint = if (isLiked) Color.White else Color.Gray,
-            contentDescription = "",
-        )
+                ) {
+                    onPlayed()
+                    // Start a radio from the tapped track (queue = this song + Spotify
+                    // recommendations) rather than queuing the whole search list.
+                    searchViewModel.startRadioFromSong(song)
+                    SongPlayer.playSong(song.url, context)
+                    searchViewModel.updateSongState(
+                        song.coverUri,
+                        song.title,
+                        song.singer,
+                        true,
+                        song.id,
+                        0,
+                        song.album,
+                    )
+                }
+                .padding(16.dp, 8.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.width(280.dp),
+            ) {
+                GlideImage(
+                    modifier = Modifier
+                        .padding(0.dp, 0.dp, 10.dp, 0.dp)
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(6.dp)),
+                    model = song.coverUri,
+                    contentScale = ContentScale.Crop,
+                    failure = placeholder(R.drawable.placeholder),
+                    loading = placeholder(R.drawable.placeholder),
+                    contentDescription = "",
+                )
+                Column {
+                    Text(text = song.title, color = currentPlayingIndicatorColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                    Text(text = "Song • ${song.singer}", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                }
+            }
+
+            Icon(
+                modifier = Modifier
+                    .size(20.dp)
+                    .combinedClickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {
+                            if (isLiked) removeLikedSongId(context, song.id.toString())
+                            else addLikedSongId(context, song.id.toString())
+                            isLiked = isSongLiked(context, song.id.toString())
+                            searchViewModel.updateLikeState(!searchViewModel.likeState.value)
+                        },
+                        onLongClick = { showSavedIn = true },
+                    ),
+                painter = if (isLiked) painterResource(id = R.drawable.added) else painterResource(id = R.drawable.ic_add),
+                tint = if (isLiked) Color.White else Color.Gray,
+                contentDescription = "",
+            )
+        }
     }
 }
 

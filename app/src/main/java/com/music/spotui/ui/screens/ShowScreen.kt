@@ -3,6 +3,7 @@ package com.music.spotui.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,11 +47,18 @@ import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.components.Loader
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.viewmodel.ShowViewModel
+import com.music.spotui.ui.viewmodel.PlayerViewModel
+import androidx.compose.ui.res.painterResource
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material.icons.automirrored.filled.List
 
 @OptIn(ExperimentalGlideComposeApi::class)
 @Composable
 fun ShowScreen(navController: NavController, showId: String, showName: String = "") {
     val vm: ShowViewModel = hiltViewModel()
+    val playerViewModel: PlayerViewModel = hiltViewModel()
     val context = LocalContext.current
     LaunchedEffect(showId) { vm.loadShow(showId) }
 
@@ -102,6 +110,27 @@ fun ShowScreen(navController: NavController, showId: String, showName: String = 
                 show?.publisher?.takeIf { it.isNotBlank() }?.let {
                     Text(it, color = Color(0xFFB3B3B3), fontSize = 13.sp)
                 }
+                if (episodes.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_queue_add),
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) {
+                                playerViewModel.addAllToQueue(episodes)
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "${episodes.size} episode(s) added to queue",
+                                    android.widget.Toast.LENGTH_SHORT,
+                                ).show()
+                            },
+                        contentDescription = "Add all to queue",
+                    )
+                }
             }
         }
 
@@ -111,37 +140,68 @@ fun ShowScreen(navController: NavController, showId: String, showName: String = 
 
         items(episodes.size) { i ->
             val ep = episodes[i]
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) {
-                        vm.updateQueue(listOf(ep))
-                        SongPlayer.playSong(ep.url, context)
-                        vm.updateSongState(ep.coverUri, ep.title, ep.singer, true, ep.id, 0, ep.album)
+            val dismissState = rememberSwipeToDismissBoxState(
+                confirmValueChange = { value ->
+                    if (value == SwipeToDismissBoxValue.StartToEnd) {
+                        playerViewModel.addToQueue(ep)
                     }
-                    .padding(16.dp, 10.dp),
+                    false
+                }
+            )
+
+            SwipeToDismissBox(
+                state = dismissState,
+                enableDismissFromStartToEnd = true,
+                enableDismissFromEndToStart = false,
+                backgroundContent = {
+                    Box(
+                        contentAlignment = Alignment.CenterStart,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color(0xFF1DB954)) // Spotify Green
+                            .padding(horizontal = 24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.List,
+                            contentDescription = "Add to queue",
+                            tint = Color.White
+                        )
+                    }
+                }
             ) {
-                GlideImage(
-                    model = ep.coverUri,
-                    contentScale = ContentScale.Crop,
-                    failure = placeholder(R.drawable.placeholder),
-                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
-                    contentDescription = null,
-                )
-                Column(modifier = Modifier.padding(start = 12.dp)) {
-                    Text(
-                        ep.title,
-                        color = if (ep.id == vm.currentSongId.value) Color(0xFF1ED760) else Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(AppBackground)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) {
+                            vm.updateQueue(listOf(ep))
+                            SongPlayer.playSong(ep.url, context)
+                            vm.updateSongState(ep.coverUri, ep.title, ep.singer, true, ep.id, 0, ep.album)
+                        }
+                        .padding(16.dp, 10.dp),
+                ) {
+                    GlideImage(
+                        model = ep.coverUri,
+                        contentScale = ContentScale.Crop,
+                        failure = placeholder(R.drawable.placeholder),
+                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
+                        contentDescription = null,
                     )
-                    Text(ep.singer, color = Color(0xFFB3B3B3), fontSize = 12.sp, maxLines = 1)
+                    Column(modifier = Modifier.padding(start = 12.dp)) {
+                        Text(
+                            ep.title,
+                            color = if (ep.id == vm.currentSongId.value) Color(0xFF1ED760) else Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(ep.singer, color = Color(0xFFB3B3B3), fontSize = 12.sp, maxLines = 1)
+                    }
                 }
             }
         }

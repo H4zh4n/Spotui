@@ -72,6 +72,11 @@ import com.music.spotui.ui.navigation.artistRoute
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.ArtistViewModel
+import com.music.spotui.ui.viewmodel.PlayerViewModel
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material.icons.automirrored.filled.List
 
 private val SpotifyGreen = Color(0xFF1ED760)
 
@@ -435,60 +440,92 @@ private fun PopularTrackRow(
     }
     val likeState = artistViewModel.likeState.value
     LaunchedEffect(likeState) { isLiked = isSongLiked(context, song.id.toString()) }
+    val playerViewModel: PlayerViewModel = hiltViewModel()
     val titleColor =
         if (song.id == artistViewModel.currentSongId.value) Color(AppPalette.toArgb()) else Color.White
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp, 6.dp)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-            ) { onPlay() },
-    ) {
-        Text(
-            text = "${index + 1}",
-            color = Color.Gray,
-            fontSize = 15.sp,
-            modifier = Modifier.width(24.dp),
-        )
-        GlideImage(
-            modifier = Modifier
-                .padding(8.dp, 0.dp, 12.dp, 0.dp)
-                .size(48.dp)
-                .clip(RoundedCornerShape(4.dp)),
-            model = song.coverUri,
-            contentScale = ContentScale.Crop,
-            failure = placeholder(R.drawable.placeholder),
-            loading = placeholder(R.drawable.placeholder),
-            contentDescription = "",
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = song.title, color = titleColor, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
-            item.playcount?.let {
-                Text(text = grouped(it), color = Color.Gray, fontSize = 12.sp, maxLines = 1)
-            } ?: Text(text = song.singer, color = Color.Gray, fontSize = 12.sp, maxLines = 1)
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.StartToEnd) {
+                playerViewModel.addToQueue(song)
+            }
+            false
         }
-        Icon(
-            painter = if (isLiked) painterResource(id = R.drawable.added) else painterResource(id = R.drawable.ic_add),
-            contentDescription = "",
-            tint = if (isLiked) Color.White else Color.Gray,
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = true,
+        enableDismissFromEndToStart = false,
+        backgroundContent = {
+            Box(
+                contentAlignment = Alignment.CenterStart,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFF1DB954)) // Spotify Green
+                    .padding(horizontal = 24.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.List,
+                    contentDescription = "Add to queue",
+                    tint = Color.White
+                )
+            }
+        }
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .size(20.dp)
-                .combinedClickable(
+                .fillMaxWidth()
+                .background(AppBackground)
+                .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClick = {
-                        if (isLiked) removeLikedSongId(context, song.id.toString())
-                        else addLikedSongId(context, song.id.toString())
-                        isLiked = isSongLiked(context, song.id.toString())
-                        artistViewModel.updateLikeState(!artistViewModel.likeState.value)
-                    },
-                    onLongClick = { showSavedIn = true },
-                ),
-        )
+                ) { onPlay() }
+                .padding(16.dp, 6.dp),
+        ) {
+            Text(
+                text = "${index + 1}",
+                color = Color.Gray,
+                fontSize = 15.sp,
+                modifier = Modifier.width(24.dp),
+            )
+            GlideImage(
+                modifier = Modifier
+                    .padding(8.dp, 0.dp, 12.dp, 0.dp)
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(4.dp)),
+                model = song.coverUri,
+                contentScale = ContentScale.Crop,
+                failure = placeholder(R.drawable.placeholder),
+                loading = placeholder(R.drawable.placeholder),
+                contentDescription = "",
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = song.title, color = titleColor, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                item.playcount?.let {
+                    Text(text = grouped(it), color = Color.Gray, fontSize = 12.sp, maxLines = 1)
+                } ?: Text(text = song.singer, color = Color.Gray, fontSize = 12.sp, maxLines = 1)
+            }
+            Icon(
+                painter = if (isLiked) painterResource(id = R.drawable.added) else painterResource(id = R.drawable.ic_add),
+                contentDescription = "",
+                tint = if (isLiked) Color.White else Color.Gray,
+                modifier = Modifier
+                    .size(20.dp)
+                    .combinedClickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {
+                            if (isLiked) removeLikedSongId(context, song.id.toString())
+                            else addLikedSongId(context, song.id.toString())
+                            isLiked = isSongLiked(context, song.id.toString())
+                            artistViewModel.updateLikeState(!artistViewModel.likeState.value)
+                        },
+                        onLongClick = { showSavedIn = true },
+                    ),
+            )
+        }
     }
 }
 

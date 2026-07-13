@@ -62,6 +62,15 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
         currentSongState.updateQueue(q + song)
     }
 
+    /** Append multiple tracks to the end of the queue. */
+    fun addAllToQueue(songs: List<SongsModel>) {
+        val current = currentSongState.queue.value
+        val newSongs = songs.filter { s -> current.none { it.id == s.id } }
+        if (newSongs.isNotEmpty()) {
+            currentSongState.updateQueue(current + newSongs)
+        }
+    }
+
     /** Reorder the queue, moving the track at [from] to [to] (both absolute indices). */
     fun moveQueueItem(from: Int, to: Int) {
         val q = currentSongState.queue.value.toMutableList()

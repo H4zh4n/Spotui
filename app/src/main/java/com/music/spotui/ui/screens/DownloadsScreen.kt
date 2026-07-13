@@ -80,6 +80,9 @@ import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.PlayerViewModel
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 
 fun DownloadSortOption.getDescriptiveLabel(isDescending: Boolean): String {
     return when (this) {
@@ -418,54 +421,85 @@ fun DownloadsScreen(navController: NavController) {
                         val currentColor = if (song.id == playerViewModel.currentSongId.value)
                             Color(AppPalette.toArgb()) else Color.White
 
-                        Row(
-                            horizontalArrangement = Arrangement.Start,
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(20.dp, 8.dp)
-                                .combinedClickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onLongClick = { menuSong = song },
-                                    onClick = {
-                                        playerViewModel.updateQueue(displayedSongs)
-                                        SongPlayer.playSong(song.url, context)
-                                        playerViewModel.updateSongState(
-                                            song.coverUri, song.title, song.singer,
-                                            true, song.id, index, "Downloaded"
-                                        )
-                                    },
-                                )
+                        val dismissState = rememberSwipeToDismissBoxState(
+                            confirmValueChange = { value ->
+                                if (value == SwipeToDismissBoxValue.StartToEnd) {
+                                    playerViewModel.addToQueue(song)
+                                }
+                                false
+                            }
+                        )
+
+                        SwipeToDismissBox(
+                            state = dismissState,
+                            enableDismissFromStartToEnd = true,
+                            enableDismissFromEndToStart = false,
+                            backgroundContent = {
+                                Box(
+                                    contentAlignment = Alignment.CenterStart,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color(0xFF1DB954)) // Spotify Green
+                                        .padding(horizontal = 24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.List,
+                                        contentDescription = "Add to queue",
+                                        tint = Color.White
+                                    )
+                                }
+                            }
                         ) {
-                            GlideImage(
+                            Row(
+                                horizontalArrangement = Arrangement.Start,
+                                verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(RoundedCornerShape(4.dp)),
-                                model = song.coverUri,
-                                failure = placeholder(R.drawable.placeholder),
-                                contentScale = ContentScale.Crop,
-                                contentDescription = ""
-                            )
-                            Column(
-                                modifier = Modifier
-                                    .padding(start = 12.dp)
-                                    .width(280.dp)
+                                    .fillMaxWidth()
+                                    .background(AppBackground)
+                                    .combinedClickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onLongClick = { menuSong = song },
+                                        onClick = {
+                                            playerViewModel.updateQueue(displayedSongs)
+                                            SongPlayer.playSong(song.url, context)
+                                            playerViewModel.updateSongState(
+                                                song.coverUri, song.title, song.singer,
+                                                true, song.id, index, "Downloaded"
+                                            )
+                                        },
+                                    )
+                                    .padding(20.dp, 8.dp)
                             ) {
-                                Text(
-                                    text = song.title,
-                                    color = currentColor,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1
+                                GlideImage(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(RoundedCornerShape(4.dp)),
+                                    model = song.coverUri,
+                                    failure = placeholder(R.drawable.placeholder),
+                                    contentScale = ContentScale.Crop,
+                                    contentDescription = ""
                                 )
-                                Text(
-                                    text = song.singer,
-                                    color = Color.Gray,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1
-                                )
+                                Column(
+                                    modifier = Modifier
+                                        .padding(start = 12.dp)
+                                        .width(280.dp)
+                                ) {
+                                    Text(
+                                        text = song.title,
+                                        color = currentColor,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        text = song.singer,
+                                        color = Color.Gray,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1
+                                    )
+                                }
                             }
                         }
                     }

@@ -64,6 +64,11 @@ import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.AlbumViewModel
+import com.music.spotui.ui.viewmodel.PlayerViewModel
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material.icons.automirrored.filled.List
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalGlideComposeApi::class)
@@ -75,6 +80,7 @@ fun LikedSongsScreen(
     context: Context
 ) {
     val albumViewModel : AlbumViewModel =  hiltViewModel()
+    val playerViewModel : PlayerViewModel = hiltViewModel()
 
 
     val album = albums.filter { it.name == "Liked Songs" }
@@ -187,36 +193,62 @@ fun LikedSongsScreen(
                     }
 
 
-                    if(!albumViewModel.currentSongPlayingState.value && likedSongs.isNotEmpty()){
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .size(52.dp)
-                                .clip(RoundedCornerShape(100.dp))
-                                .background(Color.White)
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) {
-                                    albumViewModel.updateQueue(likedSongs)
-                                    SongPlayer.playSong(likedSongs[0].url, context)
-                                    albumViewModel.updateSongState(
-                                        likedSongs[0].coverUri,
-                                        likedSongs[0].title,
-                                        likedSongs[0].singer,
-                                        true,
-                                        likedSongs[0].id,
-                                        0,
-                                        "Liked Songs"
-                                    )
-                                }
-                        ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (likedSongs.isNotEmpty()) {
                             Icon(
+                                painter = painterResource(id = R.drawable.ic_queue_add),
+                                tint = Color.White,
                                 modifier = Modifier
-                                    .size(25.dp),
-                                tint = Color.Black,
-                                painter = painterResource(id = R.drawable.play_svgrepo_com),
-                                contentDescription = "")
+                                    .size(24.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {
+                                        playerViewModel.addAllToQueue(likedSongs)
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "${likedSongs.size} track(s) added to queue",
+                                            android.widget.Toast.LENGTH_SHORT,
+                                        ).show()
+                                    },
+                                contentDescription = "Add to queue",
+                            )
+                        }
+
+                        if (!albumViewModel.currentSongPlayingState.value && likedSongs.isNotEmpty()) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .clip(RoundedCornerShape(100.dp))
+                                    .background(Color.White)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) {
+                                        albumViewModel.updateQueue(likedSongs)
+                                        SongPlayer.playSong(likedSongs[0].url, context)
+                                        albumViewModel.updateSongState(
+                                            likedSongs[0].coverUri,
+                                            likedSongs[0].title,
+                                            likedSongs[0].singer,
+                                            true,
+                                            likedSongs[0].id,
+                                            0,
+                                            "Liked Songs"
+                                        )
+                                    }
+                            ) {
+                                Icon(
+                                    modifier = Modifier.size(25.dp),
+                                    tint = Color.Black,
+                                    painter = painterResource(id = R.drawable.play_svgrepo_com),
+                                    contentDescription = ""
+                                )
+                            }
                         }
                     }
 
@@ -246,88 +278,119 @@ fun LikedSongsScreen(
                     val currentPlayingIndicatorColor = if(songId == albumViewModel.currentSongId.value) Color(
                         AppPalette.toArgb()) else Color.White
 
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp, 8.dp)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) {
-                                albumViewModel.updateQueue(likedSongs)
-                                SongPlayer.playSong(likedSongs[song].url, context)
-                                albumViewModel.updateSongState(
-                                    likedSongs[song].coverUri,
-                                    likedSongs[song].title,
-                                    likedSongs[song].singer,
-                                    true,
-                                    likedSongs[song].id,
-                                    song,
-                                    "Liked Songs"
-                                )
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            if (value == SwipeToDismissBoxValue.StartToEnd) {
+                                playerViewModel.addToQueue(likedSongs[song])
                             }
-                    ) {
+                            false
+                        }
+                    )
 
-                        Row(
-                            horizontalArrangement = Arrangement.Start,
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.width(280.dp)
-                        ) {
-                            GlideImage(
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        enableDismissFromStartToEnd = true,
+                        enableDismissFromEndToStart = false,
+                        backgroundContent = {
+                            Box(
+                                contentAlignment = Alignment.CenterStart,
                                 modifier = Modifier
-                                    .padding(0.dp, 0.dp, 10.dp, 0.dp)
-                                    .size(50.dp),
-                                model = likedSongs[song].coverUri,
-                                contentScale = ContentScale.Crop,
-                                failure = placeholder(R.drawable.placeholder),
-                                loading = placeholder(R.drawable.placeholder),
-                                contentDescription = ""
-                            )
-                            Column {
-                                Text(
-                                    text = likedSongs[song].title,
-                                    color = currentPlayingIndicatorColor,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Text(
-                                    text = likedSongs[song].singer,
-                                    color = Color.Gray,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium
+                                    .fillMaxSize()
+                                    .background(Color(0xFF1DB954)) // Spotify Green
+                                    .padding(horizontal = 24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.List,
+                                    contentDescription = "Add to queue",
+                                    tint = Color.White
                                 )
                             }
                         }
-
-                        Icon(
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .size(20.dp)
-                                .combinedClickable(
+                                .fillMaxWidth()
+                                .background(AppBackground)
+                                .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = {
-                                        if (isLiked) {
-                                            removeLikedSongId(context, songId.toString())
-                                        } else {
-                                            addLikedSongId(context, songId.toString())
-                                        }
-                                        //isLiked = isSongLiked(context, songId.toString())
-                                        albumViewModel.updateLikeState(!albumViewModel.likeState.value)
-                                    },
-                                    onLongClick = { showSavedIn = true },
-                                ),
-                            painter = if (isLiked){
-                                painterResource(id = R.drawable.added)
+                                    indication = null
+                                ) {
+                                    albumViewModel.updateQueue(likedSongs)
+                                    SongPlayer.playSong(likedSongs[song].url, context)
+                                    albumViewModel.updateSongState(
+                                        likedSongs[song].coverUri,
+                                        likedSongs[song].title,
+                                        likedSongs[song].singer,
+                                        true,
+                                        likedSongs[song].id,
+                                        song,
+                                        "Liked Songs"
+                                    )
+                                }
+                                .padding(20.dp, 8.dp)
+                        ) {
+
+                            Row(
+                                horizontalArrangement = Arrangement.Start,
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.width(280.dp)
+                            ) {
+                                GlideImage(
+                                    modifier = Modifier
+                                        .padding(0.dp, 0.dp, 10.dp, 0.dp)
+                                        .size(50.dp),
+                                    model = likedSongs[song].coverUri,
+                                    contentScale = ContentScale.Crop,
+                                    failure = placeholder(R.drawable.placeholder),
+                                    loading = placeholder(R.drawable.placeholder),
+                                    contentDescription = ""
+                                )
+                                Column {
+                                    Text(
+                                        text = likedSongs[song].title,
+                                        color = currentPlayingIndicatorColor,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = likedSongs[song].singer,
+                                        color = Color.Gray,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
-                            else{
-                                painterResource(id = R.drawable.ic_add)
-                            }
-                            ,
-                            tint = Color.LightGray,
-                            contentDescription = ""
-                        )
+
+                            Icon(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .combinedClickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = {
+                                            if (isLiked) {
+                                                removeLikedSongId(context, songId.toString())
+                                            } else {
+                                                addLikedSongId(context, songId.toString())
+                                            }
+                                            //isLiked = isSongLiked(context, songId.toString())
+                                            albumViewModel.updateLikeState(!albumViewModel.likeState.value)
+                                        },
+                                        onLongClick = { showSavedIn = true },
+                                    ),
+                                painter = if (isLiked){
+                                    painterResource(id = R.drawable.added)
+                                }
+                                else{
+                                    painterResource(id = R.drawable.ic_add)
+                                }
+                                ,
+                                tint = Color.LightGray,
+                                contentDescription = ""
+                            )
+                        }
                     }
                 }
             }

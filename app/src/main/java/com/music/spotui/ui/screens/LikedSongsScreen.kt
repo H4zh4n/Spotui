@@ -65,6 +65,11 @@ import com.music.spotui.ui.components.Loader
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.LikedSongsViewModel
+import com.music.spotui.ui.viewmodel.PlayerViewModel
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material.icons.automirrored.filled.List
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalGlideComposeApi::class, ExperimentalFoundationApi::class)
@@ -72,6 +77,7 @@ import com.music.spotui.ui.viewmodel.LikedSongsViewModel
 fun LikedSongsScreen(navController: NavController) {
 
     val likedSongsViewModel: LikedSongsViewModel = hiltViewModel()
+    val playerViewModel: PlayerViewModel = hiltViewModel()
     val songsResp by likedSongsViewModel.songs.collectAsState()
     val context = LocalContext.current
 
@@ -230,6 +236,25 @@ fun LikedSongsScreen(navController: NavController) {
                                     contentDescription = "Download liked songs",
                                 )
                                 Spacer(modifier = Modifier.width(16.dp))
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_queue_add),
+                                    tint = Color.White,
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                        ) {
+                                            playerViewModel.addAllToQueue(songs)
+                                            android.widget.Toast.makeText(
+                                                context,
+                                                "${songs.size} track(s) added to queue",
+                                                android.widget.Toast.LENGTH_SHORT,
+                                            ).show()
+                                        },
+                                    contentDescription = "Add to queue",
+                                )
+                                Spacer(modifier = Modifier.width(16.dp))
                                 // Shuffle-play: start liked songs in random order.
                                 Icon(
                                     painter = painterResource(id = R.drawable.ic_player_shuffle),
@@ -309,55 +334,86 @@ fun LikedSongsScreen(navController: NavController) {
                     val currentColor = if (song.id == likedSongsViewModel.currentSongId.value)
                         Color(AppPalette.toArgb()) else Color.White
 
-                    Row(
-                        horizontalArrangement = Arrangement.Start,
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp, 8.dp)
-                            .combinedClickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onLongClick = { menuSong = song },
-                                onClick = {
-                                    likedSongsViewModel.updateQueue(songs)
-                                    SongPlayer.playSong(song.url, context)
-                                    likedSongsViewModel.updateSongState(
-                                        song.coverUri,
-                                        song.title,
-                                        song.singer,
-                                        true,
-                                        song.id,
-                                        index,
-                                        "Liked Songs"
-                                    )
-                                },
-                            )
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            if (value == SwipeToDismissBoxValue.StartToEnd) {
+                                playerViewModel.addToQueue(song)
+                            }
+                            false
+                        }
+                    )
+
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        enableDismissFromStartToEnd = true,
+                        enableDismissFromEndToStart = false,
+                        backgroundContent = {
+                            Box(
+                                contentAlignment = Alignment.CenterStart,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color(0xFF1DB954)) // Spotify Green
+                                    .padding(horizontal = 24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.List,
+                                    contentDescription = "Add to queue",
+                                    tint = Color.White
+                                )
+                            }
+                        }
                     ) {
-                        GlideImage(
+                        Row(
+                            horizontalArrangement = Arrangement.Start,
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(4.dp)),
-                            model = song.coverUri,
-                            failure = placeholder(R.drawable.placeholder),
-                            contentScale = ContentScale.Crop,
-                            contentDescription = ""
-                        )
-                        Column(modifier = Modifier.padding(start = 12.dp).width(280.dp)) {
-                            Text(
-                                text = song.title,
-                                color = currentColor,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1
+                                .fillMaxWidth()
+                                .background(AppBackground)
+                                .combinedClickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onLongClick = { menuSong = song },
+                                    onClick = {
+                                        likedSongsViewModel.updateQueue(songs)
+                                        SongPlayer.playSong(song.url, context)
+                                        likedSongsViewModel.updateSongState(
+                                            song.coverUri,
+                                            song.title,
+                                            song.singer,
+                                            true,
+                                            song.id,
+                                            index,
+                                            "Liked Songs"
+                                        )
+                                    },
+                                )
+                                .padding(20.dp, 8.dp)
+                        ) {
+                            GlideImage(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(RoundedCornerShape(4.dp)),
+                                model = song.coverUri,
+                                failure = placeholder(R.drawable.placeholder),
+                                contentScale = ContentScale.Crop,
+                                contentDescription = ""
                             )
-                            Text(
-                                text = song.singer,
-                                color = Color.Gray,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1
-                            )
+                            Column(modifier = Modifier.padding(start = 12.dp).width(280.dp)) {
+                                Text(
+                                    text = song.title,
+                                    color = currentColor,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = song.singer,
+                                    color = Color.Gray,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
                 }

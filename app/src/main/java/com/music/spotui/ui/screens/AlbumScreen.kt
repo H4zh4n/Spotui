@@ -78,6 +78,11 @@ import com.music.spotui.ui.components.Snackbar
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.AlbumViewModel
+import com.music.spotui.ui.viewmodel.PlayerViewModel
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.material.icons.automirrored.filled.List
 import kotlinx.coroutines.delay
 
 
@@ -139,6 +144,7 @@ fun SumUpAlbumScreen(
     albumName: String,
     context: Context
 ) {
+    val playerViewModel: PlayerViewModel = hiltViewModel()
     // `songs` is already this album's track list (loaded by AlbumViewModel).
     val albumSongs: List<SongsModel> = songs
 
@@ -368,6 +374,27 @@ fun SumUpAlbumScreen(
                                 contentDescription = "Download album",
                             )
                             Spacer(modifier = Modifier.width(16.dp))
+                            if (albumSongs.isNotEmpty()) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_queue_add),
+                                    tint = Color.White,
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                        ) {
+                                            playerViewModel.addAllToQueue(albumSongs)
+                                            android.widget.Toast.makeText(
+                                                context,
+                                                "${albumSongs.size} track(s) added to queue",
+                                                android.widget.Toast.LENGTH_SHORT,
+                                            ).show()
+                                        },
+                                    contentDescription = "Add to queue",
+                                )
+                                Spacer(modifier = Modifier.width(16.dp))
+                            }
                             // Shuffle-play: start the album in random order.
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_player_shuffle),
@@ -475,94 +502,125 @@ fun SumUpAlbumScreen(
 
                     val currentPlayingIndicatorColor = if(songId == albumViewModel.currentSongId.value) Color(AppPalette.toArgb()) else Color.White
 
-                    Row(
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp, 8.dp)
-                            .combinedClickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onLongClick = { menuSong = albumSongs[song] },
-                                onClick = {
-                                    albumViewModel.updateQueue(albumSongs)
-                                    SongPlayer.playSong(albumSongs[song].url, context)
-                                    albumViewModel.updateSongState(
-                                        albumSongs[song].coverUri,
-                                        albumSongs[song].title,
-                                        albumSongs[song].singer,
-                                        true,
-                                        albumSongs[song].id,
-                                        song,
-                                        albumName
-                                    )
-                                },
-                            )
-                    ) {
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            if (value == SwipeToDismissBoxValue.StartToEnd) {
+                                playerViewModel.addToQueue(albumSongs[song])
+                            }
+                            false
+                        }
+                    )
 
-                        Row(
-                            horizontalArrangement = Arrangement.Start,
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.width(200.dp)
-                        ) {
-//                        GlideImage(
-//                            modifier = Modifier.size(60.dp),
-//                            model = albumSongs[song].coverUri,
-//                            contentScale = ContentScale.Crop,
-//                            contentDescription = ""
-//                        )
-                            Column {
-                                Text(
-                                    text = albumSongs[song].title,
-                                    color = currentPlayingIndicatorColor,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = albumSongs[song].singer,
-                                    color = Color.Gray,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1,
-                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        enableDismissFromStartToEnd = true,
+                        enableDismissFromEndToStart = false,
+                        backgroundContent = {
+                            Box(
+                                contentAlignment = Alignment.CenterStart,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color(0xFF1DB954)) // Spotify Green
+                                    .padding(horizontal = 24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.List,
+                                    contentDescription = "Add to queue",
+                                    tint = Color.White
                                 )
                             }
                         }
-
-                        Icon(
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .size(20.dp)
+                                .fillMaxWidth()
+                                .background(AppBackground)
                                 .combinedClickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null,
+                                    onLongClick = { menuSong = albumSongs[song] },
                                     onClick = {
-                                        if (isLiked) {
-                                            removeLikedSongId(context, songId.toString())
-                                        } else {
-                                            addLikedSongId(context, songId.toString())
-                                        }
-                                        isLiked = isSongLiked(context, songId.toString())
-                                        albumViewModel.updateLikeState(!albumViewModel.likeState.value)
+                                        albumViewModel.updateQueue(albumSongs)
+                                        SongPlayer.playSong(albumSongs[song].url, context)
+                                        albumViewModel.updateSongState(
+                                            albumSongs[song].coverUri,
+                                            albumSongs[song].title,
+                                            albumSongs[song].singer,
+                                            true,
+                                            albumSongs[song].id,
+                                            song,
+                                            albumName
+                                        )
                                     },
-                                    onLongClick = { showSavedIn = true },
-                                ),
-                            painter = if (isLiked){
-                                painterResource(id = R.drawable.added)
+                                )
+                                .padding(20.dp, 8.dp)
+                        ) {
+
+                            Row(
+                                horizontalArrangement = Arrangement.Start,
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.width(200.dp)
+                            ) {
+        //                        GlideImage(
+        //                            modifier = Modifier.size(60.dp),
+        //                            model = albumSongs[song].coverUri,
+        //                            contentScale = ContentScale.Crop,
+        //                            contentDescription = ""
+        //                        )
+                                Column {
+                                    Text(
+                                        text = albumSongs[song].title,
+                                        color = currentPlayingIndicatorColor,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = albumSongs[song].singer,
+                                        color = Color.Gray,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
                             }
-                            else{
-                                painterResource(id = R.drawable.ic_add)
-                            }
-                            ,
-                            tint = if (isLiked){
-                                Color.White
-                            }else{
-                                Color.Gray
-                            },
-                            contentDescription = ""
-                        )
+
+                            Icon(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .combinedClickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = {
+                                            if (isLiked) {
+                                                removeLikedSongId(context, songId.toString())
+                                            } else {
+                                                addLikedSongId(context, songId.toString())
+                                            }
+                                            isLiked = isSongLiked(context, songId.toString())
+                                            albumViewModel.updateLikeState(!albumViewModel.likeState.value)
+                                        },
+                                        onLongClick = { showSavedIn = true },
+                                    ),
+                                painter = if (isLiked){
+                                    painterResource(id = R.drawable.added)
+                                }
+                                else{
+                                    painterResource(id = R.drawable.ic_add)
+                                }
+                                ,
+                                tint = if (isLiked){
+                                    Color.White
+                                }else{
+                                    Color.Gray
+                                },
+                                contentDescription = ""
+                            )
+                        }
                     }
                 }
             }
