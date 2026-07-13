@@ -47,6 +47,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
@@ -1592,6 +1593,18 @@ fun PlayerOptionsSheet(
     val altSearchViewModel: com.music.spotui.ui.viewmodel.AlternativeSearchViewModel =
         hiltViewModel()
 
+    var currentTime by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            currentTime = System.currentTimeMillis()
+            kotlinx.coroutines.delay(250L)
+        }
+    }
+    val sleepTimerEnd = SongPlayer.sleepTimerEndAt
+    val remainingMillis = (sleepTimerEnd - currentTime).coerceAtLeast(0L)
+    val remainingSeconds = remainingMillis / 1000L
+    val minutesLeft = (remainingSeconds + 59) / 60
+
     val title = playerViewModel.currentSongTitle.value
     val singer = playerViewModel.currentSongSinger.value
     val cover = playerViewModel.currentSongCoverUri.value
@@ -1871,16 +1884,44 @@ fun PlayerOptionsSheet(
                 PlayerMenuRow(
                     icon = Icons.Default.Notifications,
                     label = "Sleep timer",
+                    subtitle = if (minutesLeft > 0) "$minutesLeft min left" else null,
                     trailingArrow = true
                 ) { showSleep = true }
             } else {
-                Text(
-                    "Sleep timer",
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(16.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clickable { showSleep = false },
+                        contentDescription = "Back",
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        "Sleep timer",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (remainingSeconds > 0) {
+                        val minutes = remainingSeconds / 60
+                        val seconds = remainingSeconds % 60
+                        Text(
+                            text = String.format("%02d:%02d", minutes, seconds),
+                            color = Color(AppPalette.toArgb()),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(end = 16.dp)
+                        )
+                    }
+                }
                 androidx.compose.material3.HorizontalDivider(color = Color(0xFF2A2A2A))
                 val options = listOf(
                     "Off" to 0L,
@@ -1890,9 +1931,9 @@ fun PlayerOptionsSheet(
                     "45 minutes" to 45L,
                     "1 hour" to 60L
                 )
-                options.forEach { (label, minutes) ->
+                options.forEach { (label, minutesOption) ->
                     PlayerMenuRow(icon = Icons.Default.Notifications, label = label) {
-                        SongPlayer.setSleepTimer(minutes * 60_000L)
+                        SongPlayer.setSleepTimer(minutesOption * 60_000L)
                         onDismiss()
                     }
                 }
@@ -2260,6 +2301,7 @@ private fun YouTubeSearchResultRow(
 fun PlayerMenuRow(
     icon: ImageVector,
     label: String,
+    subtitle: String? = null,
     iconTint: Color = Color.White,
     enabled: Boolean = true,
     trailingArrow: Boolean = false,
@@ -2279,14 +2321,24 @@ fun PlayerMenuRow(
             contentDescription = null
         )
         Spacer(modifier = Modifier.width(20.dp))
-        Text(
-            text = label,
-            color = if (enabled) Color.White else Color.Gray,
-            fontSize = 15.sp,
-            maxLines = 1,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                color = if (enabled) Color.White else Color.Gray,
+                fontSize = 15.sp,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    color = Color.Gray,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+            }
+        }
         if (trailingArrow) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
