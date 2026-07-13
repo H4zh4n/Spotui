@@ -15,6 +15,8 @@ import com.music.spotui.data.preferences.getSourceLanguage
 import com.music.spotui.data.preferences.getTargetLanguage
 import com.music.spotui.data.preferences.setSourceLanguage
 import com.music.spotui.data.preferences.setTargetLanguage
+import com.music.spotui.data.preferences.TranslationCachePref
+import com.music.spotui.data.preferences.translationCacheKey
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -47,6 +49,8 @@ class LyricsViewModel @Inject constructor(
     val state: StateFlow<State> = _state
 
     private var loadedKey: String? = null
+    private var loadedTitle: String? = null
+    private var loadedArtist: String? = null
     private var loadJob: kotlinx.coroutines.Job? = null
 
     var showLanguageBar by mutableStateOf(false)
@@ -74,6 +78,8 @@ class LyricsViewModel @Inject constructor(
         val key = "$title|$artist"
         if (loadedKey == key && _state.value !is State.NotFound) return
         loadedKey = key
+        loadedTitle = title
+        loadedArtist = artist
         _state.value = State.Loading
         resetTranslationState()
         loadJob?.cancel()
@@ -90,7 +96,34 @@ class LyricsViewModel @Inject constructor(
                     State.Loaded(lyrics)
                 }
             }
+            // Auto-display cached translation for the current language pair.
+            withContext(Dispatchers.Main) {
+                restoreCachedTranslation(title, artist, lyrics)
+            }
         }
+    }
+
+    private fun restoreCachedTranslation(title: String, artist: String, lyrics: Lyrics?) {
+        if (lyrics == null || lyrics.isEmpty) return
+        val key = translationCacheKey(title, artist, sourceLanguage, targetLanguage)
+        val cached = TranslationCachePref.get(context, key)
+        if (cached != null && cached.size == lyrics.lines.size) {
+            translatedLines = cached
+        }
+    }
+
+    private fun persistCachedTranslation(lines: List<LyricLine>) {
+        val title = loadedTitle ?: return
+        val artist = loadedArtist ?: return
+        if (lines.isEmpty()) return
+        val key = translationCacheKey(title, artist, sourceLanguage, targetLanguage)
+        TranslationCachePref.put(context, key, lines)
+    }
+
+    private fun translationCacheKeyForCurrent(): String? {
+        val title = loadedTitle ?: return null
+        val artist = loadedArtist ?: return null
+        return translationCacheKey(title, artist, sourceLanguage, targetLanguage)
     }
 
     fun toggleLanguageBar() {
@@ -98,6 +131,8 @@ class LyricsViewModel @Inject constructor(
     }
 
     fun dismissTranslate() {
+        // Remove from disk so it won't auto-show when lyrics load again.
+        translationCacheKeyForCurrent()?.let { TranslationCachePref.remove(context, it) }
         showLanguageBar = false
         translatedLines = null
         translationsLoading = false
@@ -147,6 +182,8 @@ class LyricsViewModel @Inject constructor(
                         translationError = "Translation failed — no lines were translated."
                     } else {
                         translatedLines = result
+                        // Persist to disk so it auto-shows on next load.
+                        persistCachedTranslation(result)
                     }
                     translationsLoading = false
                 }
