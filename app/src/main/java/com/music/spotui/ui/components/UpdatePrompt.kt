@@ -28,11 +28,36 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.music.spotui.data.update.UpdateChecker
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import com.bumptech.glide.integration.compose.GlideImage
+import com.bumptech.glide.integration.compose.placeholder
+import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import kotlin.OptIn
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 
 @Composable
 fun UpdatePrompt() {
@@ -97,6 +122,126 @@ fun UpdatePrompt() {
 
 private val HEADER_RE = Regex("""^(#{1,6})\s+(.*)""")
 
+private data class ImageItem(val url: String, val widthPercent: Float?)
+
+private fun extractImages(text: String): List<ImageItem> {
+    val list = mutableListOf<ImageItem>()
+    val imgTags = Regex("""<img\s+[^>]+>""", RegexOption.IGNORE_CASE).findAll(text)
+    for (match in imgTags) {
+        val tagContent = match.value
+        val srcMatch = Regex("""src=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(tagContent)
+        val widthMatch = Regex("""width=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(tagContent)
+        if (srcMatch != null) {
+            val url = srcMatch.groupValues[1]
+            val widthStr = widthMatch?.groupValues?.get(1)
+            val widthPercent = widthStr?.removeSuffix("%")?.toFloatOrNull()?.let { it / 100f }
+            list.add(ImageItem(url, widthPercent))
+        }
+    }
+    val mdImgTags = Regex("""!\[([^\]]*)\]\(([^)]+)\)""").findAll(text)
+    for (match in mdImgTags) {
+        val url = match.groupValues[2]
+        list.add(ImageItem(url, null))
+    }
+    return list
+}
+
+@OptIn(ExperimentalGlideComposeApi::class)
+@Composable
+private fun RenderImagesRow(images: List<ImageItem>, onImageClick: (String) -> Unit) {
+    val aspectRatio = when (images.size) {
+        1 -> 1.77f
+        2 -> 1f
+        else -> 0.6f
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        images.forEach { image ->
+            val weight = image.widthPercent ?: (1f / images.size)
+            Box(
+                modifier = Modifier
+                    .weight(weight)
+                    .aspectRatio(aspectRatio)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onImageClick(image.url) }
+            ) {
+                GlideImage(
+                    model = image.url,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    failure = placeholder(com.music.spotui.R.drawable.placeholder),
+                    loading = placeholder(com.music.spotui.R.drawable.placeholder),
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalGlideComposeApi::class)
+@Composable
+private fun ZoomableImageDialog(url: String, onDismiss: () -> Unit) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        var scale by remember { mutableStateOf(1f) }
+        var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+        val state = rememberTransformableState { zoomChange, offsetChange, _ ->
+            scale = (scale * zoomChange).coerceIn(1f, 5f)
+            if (scale > 1f) {
+                offset += offsetChange
+            } else {
+                offset = androidx.compose.ui.geometry.Offset.Zero
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.95f))
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = { onDismiss() })
+                }
+        ) {
+            GlideImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer(
+                        scaleX = scale,
+                        scaleY = scale,
+                        translationX = offset.x,
+                        translationY = offset.y
+                    )
+                    .transformable(state = state)
+            )
+
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(androidx.compose.ui.Alignment.TopEnd)
+                    .padding(16.dp)
+            ) {
+                Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = Color.White
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun RenderMarkdown(markdown: String) {
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
@@ -104,15 +249,52 @@ private fun RenderMarkdown(markdown: String) {
     val headingColor = Color.White
     val bodyColor = Color(0xFFB3B3B3)
 
+    var enlargedImageUrl by remember { mutableStateOf<String?>(null) }
+
     val lines = markdown.lines()
     var i = 0
     while (i < lines.size) {
         val line = lines[i]
         val trimmed = line.trim()
 
+        // Look ahead for image block
+        val currentImages = mutableListOf<ImageItem>()
+        var j = i
+        var hasImages = false
+        while (j < lines.size) {
+            val nextLine = lines[j].trim()
+            val nextImages = extractImages(nextLine)
+            val isImageContainerTag = nextLine.startsWith("<p", ignoreCase = true) || 
+                                      nextLine.startsWith("</p", ignoreCase = true) ||
+                                      nextLine.startsWith("<div", ignoreCase = true) ||
+                                      nextLine.startsWith("</div", ignoreCase = true)
+            
+            if (nextImages.isNotEmpty()) {
+                currentImages.addAll(nextImages)
+                hasImages = true
+                j++
+            } else if (isImageContainerTag || nextLine.isEmpty()) {
+                j++
+            } else {
+                break
+            }
+        }
+
+        if (hasImages && currentImages.isNotEmpty()) {
+            RenderImagesRow(currentImages, onImageClick = { enlargedImageUrl = it })
+            i = j
+            continue
+        }
+
         when {
             trimmed.isEmpty() -> {
                 Spacer(modifier = Modifier.height(6.dp))
+            }
+            trimmed.startsWith("<p", ignoreCase = true) || 
+            trimmed.startsWith("</p", ignoreCase = true) ||
+            trimmed.startsWith("<div", ignoreCase = true) ||
+            trimmed.startsWith("</div", ignoreCase = true) -> {
+                // Ignore container tags
             }
             trimmed == "---" || trimmed == "***" || trimmed == "___"
                 || (trimmed.length >= 3 && trimmed.all { it == '_' || it == '-' || it == '*' }) -> {
@@ -172,6 +354,10 @@ private fun RenderMarkdown(markdown: String) {
         }
         i++
     }
+
+    enlargedImageUrl?.let { url ->
+        ZoomableImageDialog(url = url, onDismiss = { enlargedImageUrl = null })
+    }
 }
 
 @Composable
@@ -184,11 +370,12 @@ private fun MarkdownInline(
 ) {
     val patterns = listOf(
         Triple(Regex("""\*\*(.+?)\*\*"""), "bold", null as String?),
-        Triple(Regex("""__(.+?)__"""), "underline", null),
-        Triple(Regex("""_(.+?)_"""), "underline", null),
-        Triple(Regex("""~~(.+?)~~"""), "strikethrough", null),
-        Triple(Regex("""`([^`]+)`"""), "code", null),
-        Triple(Regex("""\[([^\]]+)\]\(([^)]+)\)"""), "link", null),
+        Triple(Regex("""(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)"""), "italic", null as String?),
+        Triple(Regex("""__(.+?)__"""), "underline", null as String?),
+        Triple(Regex("""_(.+?)_"""), "underline", null as String?),
+        Triple(Regex("""~~(.+?)~~"""), "strikethrough", null as String?),
+        Triple(Regex("""`([^`]+)`"""), "code", null as String?),
+        Triple(Regex("""\[([^\]]+)\]\(([^)]+)\)"""), "link", null as String?),
     )
 
     val annotated = buildAnnotatedString {
@@ -225,6 +412,11 @@ private fun MarkdownInline(
             when (seg.type) {
                 "bold" -> {
                     pushStyle(SpanStyle(color = bodyColor, fontWeight = FontWeight.Bold))
+                    append(seg.content)
+                    pop()
+                }
+                "italic" -> {
+                    pushStyle(SpanStyle(color = bodyColor, fontStyle = FontStyle.Italic))
                     append(seg.content)
                     pop()
                 }
