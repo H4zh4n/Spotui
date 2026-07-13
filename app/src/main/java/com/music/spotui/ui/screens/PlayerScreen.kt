@@ -1540,35 +1540,37 @@ fun ArtistsSheet(
                                 )
                             },
                     )
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .border(
-                                1.dp,
-                                if (following) Color.Transparent else Color.Gray,
-                                RoundedCornerShape(20.dp),
-                            )
-                            .background(
-                                if (following) Color(0xFF1DB954) else Color.Transparent,
-                                RoundedCornerShape(20.dp),
-                            )
-                            .clickable(enabled = aId.isNotBlank()) {
-                                following = !following
-                                if (following) {
-                                    com.music.spotui.data.preferences.addFollowedArtist(context, aId, name)
-                                } else {
-                                    com.music.spotui.data.preferences.removeFollowedArtist(context, aId)
+                    if (aId.isNotBlank()) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .border(
+                                    1.dp,
+                                    if (following) Color.Transparent else Color.Gray,
+                                    RoundedCornerShape(20.dp),
+                                )
+                                .background(
+                                    if (following) Color(0xFF1DB954) else Color.Transparent,
+                                    RoundedCornerShape(20.dp),
+                                )
+                                .clickable {
+                                    following = !following
+                                    if (following) {
+                                        com.music.spotui.data.preferences.addFollowedArtist(context, aId, name)
+                                    } else {
+                                        com.music.spotui.data.preferences.removeFollowedArtist(context, aId)
+                                    }
+                                    com.music.spotui.data.api.SpotifySync.setArtistFollowed(context, aId, following)
                                 }
-                                com.music.spotui.data.api.SpotifySync.setArtistFollowed(context, aId, following)
-                            }
-                            .padding(horizontal = 16.dp, vertical = 6.dp),
-                    ) {
-                        Text(
-                            text = if (following) "Following" else "Follow",
-                            color = if (following) Color(0xFF191414) else Color.White,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                text = if (following) "Following" else "Follow",
+                                color = if (following) Color(0xFF191414) else Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
                     }
                 }
             }
