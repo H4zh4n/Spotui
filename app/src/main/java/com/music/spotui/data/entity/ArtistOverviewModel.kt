@@ -17,6 +17,7 @@ data class ArtistOverviewModel(
     val popularReleases: List<AlbumsModel> = emptyList(),
     val appearsOn: List<AlbumsModel> = emptyList(),
     val relatedArtists: List<ArtistsModel> = emptyList(),
+    val featuringPlaylist: LibraryEntry? = null,
 )
 
 data class ArtistTrackUi(

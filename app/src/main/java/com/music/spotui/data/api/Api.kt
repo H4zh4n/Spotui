@@ -458,6 +458,42 @@ class Api @Inject constructor(
             emit(Response.Error("Artist not found")); return@flow
         }
         val searchCover = artist?.images?.firstOrNull()?.url ?: ""
+
+        val playlistName = artistName.ifBlank { artist?.name.orEmpty() }
+        val featuringPlaylist = try {
+            var searchRes = Spotify.search("Featuring $playlistName", types = listOf("playlist"), limit = 10).getOrNull()
+            var list = searchRes?.playlists?.items.orEmpty()
+            var match = list.firstOrNull {
+                it.name.equals("Featuring $playlistName", ignoreCase = true) ||
+                it.name.equals("This Is $playlistName", ignoreCase = true)
+            } ?: list.firstOrNull {
+                it.name.contains("Featuring $playlistName", ignoreCase = true) ||
+                it.name.contains("This Is $playlistName", ignoreCase = true)
+            }
+            if (match == null) {
+                searchRes = Spotify.search("This Is $playlistName", types = listOf("playlist"), limit = 10).getOrNull()
+                list = searchRes?.playlists?.items.orEmpty()
+                match = list.firstOrNull {
+                    it.name.equals("Featuring $playlistName", ignoreCase = true) ||
+                    it.name.equals("This Is $playlistName", ignoreCase = true)
+                } ?: list.firstOrNull {
+                    it.name.contains("Featuring $playlistName", ignoreCase = true) ||
+                    it.name.contains("This Is $playlistName", ignoreCase = true)
+                } ?: list.firstOrNull()
+            }
+            match?.let {
+                com.music.spotui.data.entity.LibraryEntry(
+                    spotifyId = it.id,
+                    name = it.name,
+                    subtitle = "Playlist" + (it.owner?.displayName?.let { owner -> " • $owner" } ?: ""),
+                    coverUri = it.images.firstOrNull()?.url ?: "",
+                    isPlaylist = true,
+                )
+            }
+        } catch (e: Exception) {
+            null
+        }
+
         Spotify.artistOverview(artistId).fold(
             onSuccess = { o ->
                 val avatar = o.avatarImages.firstOrNull()?.url?.ifBlank { null } ?: searchCover
@@ -480,6 +516,7 @@ class Api @Inject constructor(
                     popularReleases = o.popularReleases.map { it.toAlbumModel() },
                     appearsOn = o.appearsOn.map { it.toAlbumModel() },
                     relatedArtists = o.relatedArtists.map { it.toArtistModel() },
+                    featuringPlaylist = featuringPlaylist,
                 )))
             },
             onFailure = { Log.e("Api", "getArtistOverview failed", it); emit(Response.Error(it.message ?: "error")) },

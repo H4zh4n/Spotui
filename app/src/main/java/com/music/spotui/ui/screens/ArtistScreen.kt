@@ -69,6 +69,7 @@ import com.music.spotui.ui.components.SavedInSheet
 import com.music.spotui.ui.navigation.Routes
 import com.music.spotui.ui.navigation.albumRoute
 import com.music.spotui.ui.navigation.artistRoute
+import com.music.spotui.ui.navigation.playlistRoute
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.ArtistViewModel
@@ -335,6 +336,56 @@ private fun ArtistOverviewContent(
                 item {
                     ShowAllButton {
                         navController.navigate("${Routes.ArtistReleases.route}/$artistName")
+                    }
+                }
+            }
+        }
+
+        // ── Featuring Artist Playlist ──
+        overview.featuringPlaylist?.let { playlist ->
+            item { SectionHeader("Featuring $displayName") }
+            item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.White.copy(alpha = 0.05f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) {
+                            navController.navigate(playlistRoute(playlist.spotifyId, playlist.name))
+                        }
+                        .padding(12.dp),
+                ) {
+                    GlideImage(
+                        modifier = Modifier
+                            .size(100.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        model = playlist.coverUri,
+                        contentScale = ContentScale.Crop,
+                        failure = placeholder(R.drawable.placeholder),
+                        loading = placeholder(R.drawable.placeholder),
+                        contentDescription = "",
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = playlist.name,
+                            color = Color.White,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = playlist.subtitle,
+                            color = Color.Gray,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                        )
                     }
                 }
             }
