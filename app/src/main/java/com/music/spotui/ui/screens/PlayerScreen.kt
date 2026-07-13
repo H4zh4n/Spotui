@@ -1435,7 +1435,7 @@ fun ArtistsSheet(
     navController: NavController,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val artistImages = remember { mutableMapOf<String, String>() }
+    val artistImages = remember { androidx.compose.runtime.mutableStateMapOf<String, String>() }
 
     LaunchedEffect(artistIds) {
         artistIds.filter { it.isNotBlank() }.forEach { id ->
