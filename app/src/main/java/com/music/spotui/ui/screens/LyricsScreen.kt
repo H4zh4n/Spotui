@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -29,12 +31,21 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ClearAll
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -352,18 +363,24 @@ private fun TranslateFloatingPanel(vm: LyricsViewModel, modifier: Modifier = Mod
                     .padding(10.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.ClearAll,
-                        contentDescription = "Clear translation",
-                        tint = Color.White.copy(alpha = 0.6f),
+                    Box(
                         modifier = Modifier
-                            .size(20.dp)
+                            .padding(end = 8.dp)
+                            .size(28.dp)
+                            .background(Color.White, shape = androidx.compose.foundation.shape.CircleShape)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
-                            ) { vm.dismissTranslate() }
-                            .padding(end = 4.dp),
-                    )
+                            ) { vm.dismissTranslate() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ClearAll,
+                            contentDescription = "Clear translation",
+                            tint = Color.Black,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                     TranslationBar(vm = vm)
                 }
                 vm.translationError?.let { error ->
@@ -586,7 +603,7 @@ private fun TranslationBar(vm: LyricsViewModel) {
     }
 }
 
-/** A single tappable language chip that opens a [DropdownMenu]. */
+/** A single tappable language chip that opens a [LanguagePickerDialog]. */
 @Composable
 private fun LangChip(
     code: String,
@@ -619,29 +636,177 @@ private fun LangChip(
                 modifier = Modifier.size(16.dp),
             )
         }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.background(Color(0xFF282828)),
-        ) {
-            languages.forEachIndexed { i, (codeLang, name) ->
-                if (i > 0) {
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.1f))
+        if (expanded) {
+            LanguagePickerBottomSheet(
+                currentCode = code,
+                languages = languages,
+                onDismiss = { expanded = false },
+                onSelect = { selectedCode ->
+                    onClick(selectedCode)
+                    expanded = false
                 }
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = name,
-                            color = if (codeLang == code) Color.White else Color.White.copy(alpha = 0.7f),
-                            fontWeight = if (codeLang == code) FontWeight.Bold else FontWeight.Normal,
-                            fontSize = 14.sp,
-                        )
-                    },
-                    onClick = {
-                        onClick(codeLang)
-                        expanded = false
-                    },
+            )
+        }
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun LanguagePickerBottomSheet(
+    currentCode: String,
+    languages: List<Pair<String, String>>,
+    onDismiss: () -> Unit,
+    onSelect: (String) -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    val filteredLanguages = remember(searchQuery, languages) {
+        if (searchQuery.isBlank()) {
+            languages
+        } else {
+            languages.filter { (code, name) ->
+                name.contains(searchQuery, ignoreCase = true) ||
+                code.contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val index = languages.indexOfFirst { it.first == currentCode }
+        if (index >= 0) {
+            listState.scrollToItem(index)
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF1E1E1E), // Sleek dark gray
+        contentColor = Color.White
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .navigationBarsPadding()
+                .heightIn(max = 450.dp)
+        ) {
+            // Header Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Select Language",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
                 )
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = Color.White.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            // Search Box
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Search languages...", color = Color.White.copy(alpha = 0.4f), fontSize = 14.sp) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search icon",
+                        tint = Color.White.copy(alpha = 0.5f)
+                    )
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Clear search",
+                                tint = Color.White.copy(alpha = 0.5f)
+                            )
+                        }
+                    }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedContainerColor = Color.White.copy(alpha = 0.05f),
+                    unfocusedContainerColor = Color.White.copy(alpha = 0.05f),
+                    focusedBorderColor = Color(0xFF1DB954), // Spotify Green
+                    unfocusedBorderColor = Color.White.copy(alpha = 0.2f),
+                    cursorColor = Color(0xFF1DB954)
+                ),
+                singleLine = true,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+            )
+
+            // Languages List
+            if (filteredLanguages.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No languages found",
+                        color = Color.White.copy(alpha = 0.5f),
+                        fontSize = 14.sp
+                    )
+                }
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    itemsIndexed(filteredLanguages) { index, (code, name) ->
+                        val isSelected = code == currentCode
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onSelect(code)
+                                }
+                                .padding(vertical = 12.dp, horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = name,
+                                color = if (isSelected) Color(0xFF1DB954) else Color.White,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 15.sp,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = Color(0xFF1DB954),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        if (index < filteredLanguages.lastIndex) {
+                            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                        }
+                    }
+                }
             }
         }
     }
