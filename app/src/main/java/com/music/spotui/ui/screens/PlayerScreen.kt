@@ -134,6 +134,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
+private val artistImageCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+
 @OptIn(
     ExperimentalGlideComposeApi::class,
     androidx.compose.foundation.ExperimentalFoundationApi::class
@@ -1439,14 +1441,23 @@ fun ArtistsSheet(
 
     LaunchedEffect(artistIds) {
         artistIds.filter { it.isNotBlank() }.forEach { id ->
-            val cachedUrl = com.music.spotui.data.preferences.getCachedArtistImage(context, id)
-            if (cachedUrl != null) {
+            val cachedUrl = artistImageCache[id]
+            android.util.Log.d("ArtistsSheetCache", "Checking in-memory cache for $id -> $cachedUrl")
+            if (!cachedUrl.isNullOrBlank()) {
                 artistImages[id] = cachedUrl
             } else {
-                com.metrolist.spotify.Spotify.artist(id).getOrNull()?.let { artist ->
-                    val url = artist.images.firstOrNull()?.url.orEmpty()
-                    com.music.spotui.data.preferences.cacheArtistImage(context, id, url)
-                    artistImages[id] = url
+                android.util.Log.d("ArtistsSheetCache", "Cache miss for $id, fetching from Spotify...")
+                if (com.music.spotui.data.api.SpotifyTokenProvider.ensureToken(context)) {
+                    com.metrolist.spotify.Spotify.artist(id).getOrNull()?.let { artist ->
+                        val url = artist.images.firstOrNull()?.url.orEmpty()
+                        android.util.Log.d("ArtistsSheetCache", "Fetched $id image: $url")
+                        artistImageCache[id] = url
+                        artistImages[id] = url
+                    } ?: run {
+                        android.util.Log.e("ArtistsSheetCache", "Failed to fetch artist details for $id")
+                    }
+                } else {
+                    android.util.Log.e("ArtistsSheetCache", "Failed to ensure Spotify token for $id")
                 }
             }
         }
