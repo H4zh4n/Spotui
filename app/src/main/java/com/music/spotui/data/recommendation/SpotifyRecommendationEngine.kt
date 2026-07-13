@@ -42,6 +42,7 @@ object SpotifyRecommendationEngine {
     @Volatile private var topTrackPool: List<SpotifyTrack> = emptyList()
     @Volatile private var shortTermArtistIds: Set<String> = emptySet()
     @Volatile private var lastProfileRefresh: Long = 0L
+    @Volatile private var lastProfileFailure: Long = 0L
 
     private enum class Bucket(val sourceScore: Float) {
         SEED_ARTIST(1.0f),
@@ -69,9 +70,13 @@ object SpotifyRecommendationEngine {
 
     /** Builds/refreshes the user's taste profile from their Spotify top tracks/artists. */
     private suspend fun ensureProfileLoaded(): Boolean = withContext(Dispatchers.IO) {
-        if (System.currentTimeMillis() - lastProfileRefresh < PROFILE_TTL_MS &&
-            artistAffinityMap.isNotEmpty()
-        ) return@withContext true
+        val now = System.currentTimeMillis()
+        if (now - lastProfileFailure < 15 * 60 * 1000) { // 15 minutes cooldown on failure
+            return@withContext artistAffinityMap.isNotEmpty()
+        }
+        if (now - lastProfileRefresh < PROFILE_TTL_MS && artistAffinityMap.isNotEmpty()) {
+            return@withContext true
+        }
 
         try {
             val profileTracks: List<SpotifyTrack> =
@@ -81,6 +86,7 @@ object SpotifyRecommendationEngine {
 
             if (profileTracks.isEmpty() && profileArtists.isEmpty()) {
                 Log.w(TAG, "No profile data available")
+                lastProfileFailure = System.currentTimeMillis()
                 return@withContext false
             }
 
@@ -120,6 +126,7 @@ object SpotifyRecommendationEngine {
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to build profile", e)
+            lastProfileFailure = System.currentTimeMillis()
             false
         }
     }

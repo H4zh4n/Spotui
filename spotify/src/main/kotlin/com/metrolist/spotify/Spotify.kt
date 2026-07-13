@@ -90,9 +90,6 @@ object Spotify {
             defaultRequest {
                 url("https://api.spotify.com/v1/")
                 header("User-Agent", randomUserAgent())
-                header("app-platform", "WebPlayer")
-                header("Origin", "https://open.spotify.com")
-                header("Referer", "https://open.spotify.com/")
             }
             expectSuccess = false
         }

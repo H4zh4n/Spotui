@@ -38,8 +38,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -87,6 +89,8 @@ fun SavedInSheet(
     var creating by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
     var isPublic by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    var isCreatingPlaylist by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         playlists = withContext(Dispatchers.IO) {
@@ -96,12 +100,30 @@ fun SavedInSheet(
 
     fun createNow() {
         val name = newName.trim().ifBlank { "My Playlist" }
-        creating = false
+        isCreatingPlaylist = true
         val currentIsPublic = isPublic
         newName = ""
         isPublic = false
-        SpotifySync.createPlaylistWithTrack(context, name, song.spotifyTrackId, public = currentIsPublic)
-        onDismiss()
+        SpotifySync.createPlaylistWithTrack(context, name, song.spotifyTrackId, public = currentIsPublic) { success ->
+            scope.launch {
+                if (success) {
+                    val updated = withContext(Dispatchers.IO) {
+                        Spotify.myPlaylists().getOrNull()?.items?.filter { it.id.isNotBlank() }
+                    }
+                    if (updated != null) {
+                        playlists = updated
+                        val newPl = updated.find { it.name == name }
+                        if (newPl != null && song.spotifyTrackId.isNotBlank()) {
+                            membership[newPl.id] = true
+                        }
+                    }
+                    creating = false
+                } else {
+                    android.widget.Toast.makeText(context, "Failed to create playlist", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                isCreatingPlaylist = false
+            }
+        }
     }
 
     ModalBottomSheet(
@@ -124,6 +146,7 @@ fun SavedInSheet(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.clickable(
+                        enabled = !isCreatingPlaylist,
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                     ) { creating = true },
@@ -132,6 +155,7 @@ fun SavedInSheet(
 
             if (creating) {
                 TextField(
+                    enabled = !isCreatingPlaylist,
                     value = newName,
                     onValueChange = { newName = it },
                     singleLine = true,
@@ -172,6 +196,7 @@ fun SavedInSheet(
                         )
                     }
                     Switch(
+                        enabled = !isCreatingPlaylist,
                         checked = isPublic,
                         onCheckedChange = { isPublic = it },
                         colors = SwitchDefaults.colors(
@@ -186,11 +211,12 @@ fun SavedInSheet(
                 }
                 Row(modifier = Modifier.padding(20.dp, 0.dp, 20.dp, 8.dp)) {
                     Text(
-                        "Create",
-                        color = SpotifyGreen,
+                        if (isCreatingPlaylist) "Creating..." else "Create",
+                        color = if (isCreatingPlaylist) Color.Gray else SpotifyGreen,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.clickable(
+                            enabled = !isCreatingPlaylist,
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
                         ) { createNow() },
@@ -201,6 +227,7 @@ fun SavedInSheet(
                         color = Color.Gray,
                         fontSize = 14.sp,
                         modifier = Modifier.clickable(
+                            enabled = !isCreatingPlaylist,
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
                         ) { creating = false; newName = ""; isPublic = false },
