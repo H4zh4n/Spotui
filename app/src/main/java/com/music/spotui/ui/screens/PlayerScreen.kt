@@ -656,7 +656,16 @@ fun PlayerScreen(navController: NavController) {
                             isResolving = playerViewModel.isResolving.value,
                             resolveStatus = playerViewModel.resolveStatus.value,
                             resolveError = playerViewModel.resolveError.value,
-                            onArtistClick = { showArtistSheet = true },
+                            onArtistClick = {
+                        val artists = songSinger.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                        val ids = playerViewModel.currentArtistIds.value.split(",").map { it.trim() }
+                        if (artists.size == 1) {
+                            val aId = ids.getOrElse(0) { "" }
+                            navController.navigate(com.music.spotui.ui.navigation.artistRoute(artists[0], aId))
+                        } else {
+                            showArtistSheet = true
+                        }
+                    },
                             spotifyTrackId = queueSongs.firstOrNull { it.id == songId }?.spotifyTrackId.orEmpty(),
                             onShowSavedIn = { showSavedIn = true },
                         )
