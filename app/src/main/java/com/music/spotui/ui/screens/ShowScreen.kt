@@ -144,6 +144,11 @@ fun ShowScreen(navController: NavController, showId: String, showName: String = 
                 confirmValueChange = { value ->
                     if (value == SwipeToDismissBoxValue.StartToEnd) {
                         playerViewModel.addToQueue(ep)
+                        android.widget.Toast.makeText(
+                            context,
+                            "${ep.title} added to queue",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
                     }
                     false
                 }
@@ -162,9 +167,10 @@ fun ShowScreen(navController: NavController, showId: String, showName: String = 
                             .padding(horizontal = 24.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.List,
+                            painter = painterResource(id = R.drawable.ic_queue_add),
                             contentDescription = "Add to queue",
-                            tint = Color.White
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }

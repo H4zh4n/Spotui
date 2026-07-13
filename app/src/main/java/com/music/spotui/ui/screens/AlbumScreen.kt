@@ -506,6 +506,11 @@ fun SumUpAlbumScreen(
                         confirmValueChange = { value ->
                             if (value == SwipeToDismissBoxValue.StartToEnd) {
                                 playerViewModel.addToQueue(albumSongs[song])
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "${albumSongs[song].title} added to queue",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
                             }
                             false
                         }
@@ -524,9 +529,10 @@ fun SumUpAlbumScreen(
                                     .padding(horizontal = 24.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.List,
+                                    painter = painterResource(id = R.drawable.ic_queue_add),
                                     contentDescription = "Add to queue",
-                                    tint = Color.White
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         }
