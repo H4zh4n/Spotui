@@ -2,8 +2,10 @@ package com.music.spotui.ui.components
 
 import android.annotation.SuppressLint
 import android.content.Context
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -64,7 +66,7 @@ import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.AlbumViewModel
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalGlideComposeApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalGlideComposeApi::class)
 @Composable
 fun LikedSongsScreen(
     albums: List<AlbumsModel>,
@@ -231,6 +233,15 @@ fun LikedSongsScreen(
                     var isLiked by remember {
                         mutableStateOf(isSongLiked(context, likedSongs[song].id.toString()))
                     }
+                    var showSavedIn by remember { mutableStateOf(false) }
+                    if (showSavedIn) {
+                        SavedInSheet(
+                            song = likedSongs[song],
+                            context = context,
+                            onDismiss = { showSavedIn = false },
+                            onLikedChanged = { isLiked = it },
+                        )
+                    }
                     val songId = likedSongs[song].id
                     val currentPlayingIndicatorColor = if(songId == albumViewModel.currentSongId.value) Color(
                         AppPalette.toArgb()) else Color.White
@@ -293,19 +304,20 @@ fun LikedSongsScreen(
                         Icon(
                             modifier = Modifier
                                 .size(20.dp)
-                                .clickable(
+                                .combinedClickable(
                                     interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) {
-                                    if (isLiked) {
-                                        removeLikedSongId(context, songId.toString())
-                                    } else {
-                                        addLikedSongId(context, songId.toString())
-                                    }
-                                    //isLiked = isSongLiked(context, songId.toString())
-                                    albumViewModel.updateLikeState(!albumViewModel.likeState.value)
-
-                                },
+                                    indication = null,
+                                    onClick = {
+                                        if (isLiked) {
+                                            removeLikedSongId(context, songId.toString())
+                                        } else {
+                                            addLikedSongId(context, songId.toString())
+                                        }
+                                        //isLiked = isSongLiked(context, songId.toString())
+                                        albumViewModel.updateLikeState(!albumViewModel.likeState.value)
+                                    },
+                                    onLongClick = { showSavedIn = true },
+                                ),
                             painter = if (isLiked){
                                 painterResource(id = R.drawable.added)
                             }

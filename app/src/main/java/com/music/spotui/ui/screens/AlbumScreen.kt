@@ -73,6 +73,7 @@ import com.music.spotui.di.Palette
 import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.components.LikedSongsScreen
 import com.music.spotui.ui.components.Loader
+import com.music.spotui.ui.components.SavedInSheet
 import com.music.spotui.ui.components.Snackbar
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
@@ -457,6 +458,15 @@ fun SumUpAlbumScreen(
                     var isLiked by remember {
                         mutableStateOf(isSongLiked(context, albumSongs[song].id.toString()))
                     }
+                    var showSavedIn by remember { mutableStateOf(false) }
+                    if (showSavedIn) {
+                        SavedInSheet(
+                            song = albumSongs[song],
+                            context = context,
+                            onDismiss = { showSavedIn = false },
+                            onLikedChanged = { isLiked = it },
+                        )
+                    }
                     val likeState = albumViewModel.likeState.value
                     LaunchedEffect(likeState){
                         isLiked = isSongLiked(context, albumSongs[song].id.toString())
@@ -525,19 +535,20 @@ fun SumUpAlbumScreen(
                         Icon(
                             modifier = Modifier
                                 .size(20.dp)
-                                .clickable(
+                                .combinedClickable(
                                     interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) {
-                                    if (isLiked) {
-                                        removeLikedSongId(context, songId.toString())
-                                    } else {
-                                        addLikedSongId(context, songId.toString())
-                                    }
-                                    isLiked = isSongLiked(context, songId.toString())
-                                    albumViewModel.updateLikeState(!albumViewModel.likeState.value)
-
-                                },
+                                    indication = null,
+                                    onClick = {
+                                        if (isLiked) {
+                                            removeLikedSongId(context, songId.toString())
+                                        } else {
+                                            addLikedSongId(context, songId.toString())
+                                        }
+                                        isLiked = isSongLiked(context, songId.toString())
+                                        albumViewModel.updateLikeState(!albumViewModel.likeState.value)
+                                    },
+                                    onLongClick = { showSavedIn = true },
+                                ),
                             painter = if (isLiked){
                                 painterResource(id = R.drawable.added)
                             }

@@ -6,6 +6,7 @@ import androidx.annotation.RequiresApi
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -66,6 +67,7 @@ import com.music.spotui.data.preferences.isSongLiked
 import com.music.spotui.data.preferences.removeLikedSongId
 import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.components.Loader
+import com.music.spotui.ui.components.SavedInSheet
 import com.music.spotui.ui.navigation.Routes
 import com.music.spotui.ui.navigation.albumRoute
 import com.music.spotui.ui.navigation.artistRoute
@@ -396,7 +398,7 @@ fun RecentItemRow(
 }
 
 @RequiresApi(Build.VERSION_CODES.S)
-@OptIn(ExperimentalGlideComposeApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalGlideComposeApi::class)
 @Composable
 fun SearchSongRow(
     song: SongsModel,
@@ -406,6 +408,15 @@ fun SearchSongRow(
 ) {
     val context = LocalContext.current
     var isLiked by remember { mutableStateOf(isSongLiked(context, song.id.toString())) }
+    var showSavedIn by remember { mutableStateOf(false) }
+    if (showSavedIn) {
+        SavedInSheet(
+            song = song,
+            context = context,
+            onDismiss = { showSavedIn = false },
+            onLikedChanged = { isLiked = it },
+        )
+    }
     val likeState = searchViewModel.likeState.value
     LaunchedEffect(likeState) { isLiked = isSongLiked(context, song.id.toString()) }
     val currentPlayingIndicatorColor =
@@ -462,15 +473,17 @@ fun SearchSongRow(
         Icon(
             modifier = Modifier
                 .size(20.dp)
-                .clickable(
+                .combinedClickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                ) {
-                    if (isLiked) removeLikedSongId(context, song.id.toString())
-                    else addLikedSongId(context, song.id.toString())
-                    isLiked = isSongLiked(context, song.id.toString())
-                    searchViewModel.updateLikeState(!searchViewModel.likeState.value)
-                },
+                    onClick = {
+                        if (isLiked) removeLikedSongId(context, song.id.toString())
+                        else addLikedSongId(context, song.id.toString())
+                        isLiked = isSongLiked(context, song.id.toString())
+                        searchViewModel.updateLikeState(!searchViewModel.likeState.value)
+                    },
+                    onLongClick = { showSavedIn = true },
+                ),
             painter = if (isLiked) painterResource(id = R.drawable.added) else painterResource(id = R.drawable.ic_add),
             tint = if (isLiked) Color.White else Color.Gray,
             contentDescription = "",

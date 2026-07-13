@@ -14,10 +14,12 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -971,33 +973,35 @@ fun PlayerInfo(
             Icon(
                 modifier = Modifier
                     .size(26.dp)
-                    .clickable(
+                    .combinedClickable(
                         interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) {
-                        if (isLiked.value && onShowSavedIn != null) {
-                            // Already saved — second tap opens the Spotify-style
-                            // "Saved in" sheet (Liked Songs + playlists) instead of
-                            // silently unliking.
-                            onShowSavedIn()
-                            return@clickable
-                        }
-                        if (isLiked.value) {
-                            removeLikedSongId(context, songId.toString())
-                            snackbarMessage = "Removed from Liked Songs"
-                        } else {
-                            addLikedSongId(context, songId.toString())
-                            snackbarMessage = "Added to Liked Songs"
-                        }
-                        snackbarVisible = true
-                        isLiked.value = isSongLiked(context, songId.toString())
-                        // Mirror the like to the real Spotify account.
-                        com.music.spotui.data.api.SpotifySync.setTrackSaved(
-                            context,
-                            spotifyTrackId,
-                            isLiked.value
-                        )
-                    },
+                        indication = null,
+                        onClick = {
+                            if (isLiked.value && onShowSavedIn != null) {
+                                // Already saved — second tap opens the Spotify-style
+                                // "Saved in" sheet (Liked Songs + playlists) instead of
+                                // silently unliking.
+                                onShowSavedIn()
+                                return@combinedClickable
+                            }
+                            if (isLiked.value) {
+                                removeLikedSongId(context, songId.toString())
+                                snackbarMessage = "Removed from Liked Songs"
+                            } else {
+                                addLikedSongId(context, songId.toString())
+                                snackbarMessage = "Added to Liked Songs"
+                            }
+                            snackbarVisible = true
+                            isLiked.value = isSongLiked(context, songId.toString())
+                            // Mirror the like to the real Spotify account.
+                            com.music.spotui.data.api.SpotifySync.setTrackSaved(
+                                context,
+                                spotifyTrackId,
+                                isLiked.value
+                            )
+                        },
+                        onLongClick = { onShowSavedIn?.invoke() },
+                    ),
                 painter = if (isLiked.value) {
                     painterResource(id = R.drawable.added)
                 } else {

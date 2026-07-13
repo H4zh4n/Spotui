@@ -1,7 +1,9 @@
 package com.music.spotui.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -88,7 +90,7 @@ fun Loader() {
 
 }
 
-@OptIn(ExperimentalGlideComposeApi::class)
+@OptIn(ExperimentalGlideComposeApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun MiniPlayer(navController: NavHostController) {
     val miniPlayerViewModel : PlayerViewModel = hiltViewModel()
@@ -301,17 +303,19 @@ fun MiniPlayer(navController: NavHostController) {
                     Icon(
                         modifier = Modifier
                             .size(22.dp)
-                            .clickable(
+                            .combinedClickable(
                                 interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) {
-                                addLikedSongId(context, songId.toString())
-                                isLiked = true
-                                miniPlayerViewModel.updateLikeState(!likeState)
-                                // Mirror the like to the real Spotify account.
-                                com.music.spotui.data.api.SpotifySync.setTrackSaved(
-                                    context, currentTrack?.spotifyTrackId.orEmpty(), true)
-                            },
+                                indication = null,
+                                onClick = {
+                                    addLikedSongId(context, songId.toString())
+                                    isLiked = true
+                                    miniPlayerViewModel.updateLikeState(!likeState)
+                                    // Mirror the like to the real Spotify account.
+                                    com.music.spotui.data.api.SpotifySync.setTrackSaved(
+                                        context, currentTrack?.spotifyTrackId.orEmpty(), true)
+                                },
+                                onLongClick = { showSavedIn = true },
+                            ),
                         painter = painterResource(id = R.drawable.ic_add),
                         tint = Color.White,
                         contentDescription = "Add",
