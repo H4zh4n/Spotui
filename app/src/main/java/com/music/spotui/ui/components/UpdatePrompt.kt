@@ -376,6 +376,8 @@ private fun MarkdownInline(
         Triple(Regex("""~~(.+?)~~"""), "strikethrough", null as String?),
         Triple(Regex("""`([^`]+)`"""), "code", null as String?),
         Triple(Regex("""\[([^\]]+)\]\(([^)]+)\)"""), "link", null as String?),
+        Triple(Regex("""<a\s+[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>""", RegexOption.IGNORE_CASE), "html_link", null as String?),
+        Triple(Regex("""(?<!\()(https?://[^\s<)]+)"""), "raw_link", null as String?),
     )
 
     val annotated = buildAnnotatedString {
@@ -393,6 +395,8 @@ private fun MarkdownInline(
                 segments.add(
                     when (type) {
                         "link" -> Segment(m.range.first, m.range.last + 1, type, m.groupValues[1], m.groupValues[2])
+                        "html_link" -> Segment(m.range.first, m.range.last + 1, "link", m.groupValues[2], m.groupValues[1])
+                        "raw_link" -> Segment(m.range.first, m.range.last + 1, "link", m.groupValues[1], m.groupValues[1])
                         else -> Segment(m.range.first, m.range.last + 1, type, m.groupValues[1])
                     }
                 )
