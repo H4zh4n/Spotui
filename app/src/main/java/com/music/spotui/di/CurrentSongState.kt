@@ -187,7 +187,14 @@ class CurrentSongState @Inject constructor() {
         _title.value = title
         _album.value = album
         _singer.value = singer
-        _artistIds.value = artistIds
+        if (artistIds.isNotBlank()) {
+            _artistIds.value = artistIds
+        } else if (songId == _songId.value) {
+            // Keep existing _artistIds.value
+        } else {
+            val queueSong = _queue.value.firstOrNull { it.id == songId }
+            _artistIds.value = queueSong?.artistIds.orEmpty()
+        }
         _playingState.value = playingState
         _songIndex.value = songIndex
         _songId.value = songId
