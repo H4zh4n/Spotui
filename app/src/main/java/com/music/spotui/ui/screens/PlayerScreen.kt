@@ -1439,9 +1439,14 @@ fun ArtistsSheet(
 
     LaunchedEffect(artistIds) {
         artistIds.filter { it.isNotBlank() }.forEach { id ->
-            if (id !in artistImages) {
+            val cachedUrl = com.music.spotui.data.preferences.getCachedArtistImage(context, id)
+            if (cachedUrl != null) {
+                artistImages[id] = cachedUrl
+            } else {
                 com.metrolist.spotify.Spotify.artist(id).getOrNull()?.let { artist ->
-                    artistImages[id] = artist.images.firstOrNull()?.url.orEmpty()
+                    val url = artist.images.firstOrNull()?.url.orEmpty()
+                    com.music.spotui.data.preferences.cacheArtistImage(context, id, url)
+                    artistImages[id] = url
                 }
             }
         }
