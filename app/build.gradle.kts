@@ -14,8 +14,8 @@ android {
         applicationId = "com.music.spotui"
         minSdk = 26
         targetSdk = 37
-        versionCode = 138
-        versionName = "1.3.8"
+        versionCode = 140
+        versionName = "1.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -139,8 +139,9 @@ dependencies {
     implementation(libs.timber)
     implementation(libs.kotlinx.serialization.json)
 
-    // ML Kit on-device translation (free, no API key, works offline after model download)
+    // ML Kit on-device translation & language identification (free, no API key, works offline after model download)
     implementation(libs.mlkit.translate)
+    implementation(libs.mlkit.language.id)
 
     //core library desugaring (required by :innertube)
     coreLibraryDesugaring(libs.desugaring)
