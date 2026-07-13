@@ -81,12 +81,12 @@ object SpotifySync {
     }
 
     /** Creates a new playlist on Spotify and adds the track to it. */
-    fun createPlaylistWithTrack(context: Context, name: String, trackId: String, onDone: (Boolean) -> Unit = {}) {
+    fun createPlaylistWithTrack(context: Context, name: String, trackId: String, public: Boolean = false, onDone: (Boolean) -> Unit = {}) {
         if (name.isBlank()) { onDone(false); return }
         val app = context.applicationContext
         scope.launch {
             if (!SpotifyTokenProvider.ensureToken(app)) { onDone(false); return@launch }
-            val playlist = Spotify.createPlaylist(name).getOrNull()
+            val playlist = Spotify.createPlaylist(name, public).getOrNull()
             if (playlist == null || playlist.id.isBlank()) {
                 Log.w(TAG, "createPlaylist '$name' failed"); onDone(false); return@launch
             }

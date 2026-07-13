@@ -996,17 +996,17 @@ object Spotify {
         }
 
     /**
-     * Creates a new (private) playlist for the current user via the REST API
+     * Creates a new playlist for the current user via the REST API
      * and returns it. The web-player token carries the playlist-modify scopes.
      */
-    suspend fun createPlaylist(name: String): Result<SpotifyPlaylist> =
+    suspend fun createPlaylist(name: String, public: Boolean = false): Result<SpotifyPlaylist> =
         runCatching {
             val token = accessToken ?: throw SpotifyException(401, "Not authenticated")
             val userId = me().getOrThrow().id
             if (userId.isBlank()) throw SpotifyException(500, "No user id for createPlaylist")
             val body = buildJsonObject {
                 put("name", name)
-                put("public", false)
+                put("public", public)
             }
             val response = restClient.post("users/$userId/playlists") {
                 header("Authorization", "Bearer $token")
@@ -1017,7 +1017,7 @@ object Spotify {
                 throw SpotifyException(response.status.value, "createPlaylist HTTP ${response.status.value}")
             }
             val playlist = json.decodeFromString<SpotifyPlaylist>(response.bodyAsText())
-            log("D", "createPlaylist($name) OK — ${playlist.id}")
+            log("D", "createPlaylist($name, public=$public) OK — ${playlist.id}")
             playlist
         }
 

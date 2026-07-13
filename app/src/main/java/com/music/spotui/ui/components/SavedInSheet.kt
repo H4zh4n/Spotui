@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -84,6 +86,7 @@ fun SavedInSheet(
     val membership = remember { mutableStateMapOf<String, Boolean>() }
     var creating by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
+    var isPublic by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         playlists = withContext(Dispatchers.IO) {
@@ -94,8 +97,10 @@ fun SavedInSheet(
     fun createNow() {
         val name = newName.trim().ifBlank { "My Playlist" }
         creating = false
+        val currentIsPublic = isPublic
         newName = ""
-        SpotifySync.createPlaylistWithTrack(context, name, song.spotifyTrackId)
+        isPublic = false
+        SpotifySync.createPlaylistWithTrack(context, name, song.spotifyTrackId, public = currentIsPublic)
         onDismiss()
     }
 
@@ -147,6 +152,38 @@ fun SavedInSheet(
                         .padding(20.dp, 0.dp, 20.dp, 8.dp)
                         .clip(RoundedCornerShape(8.dp)),
                 )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp, 4.dp, 20.dp, 12.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Make public",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = if (isPublic) "Anyone can find and listen" else "Only you can view and listen",
+                            color = Color.Gray,
+                            fontSize = 12.sp
+                        )
+                    }
+                    Switch(
+                        checked = isPublic,
+                        onCheckedChange = { isPublic = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = SpotifyGreen,
+                            uncheckedThumbColor = Color(0xFFB3B3B3),
+                            uncheckedTrackColor = Color(0xFF333333),
+                            checkedBorderColor = Color.Transparent,
+                            uncheckedBorderColor = Color.Transparent,
+                        )
+                    )
+                }
                 Row(modifier = Modifier.padding(20.dp, 0.dp, 20.dp, 8.dp)) {
                     Text(
                         "Create",
@@ -166,7 +203,7 @@ fun SavedInSheet(
                         modifier = Modifier.clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                        ) { creating = false; newName = "" },
+                        ) { creating = false; newName = ""; isPublic = false },
                     )
                 }
             }
