@@ -11,7 +11,11 @@ It connects to your real Spotify account and mirrors the Spotify experience:
 
 ## Screenshot
 
-<img src="assets/screenshot-player.png" width="360" alt="Now playing screen"/>
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/dfd41cd7-92a8-46d5-800d-a4ecfddfeef8" width="32%" alt="Screenshot_2026-07-13-21-03-36-065_com music spotui" />
+  <img src="https://github.com/user-attachments/assets/64e1a3d7-fef0-422e-aa80-276e5b66d874" width="32%" alt="Screenshot_2026-07-13-21-01-15-466_com music spotui" />
+  <img src="https://github.com/user-attachments/assets/cf6b605c-ac81-4814-a286-38f0786fcc59" width="32%" alt="Screenshot_2026-07-13-20-43-45-056_com music spotui" />
+</p>
 
 ## Credits
 
