@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ClearAll
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.CircularProgressIndicator
@@ -352,8 +353,8 @@ private fun TranslateFloatingPanel(vm: LyricsViewModel, modifier: Modifier = Mod
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Hide translate",
+                        imageVector = Icons.Default.ClearAll,
+                        contentDescription = "Clear translation",
                         tint = Color.White.copy(alpha = 0.6f),
                         modifier = Modifier
                             .size(20.dp)
