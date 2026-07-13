@@ -527,6 +527,18 @@ object SongPlayer {
             return null
         }
 
+        if (forPlayback) {
+            if (shouldTryFlac) {
+                currentSource = "Lossless"
+                currentQuality = ""
+                updateResolveStatus(true, "Checking lossless source...")
+            } else if (shouldTryYoutube) {
+                currentSource = "YouTube"
+                currentQuality = ""
+                updateResolveStatus(true, "Locating YouTube source...")
+            }
+        }
+
         val flacDeferred = if (shouldTryFlac) {
             scope.async {
                 val flacSpotifyId = trackIdRegistry[song] ?: spotifyTrackIdForPlayback(song)
@@ -545,12 +557,15 @@ object SongPlayer {
 
         val ytDeferred = if (shouldTryYoutube) {
             scope.async {
-                if (forPlayback) {
+                // If checking FLAC in parallel, run YouTube resolution silently in the background
+                // without updating UI state or status message until fallback is needed.
+                val runForPlayback = forPlayback && !shouldTryFlac
+                if (runForPlayback) {
                     currentSource = "YouTube"
                     currentQuality = ""
                     updateResolveStatus(true, "Locating YouTube source...")
                 }
-                resolveYtPlayback(song, quality.audioQuality, appContext, forPlayback = forPlayback)
+                resolveYtPlayback(song, quality.audioQuality, appContext, forPlayback = runForPlayback)
             }
         } else null
 
@@ -586,6 +601,15 @@ object SongPlayer {
             Log.w(TAG, "YouTube fallback disabled — no stream for: $song")
             if (forPlayback) updateResolveStatus(false)
             return null
+        }
+
+        if (forPlayback) {
+            currentSource = "YouTube"
+            currentQuality = ""
+            // Show resolve status only if YouTube is not fully loaded yet.
+            if (ytDeferred != null && !ytDeferred.isCompleted) {
+                updateResolveStatus(true, "Locating YouTube source...")
+            }
         }
 
         val playback = ytDeferred!!.await()
