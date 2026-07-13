@@ -1185,7 +1185,7 @@ fun PlayerFull(
 
                 },
             tint = if (shuffle) {
-                Color(AppPalette.toArgb())
+                Color(0xFF1ED760)
             } else {
                 Color.White
             },

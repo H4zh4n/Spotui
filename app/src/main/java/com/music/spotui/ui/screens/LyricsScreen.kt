@@ -673,10 +673,13 @@ private fun LanguagePickerBottomSheet(
         }
     }
 
+    val density = androidx.compose.ui.platform.LocalDensity.current
     LaunchedEffect(Unit) {
         val index = languages.indexOfFirst { it.first == currentCode }
         if (index >= 0) {
-            listState.scrollToItem(index)
+            // Scroll to the item and apply a negative offset (~150.dp) to center it in the bottom sheet viewport.
+            val offsetPx = with(density) { -150.dp.roundToPx() }
+            listState.scrollToItem(index, offsetPx)
         }
     }
 
