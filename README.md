@@ -2,7 +2,17 @@
 
 A Spotify clone for Android, built with Jetpack Compose.
 
-It connects to your real Spotify account and mirrors the Spotify experience:
+## 💖 Sponsor this project
+
+If you enjoy using this app and want to support its continued development, consider buying me a coffee! 
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/hazhan)
+
+_____________
+
+## Features
+
+It connects to your real Spotify account and mirrors the Spotify experience.
 
 - 🎵 **Playlists** — browse, play, add/remove tracks, create new playlists, all synced with your Spotify account
 - 📝 **Lyrics** — Spotify's own synced lyrics, with a live preview on the player and a full-screen view
