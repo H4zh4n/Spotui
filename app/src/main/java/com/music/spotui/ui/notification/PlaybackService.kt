@@ -3,11 +3,13 @@ package com.music.spotui.ui.notification
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
+import androidx.compose.runtime.snapshotFlow
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.LibraryResult
@@ -34,10 +36,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -56,8 +56,10 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class PlaybackService : MediaLibraryService() {
 
-    @Inject lateinit var currentSongState: CurrentSongState
-    @Inject lateinit var repository: AppRepository
+    @Inject
+    lateinit var currentSongState: CurrentSongState
+    @Inject
+    lateinit var repository: AppRepository
 
     private var mediaSession: MediaLibrarySession? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -66,6 +68,7 @@ class PlaybackService : MediaLibraryService() {
     // browsed from (so playing a track queues its whole playlist/album).
     private val trackById = java.util.concurrent.ConcurrentHashMap<String, SongsModel>()
     private val queueByTrackId = java.util.concurrent.ConcurrentHashMap<String, List<SongsModel>>()
+    private val searchCache = java.util.concurrent.ConcurrentHashMap<String, List<SongsModel>>()
     private var webPlayer: WebMediaPlayer? = null
     private var showingWeb = false
 
@@ -96,15 +99,17 @@ class PlaybackService : MediaLibraryService() {
                                 .let { if (it >= 0) it else currentSongState.songIndex.value }
                                 .coerceIn(0, queue.size - 1)
                             val song = queue[cur]
-                            SongPlayer.playSong(song.url, applicationContext)
+                            SongPlayer.playSong(song.url, applicationContext, "song/${song.id}")
                         } else {
                             SongPlayer.exoPlayer?.seekTo(0)
                             SongPlayer.exoPlayer?.play()
                         }
                     }
+
                     RepeatMode.ALL -> {
                         advance(forward = true)
                     }
+
                     RepeatMode.OFF -> {
                         val queue = currentSongState.queue.value
                         if (queue.isNotEmpty()) {
@@ -128,7 +133,11 @@ class PlaybackService : MediaLibraryService() {
         }
 
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-            android.util.Log.e("PlaybackService", "Player error during playback: ${error.message}", error)
+            android.util.Log.e(
+                "PlaybackService",
+                "Player error during playback: ${error.message}",
+                error
+            )
             val queue = currentSongState.queue.value
             val curId = currentSongState.songId.value
             val cur = queue.indexOfFirst { it.id == curId }
@@ -151,13 +160,14 @@ class PlaybackService : MediaLibraryService() {
                 customLayout: ImmutableList<CommandButton>,
                 showPauseButton: Boolean
             ): ImmutableList<CommandButton> {
-                val base = super.getMediaButtons(session, playerCommands, customLayout, showPauseButton)
+                val base =
+                    super.getMediaButtons(session, playerCommands, customLayout, showPauseButton)
                 val repeatBtn = base.find { it.sessionCommand?.customAction == "ACTION_REPEAT" }
-                val closeBtn  = base.find { it.sessionCommand?.customAction == "ACTION_CLOSE" }
+                val closeBtn = base.find { it.sessionCommand?.customAction == "ACTION_CLOSE" }
                 val transport = base.filter {
                     it.sessionCommand?.customAction != "ACTION_REPEAT" &&
-                    it.sessionCommand?.customAction != "ACTION_CLOSE" &&
-                    it.sessionCommand?.customAction != "ACTION_NONE"
+                            it.sessionCommand?.customAction != "ACTION_CLOSE" &&
+                            it.sessionCommand?.customAction != "ACTION_NONE"
                 }
                 return ImmutableList.builder<CommandButton>()
                     .apply { repeatBtn?.let { add(it) } }
@@ -187,6 +197,23 @@ class PlaybackService : MediaLibraryService() {
         mediaSession = MediaLibrarySession.Builder(this, wrap(base), LibraryCallback())
             .setSessionActivity(sessionActivity)
             .build()
+
+        // Keep the session queue in sync with the in-app queue changes
+        serviceScope.launch {
+            snapshotFlow { currentSongState.queue.value }
+                .distinctUntilChanged()
+                .collect {
+                    activeForwardingPlayer?.invalidateTimeline()
+                }
+        }
+
+        serviceScope.launch {
+            snapshotFlow { currentSongState.songId.value }
+                .distinctUntilChanged()
+                .collect {
+                    activeForwardingPlayer?.invalidateTimeline()
+                }
+        }
 
         // When a crossfade promotes a new ExoPlayer instance, re-bind the session to it
         // (runs on the main thread; setPlayer is the supported way to swap a session's player).
@@ -231,9 +258,130 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
-    /** Wrap an ExoPlayer so the media session routes next/previous to our in-app queue
-     *  (the player only ever holds one resolved stream at a time). */
-    private fun wrap(base: Player): ForwardingPlayer = object : ForwardingPlayer(base) {
+    private var activeForwardingPlayer: QueueForwardingPlayer? = null
+
+    private fun wrap(base: Player): QueueForwardingPlayer {
+        return QueueForwardingPlayer(base).also { activeForwardingPlayer = it }
+    }
+
+    private inner class QueueForwardingPlayer(private val base: Player) : ForwardingPlayer(base) {
+        private val listenerMap = java.util.concurrent.ConcurrentHashMap<Player.Listener, ListenerWrapper>()
+
+        override fun addListener(listener: Player.Listener) {
+            val wrapper = ListenerWrapper(listener)
+            listenerMap[listener] = wrapper
+            super.addListener(wrapper)
+        }
+
+        override fun removeListener(listener: Player.Listener) {
+            val wrapper = listenerMap.remove(listener)
+            if (wrapper != null) {
+                super.removeListener(wrapper)
+            } else {
+                super.removeListener(listener)
+            }
+        }
+
+        fun invalidateTimeline() {
+            val timeline = currentTimeline
+            listenerMap.values.forEach { wrapper ->
+                wrapper.delegate.onTimelineChanged(timeline, Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED)
+            }
+        }
+
+        private inner class ListenerWrapper(val delegate: Player.Listener) : Player.Listener by delegate {
+            override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                delegate.onTimelineChanged(currentTimeline, reason)
+            }
+
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                delegate.onMediaItemTransition(currentMediaItem, reason)
+            }
+
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int
+            ) {
+                val idx = currentMediaItemIndex
+                val item = currentMediaItem
+                val mappedOld = Player.PositionInfo(
+                    oldPosition.windowUid ?: idx,
+                    idx,
+                    item,
+                    oldPosition.periodUid ?: idx,
+                    idx,
+                    oldPosition.positionMs,
+                    oldPosition.contentPositionMs,
+                    oldPosition.adGroupIndex,
+                    oldPosition.adIndexInAdGroup
+                )
+                val mappedNew = Player.PositionInfo(
+                    newPosition.windowUid ?: idx,
+                    idx,
+                    item,
+                    newPosition.periodUid ?: idx,
+                    idx,
+                    newPosition.positionMs,
+                    newPosition.contentPositionMs,
+                    newPosition.adGroupIndex,
+                    newPosition.adIndexInAdGroup
+                )
+                delegate.onPositionDiscontinuity(mappedOld, mappedNew, reason)
+            }
+
+            override fun onEvents(player: Player, events: Player.Events) {
+                delegate.onEvents(this@QueueForwardingPlayer, events)
+            }
+        }
+
+        override fun getCurrentTimeline(): Timeline {
+            val q = currentSongState.queue.value
+            val curId = currentSongState.songId.value
+            val idx = q.indexOfFirst { it.id == curId }.coerceAtLeast(0)
+            val mediaItems = q.map { playable(it) }
+            val currentItem = base.currentMediaItem
+            return QueueTimeline(base.currentTimeline, currentItem, mediaItems, idx)
+        }
+
+        override fun getMediaItemCount(): Int = currentSongState.queue.value.size
+
+        override fun getMediaItemAt(index: Int): MediaItem {
+            val q = currentSongState.queue.value
+            if (index in q.indices) {
+                return playable(q[index])
+            }
+            return super.getMediaItemAt(index)
+        }
+
+        override fun getCurrentMediaItemIndex(): Int {
+            val q = currentSongState.queue.value
+            val baseItem = base.currentMediaItem
+            if (baseItem != null && baseItem.mediaId.startsWith("song/")) {
+                val idx = q.indexOfFirst { "song/${it.id}" == baseItem.mediaId }
+                if (idx >= 0) return idx
+            }
+            val curId = currentSongState.songId.value
+            val idx = q.indexOfFirst { it.id == curId }
+            return if (idx >= 0) idx else 0
+        }
+
+        override fun getCurrentMediaItem(): MediaItem? {
+            val q = currentSongState.queue.value
+            val baseItem = base.currentMediaItem
+            if (baseItem != null && baseItem.mediaId.startsWith("song/")) {
+                val song = q.firstOrNull { "song/${it.id}" == baseItem.mediaId }
+                if (song != null) return playable(song)
+            }
+            val curId = currentSongState.songId.value
+            val song = q.firstOrNull { it.id == curId }
+            return song?.let { playable(it) } ?: super.getCurrentMediaItem()
+        }
+
+        override fun getCurrentPeriodIndex(): Int {
+            return currentMediaItemIndex
+        }
+
         override fun getAvailableCommands(): Player.Commands =
             super.getAvailableCommands().buildUpon()
                 .add(COMMAND_SEEK_TO_NEXT)
@@ -254,6 +402,22 @@ class PlaybackService : MediaLibraryService() {
         override fun seekToNextMediaItem() = advance(forward = true)
         override fun seekToPrevious() = advance(forward = false)
         override fun seekToPreviousMediaItem() = advance(forward = false)
+
+        override fun seekTo(mediaItemIndex: Int, positionMs: Long) {
+            val q = currentSongState.queue.value
+            val curId = currentSongState.songId.value
+            val curIdx = q.indexOfFirst { it.id == curId }
+            if (mediaItemIndex == curIdx) {
+                super.seekTo(0, positionMs)
+            } else if (mediaItemIndex in q.indices) {
+                val song = q[mediaItemIndex]
+                currentSongState.updateSongState(
+                    song.coverUri, song.title, song.singer, true,
+                    song.id, mediaItemIndex, song.album
+                )
+                SongPlayer.playSong(song.url, applicationContext, "song/${song.id}")
+            }
+        }
     }
 
     /** Advance the in-app queue one step in the given direction and start it. */
@@ -264,7 +428,7 @@ class PlaybackService : MediaLibraryService() {
         val cur = queue.indexOfFirst { it.id == curId }
             .let { if (it >= 0) it else currentSongState.songIndex.value }
             .coerceIn(0, queue.size - 1)
-        
+
         val nextIdx: Int
         if (forward) {
             if (cur < queue.size - 1) {
@@ -292,10 +456,11 @@ class PlaybackService : MediaLibraryService() {
             song.coverUri, song.title, song.singer, true,
             song.id, nextIdx, song.album
         )
-        SongPlayer.playSong(song.url, applicationContext)
+        SongPlayer.playSong(song.url, applicationContext, "song/${song.id}")
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = mediaSession
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
+        mediaSession
 
     // ── Android Auto browse tree ──────────────────────────────────────────
 
@@ -343,13 +508,15 @@ class PlaybackService : MediaLibraryService() {
             session: MediaSession,
             controller: MediaSession.ControllerInfo
         ): MediaSession.ConnectionResult {
-            val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+            val baseResult = super.onConnect(session, controller)
+            val sessionCommands = baseResult.availableSessionCommands.buildUpon()
                 .add(SessionCommand("ACTION_CLOSE", Bundle.EMPTY))
                 .add(SessionCommand("ACTION_REPEAT", Bundle.EMPTY))
                 .build()
 
             return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                 .setAvailableSessionCommands(sessionCommands)
+                .setAvailablePlayerCommands(baseResult.availablePlayerCommands)
                 .setCustomLayout(buildCustomLayout(currentSongState.repeat.value))
                 .build()
         }
@@ -367,6 +534,7 @@ class PlaybackService : MediaLibraryService() {
                     android.os.Process.killProcess(android.os.Process.myPid())
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
+
                 "ACTION_REPEAT" -> {
                     // Cycle OFF → ALL → ONE → OFF (matches full-screen UI)
                     val next = when (currentSongState.repeat.value) {
@@ -431,61 +599,160 @@ class PlaybackService : MediaLibraryService() {
                     song.coverUri, song.title, song.singer, true,
                     song.id, idx, song.album,
                 )
-                SongPlayer.playSong(song.url, applicationContext)
+                SongPlayer.playSong(song.url, applicationContext, "song/${song.id}")
             }
             return Futures.immediateFuture(
                 MediaSession.MediaItemsWithStartPosition(emptyList(), C.INDEX_UNSET, C.TIME_UNSET),
             )
         }
+
+        override fun onSearch(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<Void>> = future {
+            if (query.isNotBlank()) {
+                try {
+                    val songs = lastSuccess(repository.searchSongs(query)).orEmpty()
+                    searchCache[query] = songs
+                    registerTracks("search/$query", songs)
+                    session.notifySearchResultChanged(browser, query, songs.size, params)
+                } catch (e: Exception) {
+                    android.util.Log.e("PlaybackService", "Error in onSearch for query: $query", e)
+                }
+            }
+            LibraryResult.ofVoid()
+        }
+
+        override fun onGetSearchResult(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            query: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?,
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+            val songs = searchCache[query].orEmpty()
+            val items = songs.map { playable(it) }
+            return Futures.immediateFuture(
+                LibraryResult.ofItemList(ImmutableList.copyOf(items), params)
+            )
+        }
     }
 
-    private suspend fun childrenOf(parentId: String): List<MediaItem> = when {
-        parentId == ROOT -> listOf(
-            folder(NODE_LIKED, "Liked Songs"),
-            folder(NODE_DOWNLOADS, "Downloads"),
-            folder(NODE_PLAYLISTS, "Playlists"),
-            folder(NODE_ALBUMS, "Albums"),
-        )
-        parentId == NODE_LIKED ->
-            registerTracks(NODE_LIKED, lastSuccess(repository.provideLikedSongs()).orEmpty())
-        parentId == NODE_DOWNLOADS ->
-            registerTracks(
-                NODE_DOWNLOADS,
-                com.music.spotui.data.preferences.getDownloadedSongs(applicationContext),
-            )
-        parentId == NODE_PLAYLISTS ->
-            libraryEntries().filter {
-                it.isPlaylist && it.spotifyId != Api.LIKED_SONGS_ID && it.spotifyId != Api.DOWNLOADS_ID
-            }.map { folder("playlist/${it.spotifyId}", it.name, it.coverUri) }
-        parentId == NODE_ALBUMS ->
-            libraryEntries().filter { !it.isPlaylist }.map {
-                folder(
-                    "album/${android.net.Uri.encode(it.name)}/${android.net.Uri.encode(it.artists)}",
-                    it.name,
-                    it.coverUri,
+    private suspend fun childrenOf(parentId: String): List<MediaItem> = try {
+        // Enforce a strict fallback timeout for Android Auto responsiveness
+        kotlinx.coroutines.withTimeoutOrNull(1500) {
+            when {
+                parentId == ROOT -> listOf(
+                    folder(
+                        NODE_LIKED,
+                        "Liked Songs",
+                        mediaType = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS
+                    ),
+                    folder(
+                        NODE_DOWNLOADS,
+                        "Downloads",
+                        mediaType = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS
+                    ),
+                    folder(
+                        NODE_PLAYLISTS,
+                        "Playlists",
+                        mediaType = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS
+                    ),
+                    folder(
+                        NODE_ALBUMS,
+                        "Albums",
+                        mediaType = MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS
+                    ),
                 )
+
+                parentId == NODE_LIKED ->
+                    registerTracks(
+                        NODE_LIKED,
+                        lastSuccess(repository.provideLikedSongs()).orEmpty()
+                    )
+
+                parentId == NODE_DOWNLOADS ->
+                    registerTracks(
+                        NODE_DOWNLOADS,
+                        com.music.spotui.data.preferences.getDownloadedSongs(applicationContext),
+                    )
+
+                parentId == NODE_PLAYLISTS ->
+                    libraryEntries().filter {
+                        it.isPlaylist && it.spotifyId != Api.LIKED_SONGS_ID && it.spotifyId != Api.DOWNLOADS_ID
+                    }.map {
+                        folder(
+                            "playlist/${it.spotifyId}",
+                            it.name,
+                            it.coverUri,
+                            mediaType = MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS
+                        )
+                    }
+
+                parentId == NODE_ALBUMS ->
+                    libraryEntries().filter { !it.isPlaylist }.map {
+                        folder(
+                            "album/${android.net.Uri.encode(it.name)}/${android.net.Uri.encode(it.artists)}",
+                            it.name,
+                            it.coverUri,
+                            mediaType = MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS
+                        )
+                    }
+
+                parentId.startsWith("playlist/") -> {
+                    val songs =
+                        lastSuccess(repository.providePlaylistSongs(parentId.removePrefix("playlist/")))
+                    registerTracks(parentId, songs.orEmpty())
+                }
+
+                parentId.startsWith("album/") -> {
+                    val parts = parentId.removePrefix("album/").split('/')
+                    val name = android.net.Uri.decode(parts.getOrElse(0) { "" })
+                    val artist = android.net.Uri.decode(parts.getOrElse(1) { "" })
+                    registerTracks(
+                        parentId,
+                        lastSuccess(repository.provideAlbumSongs(name, artist)).orEmpty()
+                    )
+                }
+
+                else -> emptyList()
             }
-        parentId.startsWith("playlist/") -> {
-            val songs = lastSuccess(repository.providePlaylistSongs(parentId.removePrefix("playlist/")))
-            registerTracks(parentId, songs.orEmpty())
-        }
-        parentId.startsWith("album/") -> {
-            val parts = parentId.removePrefix("album/").split('/')
-            val name = android.net.Uri.decode(parts.getOrElse(0) { "" })
-            val artist = android.net.Uri.decode(parts.getOrElse(1) { "" })
-            registerTracks(parentId, lastSuccess(repository.provideAlbumSongs(name, artist)).orEmpty())
-        }
-        else -> emptyList()
+        } ?: emptyList()
+    } catch (e: Exception) {
+        android.util.Log.e("PlaybackService", "Error retrieving children for $parentId", e)
+        emptyList()
     }
 
     private suspend fun libraryEntries() =
         lastSuccess(repository.provideLibrary()).orEmpty()
 
     /** Runs a paged/cached response flow to completion and keeps the final data. */
-    private suspend fun <T> lastSuccess(flow: Flow<Response<T>>): T? =
-        runCatching { flow.toList() }.getOrNull()
-            ?.filterIsInstance<Response.Success<T>>()
-            ?.lastOrNull()?.data
+    private suspend fun <T> lastSuccess(flow: Flow<Response<T>>): T? {
+        var result: T? = null
+        try {
+            // Android Auto requires quick responses to avoid infinite loading screens.
+            // A 2000ms timeout ensures we never hang the media browser thread.
+            kotlinx.coroutines.withTimeoutOrNull(2000) {
+                flow.collect { response ->
+                    if (response is Response.Success) {
+                        result = response.data
+                        // Found a success emission (cached or fresh). Cancel immediately to return fast.
+                        throw kotlinx.coroutines.CancellationException("Success received")
+                    } else if (response is Response.Error) {
+                        throw kotlinx.coroutines.CancellationException("Error received")
+                    }
+                }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Expected cancellation to stop collecting
+        } catch (e: Exception) {
+            android.util.Log.e("PlaybackService", "Error in lastSuccess flow collection", e)
+        }
+        return result
+    }
 
     private fun registerTracks(parentId: String, songs: List<SongsModel>): List<MediaItem> {
         songs.forEach { song ->
@@ -495,7 +762,12 @@ class PlaybackService : MediaLibraryService() {
         return songs.map { playable(it) }
     }
 
-    private fun folder(id: String, title: String, coverUri: String = ""): MediaItem =
+    private fun folder(
+        id: String,
+        title: String,
+        coverUri: String = "",
+        mediaType: Int = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED
+    ): MediaItem =
         MediaItem.Builder()
             .setMediaId(id)
             .setMediaMetadata(
@@ -503,6 +775,7 @@ class PlaybackService : MediaLibraryService() {
                     .setTitle(title)
                     .setIsBrowsable(true)
                     .setIsPlayable(false)
+                    .setMediaType(mediaType)
                     .apply { if (coverUri.isNotBlank()) setArtworkUri(android.net.Uri.parse(coverUri)) }
                     .build(),
             )
@@ -518,7 +791,14 @@ class PlaybackService : MediaLibraryService() {
                     .setAlbumTitle(song.album)
                     .setIsBrowsable(false)
                     .setIsPlayable(true)
-                    .apply { if (song.coverUri.isNotBlank()) setArtworkUri(android.net.Uri.parse(song.coverUri)) }
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                    .apply {
+                        if (song.coverUri.isNotBlank()) setArtworkUri(
+                            android.net.Uri.parse(
+                                song.coverUri
+                            )
+                        )
+                    }
                     .build(),
             )
             .build()
@@ -548,8 +828,80 @@ class PlaybackService : MediaLibraryService() {
         SpotifyWebPlayer.onStateChanged = null
         webPlayer?.release()
         webPlayer = null
+        searchCache.clear()
         mediaSession?.release()
         mediaSession = null
         super.onDestroy()
+    }
+}
+
+class QueueTimeline(
+    private val baseTimeline: Timeline,
+    private val currentMediaItem: MediaItem?,
+    private val queue: List<MediaItem>,
+    private val currentIndex: Int
+) : Timeline() {
+
+    override fun getWindowCount(): Int = queue.size
+
+    override fun getWindow(windowIndex: Int, window: Window, defaultPositionProjectionUs: Long): Window {
+        val item = queue.getOrNull(windowIndex) ?: MediaItem.EMPTY
+        if (windowIndex == currentIndex && currentMediaItem != null) {
+            val activeTimeline = baseTimeline
+            if (!activeTimeline.isEmpty) {
+                activeTimeline.getWindow(0, window, defaultPositionProjectionUs)
+                window.mediaItem = item
+                return window
+            }
+        }
+        window.uid = windowIndex
+        window.mediaItem = item
+        window.manifest = null
+        window.presentationStartTimeMs = C.TIME_UNSET
+        window.windowStartTimeMs = C.TIME_UNSET
+        window.elapsedRealtimeEpochOffsetMs = C.TIME_UNSET
+        window.isSeekable = true
+        window.isDynamic = false
+        window.liveConfiguration = null
+        window.defaultPositionUs = 0
+        window.durationUs = C.TIME_UNSET
+        window.firstPeriodIndex = windowIndex
+        window.lastPeriodIndex = windowIndex
+        window.positionInFirstPeriodUs = 0
+        window.isPlaceholder = false
+        return window
+    }
+
+    override fun getPeriodCount(): Int = queue.size
+
+    override fun getPeriod(periodIndex: Int, period: Period, setIds: Boolean): Period {
+        val id = queue.getOrNull(periodIndex)?.mediaId ?: periodIndex.toString()
+        if (periodIndex == currentIndex && currentMediaItem != null) {
+            val activeTimeline = baseTimeline
+            if (!activeTimeline.isEmpty) {
+                activeTimeline.getPeriod(0, period, setIds)
+                period.windowIndex = periodIndex
+                if (setIds) {
+                    period.id = id
+                    period.uid = id
+                }
+                return period
+            }
+        }
+        period.id = id
+        period.uid = id
+        period.windowIndex = periodIndex
+        period.durationUs = C.TIME_UNSET
+        period.positionInWindowUs = 0
+        return period
+    }
+
+    override fun getIndexOfPeriod(uid: Any): Int {
+        val id = uid as? String ?: return C.INDEX_UNSET
+        return queue.indexOfFirst { it.mediaId == id }
+    }
+
+    override fun getUidOfPeriod(periodIndex: Int): Any {
+        return queue.getOrNull(periodIndex)?.mediaId ?: periodIndex.toString()
     }
 }

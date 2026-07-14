@@ -206,10 +206,13 @@ object SongPlayer {
         }
     }
 
-    fun playSong(song: String, context: Context) {
+    @Volatile private var currentMediaId: String? = null
+
+    fun playSong(song: String, context: Context, mediaId: String? = null) {
         val appContext = context.applicationContext
         appCtx = appContext
         currentRequest = song
+        currentMediaId = mediaId
         playWhenResolved = true
         // Remember the play-query so history can replay this track on tap.
         boundState?.setSongUrl(song)
@@ -317,6 +320,7 @@ object SongPlayer {
             .apply { if (metaCover.isNotBlank()) setArtworkUri(android.net.Uri.parse(metaCover)) }
             .build()
         return MediaItem.Builder()
+            .apply { currentMediaId?.let { setMediaId(it) } }
             .setUri(streamUrl)
             // Hint the container so ExoPlayer picks the right source/extractor even
             // when the URL has no extension: TIDAL lossless is a DASH .mpd manifest,
