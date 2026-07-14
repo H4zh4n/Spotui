@@ -162,6 +162,11 @@ class PlaybackService : MediaLibraryService() {
             ): ImmutableList<CommandButton> {
                 val base =
                     super.getMediaButtons(session, playerCommands, customLayout, showPauseButton)
+                android.util.Log.d("PlaybackService", "getMediaButtons: playerCommands=$playerCommands")
+                android.util.Log.d("PlaybackService", "getMediaButtons: baseButtons size=${base.size}")
+                for (b in base) {
+                    android.util.Log.d("PlaybackService", "getMediaButtons: button displayName=${b.displayName}, customAction=${b.sessionCommand?.customAction}, playerCommand=${b.playerCommand}")
+                }
                 val repeatBtn = base.find { it.sessionCommand?.customAction == "ACTION_REPEAT" }
                 val closeBtn = base.find { it.sessionCommand?.customAction == "ACTION_CLOSE" }
                 val transport = base.filter {
@@ -198,22 +203,7 @@ class PlaybackService : MediaLibraryService() {
             .setSessionActivity(sessionActivity)
             .build()
 
-        // Keep the session queue in sync with the in-app queue changes
-        serviceScope.launch {
-            snapshotFlow { currentSongState.queue.value }
-                .distinctUntilChanged()
-                .collect {
-                    activeForwardingPlayer?.invalidateTimeline()
-                }
-        }
 
-        serviceScope.launch {
-            snapshotFlow { currentSongState.songId.value }
-                .distinctUntilChanged()
-                .collect {
-                    activeForwardingPlayer?.invalidateTimeline()
-                }
-        }
 
         // When a crossfade promotes a new ExoPlayer instance, re-bind the session to it
         // (runs on the main thread; setPlayer is the supported way to swap a session's player).
@@ -258,166 +248,31 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
-    private var activeForwardingPlayer: QueueForwardingPlayer? = null
+    private var activeForwardingPlayer: ForwardingPlayer? = null
 
-    private fun wrap(base: Player): QueueForwardingPlayer {
-        return QueueForwardingPlayer(base).also { activeForwardingPlayer = it }
-    }
+    private fun wrap(base: Player): ForwardingPlayer {
+        return object : ForwardingPlayer(base) {
+            override fun getAvailableCommands(): Player.Commands =
+                super.getAvailableCommands().buildUpon()
+                    .add(COMMAND_SEEK_TO_NEXT)
+                    .add(COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                    .add(COMMAND_SEEK_TO_PREVIOUS)
+                    .add(COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+                    .build()
 
-    private inner class QueueForwardingPlayer(private val base: Player) : ForwardingPlayer(base) {
-        private val listenerMap = java.util.concurrent.ConcurrentHashMap<Player.Listener, ListenerWrapper>()
-
-        override fun addListener(listener: Player.Listener) {
-            val wrapper = ListenerWrapper(listener)
-            listenerMap[listener] = wrapper
-            super.addListener(wrapper)
-        }
-
-        override fun removeListener(listener: Player.Listener) {
-            val wrapper = listenerMap.remove(listener)
-            if (wrapper != null) {
-                super.removeListener(wrapper)
-            } else {
-                super.removeListener(listener)
-            }
-        }
-
-        fun invalidateTimeline() {
-            val timeline = currentTimeline
-            listenerMap.values.forEach { wrapper ->
-                wrapper.delegate.onTimelineChanged(timeline, Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED)
-            }
-        }
-
-        private inner class ListenerWrapper(val delegate: Player.Listener) : Player.Listener by delegate {
-            override fun onTimelineChanged(timeline: Timeline, reason: Int) {
-                delegate.onTimelineChanged(currentTimeline, reason)
+            override fun isCommandAvailable(command: Int): Boolean = when (command) {
+                COMMAND_SEEK_TO_NEXT, COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+                COMMAND_SEEK_TO_PREVIOUS, COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> true
+                else -> super.isCommandAvailable(command)
             }
 
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                delegate.onMediaItemTransition(currentMediaItem, reason)
-            }
-
-            override fun onPositionDiscontinuity(
-                oldPosition: Player.PositionInfo,
-                newPosition: Player.PositionInfo,
-                reason: Int
-            ) {
-                val idx = currentMediaItemIndex
-                val item = currentMediaItem
-                val mappedOld = Player.PositionInfo(
-                    oldPosition.windowUid ?: idx,
-                    idx,
-                    item,
-                    oldPosition.periodUid ?: idx,
-                    idx,
-                    oldPosition.positionMs,
-                    oldPosition.contentPositionMs,
-                    oldPosition.adGroupIndex,
-                    oldPosition.adIndexInAdGroup
-                )
-                val mappedNew = Player.PositionInfo(
-                    newPosition.windowUid ?: idx,
-                    idx,
-                    item,
-                    newPosition.periodUid ?: idx,
-                    idx,
-                    newPosition.positionMs,
-                    newPosition.contentPositionMs,
-                    newPosition.adGroupIndex,
-                    newPosition.adIndexInAdGroup
-                )
-                delegate.onPositionDiscontinuity(mappedOld, mappedNew, reason)
-            }
-
-            override fun onEvents(player: Player, events: Player.Events) {
-                delegate.onEvents(this@QueueForwardingPlayer, events)
-            }
-        }
-
-        override fun getCurrentTimeline(): Timeline {
-            val q = currentSongState.queue.value
-            val curId = currentSongState.songId.value
-            val idx = q.indexOfFirst { it.id == curId }.coerceAtLeast(0)
-            val mediaItems = q.map { playable(it) }
-            val currentItem = base.currentMediaItem
-            return QueueTimeline(base.currentTimeline, currentItem, mediaItems, idx)
-        }
-
-        override fun getMediaItemCount(): Int = currentSongState.queue.value.size
-
-        override fun getMediaItemAt(index: Int): MediaItem {
-            val q = currentSongState.queue.value
-            if (index in q.indices) {
-                return playable(q[index])
-            }
-            return super.getMediaItemAt(index)
-        }
-
-        override fun getCurrentMediaItemIndex(): Int {
-            val q = currentSongState.queue.value
-            val baseItem = base.currentMediaItem
-            if (baseItem != null && baseItem.mediaId.startsWith("song/")) {
-                val idx = q.indexOfFirst { "song/${it.id}" == baseItem.mediaId }
-                if (idx >= 0) return idx
-            }
-            val curId = currentSongState.songId.value
-            val idx = q.indexOfFirst { it.id == curId }
-            return if (idx >= 0) idx else 0
-        }
-
-        override fun getCurrentMediaItem(): MediaItem? {
-            val q = currentSongState.queue.value
-            val baseItem = base.currentMediaItem
-            if (baseItem != null && baseItem.mediaId.startsWith("song/")) {
-                val song = q.firstOrNull { "song/${it.id}" == baseItem.mediaId }
-                if (song != null) return playable(song)
-            }
-            val curId = currentSongState.songId.value
-            val song = q.firstOrNull { it.id == curId }
-            return song?.let { playable(it) } ?: super.getCurrentMediaItem()
-        }
-
-        override fun getCurrentPeriodIndex(): Int {
-            return currentMediaItemIndex
-        }
-
-        override fun getAvailableCommands(): Player.Commands =
-            super.getAvailableCommands().buildUpon()
-                .add(COMMAND_SEEK_TO_NEXT)
-                .add(COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
-                .add(COMMAND_SEEK_TO_PREVIOUS)
-                .add(COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
-                .build()
-
-        override fun isCommandAvailable(command: Int): Boolean = when (command) {
-            COMMAND_SEEK_TO_NEXT, COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
-            COMMAND_SEEK_TO_PREVIOUS, COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> true
-            else -> super.isCommandAvailable(command)
-        }
-
-        override fun hasNextMediaItem() = true
-        override fun hasPreviousMediaItem() = true
-        override fun seekToNext() = advance(forward = true)
-        override fun seekToNextMediaItem() = advance(forward = true)
-        override fun seekToPrevious() = advance(forward = false)
-        override fun seekToPreviousMediaItem() = advance(forward = false)
-
-        override fun seekTo(mediaItemIndex: Int, positionMs: Long) {
-            val q = currentSongState.queue.value
-            val curId = currentSongState.songId.value
-            val curIdx = q.indexOfFirst { it.id == curId }
-            if (mediaItemIndex == curIdx) {
-                super.seekTo(0, positionMs)
-            } else if (mediaItemIndex in q.indices) {
-                val song = q[mediaItemIndex]
-                currentSongState.updateSongState(
-                    song.coverUri, song.title, song.singer, true,
-                    song.id, mediaItemIndex, song.album
-                )
-                SongPlayer.playSong(song.url, applicationContext, "song/${song.id}")
-            }
-        }
+            override fun hasNextMediaItem() = true
+            override fun hasPreviousMediaItem() = true
+            override fun seekToNext() = advance(forward = true)
+            override fun seekToNextMediaItem() = advance(forward = true)
+            override fun seekToPrevious() = advance(forward = false)
+            override fun seekToPreviousMediaItem() = advance(forward = false)
+        }.also { activeForwardingPlayer = it }
     }
 
     /** Advance the in-app queue one step in the given direction and start it. */
@@ -832,76 +687,5 @@ class PlaybackService : MediaLibraryService() {
         mediaSession?.release()
         mediaSession = null
         super.onDestroy()
-    }
-}
-
-class QueueTimeline(
-    private val baseTimeline: Timeline,
-    private val currentMediaItem: MediaItem?,
-    private val queue: List<MediaItem>,
-    private val currentIndex: Int
-) : Timeline() {
-
-    override fun getWindowCount(): Int = queue.size
-
-    override fun getWindow(windowIndex: Int, window: Window, defaultPositionProjectionUs: Long): Window {
-        val item = queue.getOrNull(windowIndex) ?: MediaItem.EMPTY
-        if (windowIndex == currentIndex && currentMediaItem != null) {
-            val activeTimeline = baseTimeline
-            if (!activeTimeline.isEmpty) {
-                activeTimeline.getWindow(0, window, defaultPositionProjectionUs)
-                window.mediaItem = item
-                return window
-            }
-        }
-        window.uid = windowIndex
-        window.mediaItem = item
-        window.manifest = null
-        window.presentationStartTimeMs = C.TIME_UNSET
-        window.windowStartTimeMs = C.TIME_UNSET
-        window.elapsedRealtimeEpochOffsetMs = C.TIME_UNSET
-        window.isSeekable = true
-        window.isDynamic = false
-        window.liveConfiguration = null
-        window.defaultPositionUs = 0
-        window.durationUs = C.TIME_UNSET
-        window.firstPeriodIndex = windowIndex
-        window.lastPeriodIndex = windowIndex
-        window.positionInFirstPeriodUs = 0
-        window.isPlaceholder = false
-        return window
-    }
-
-    override fun getPeriodCount(): Int = queue.size
-
-    override fun getPeriod(periodIndex: Int, period: Period, setIds: Boolean): Period {
-        val id = queue.getOrNull(periodIndex)?.mediaId ?: periodIndex.toString()
-        if (periodIndex == currentIndex && currentMediaItem != null) {
-            val activeTimeline = baseTimeline
-            if (!activeTimeline.isEmpty) {
-                activeTimeline.getPeriod(0, period, setIds)
-                period.windowIndex = periodIndex
-                if (setIds) {
-                    period.id = id
-                    period.uid = id
-                }
-                return period
-            }
-        }
-        period.id = id
-        period.uid = id
-        period.windowIndex = periodIndex
-        period.durationUs = C.TIME_UNSET
-        period.positionInWindowUs = 0
-        return period
-    }
-
-    override fun getIndexOfPeriod(uid: Any): Int {
-        val id = uid as? String ?: return C.INDEX_UNSET
-        return queue.indexOfFirst { it.mediaId == id }
-    }
-
-    override fun getUidOfPeriod(periodIndex: Int): Any {
-        return queue.getOrNull(periodIndex)?.mediaId ?: periodIndex.toString()
     }
 }
