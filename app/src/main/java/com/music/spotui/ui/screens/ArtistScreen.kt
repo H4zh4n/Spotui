@@ -74,10 +74,7 @@ import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.ArtistViewModel
 import com.music.spotui.ui.viewmodel.PlayerViewModel
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
-import androidx.compose.material3.rememberSwipeToDismissBoxState
-import androidx.compose.material.icons.automirrored.filled.List
+import com.music.spotui.ui.components.SwipeToPlayNextWrapper
 
 private val SpotifyGreen = Color(0xFF1ED760)
 
@@ -495,39 +492,14 @@ private fun PopularTrackRow(
     val titleColor =
         if (song.id == artistViewModel.currentSongId.value) Color(AppPalette.toArgb()) else Color.White
 
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            if (value == SwipeToDismissBoxValue.StartToEnd) {
-                playerViewModel.addToQueue(song)
-                android.widget.Toast.makeText(
-                    context,
-                    "${song.title} added to queue",
-                    android.widget.Toast.LENGTH_SHORT
-                ).show()
-            }
-            false
-        }
-    )
-
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = true,
-        enableDismissFromEndToStart = false,
-        backgroundContent = {
-            Box(
-                contentAlignment = Alignment.CenterStart,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0xFF1DB954)) // Spotify Green
-                    .padding(horizontal = 24.dp)
-            ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_queue_add),
-                    contentDescription = "Add to queue",
-                    tint = Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
+    SwipeToPlayNextWrapper(
+        onPlayNext = {
+            playerViewModel.playNext(song)
+            android.widget.Toast.makeText(
+                context,
+                "${song.title} will play next",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
         }
     ) {
         Row(

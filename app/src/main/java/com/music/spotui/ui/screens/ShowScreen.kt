@@ -49,10 +49,7 @@ import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.viewmodel.ShowViewModel
 import com.music.spotui.ui.viewmodel.PlayerViewModel
 import androidx.compose.ui.res.painterResource
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
-import androidx.compose.material3.rememberSwipeToDismissBoxState
-import androidx.compose.material.icons.automirrored.filled.List
+import com.music.spotui.ui.components.SwipeToPlayNextWrapper
 
 @OptIn(ExperimentalGlideComposeApi::class)
 @Composable
@@ -140,39 +137,14 @@ fun ShowScreen(navController: NavController, showId: String, showName: String = 
 
         items(episodes.size) { i ->
             val ep = episodes[i]
-            val dismissState = rememberSwipeToDismissBoxState(
-                confirmValueChange = { value ->
-                    if (value == SwipeToDismissBoxValue.StartToEnd) {
-                        playerViewModel.addToQueue(ep)
-                        android.widget.Toast.makeText(
-                            context,
-                            "${ep.title} added to queue",
-                            android.widget.Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                    false
-                }
-            )
-
-            SwipeToDismissBox(
-                state = dismissState,
-                enableDismissFromStartToEnd = true,
-                enableDismissFromEndToStart = false,
-                backgroundContent = {
-                    Box(
-                        contentAlignment = Alignment.CenterStart,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color(0xFF1DB954)) // Spotify Green
-                            .padding(horizontal = 24.dp)
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.ic_queue_add),
-                            contentDescription = "Add to queue",
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
+            SwipeToPlayNextWrapper(
+                onPlayNext = {
+                    playerViewModel.playNext(ep)
+                    android.widget.Toast.makeText(
+                        context,
+                        "${ep.title} will play next",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
                 }
             ) {
                 Row(

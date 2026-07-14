@@ -65,6 +65,10 @@ import com.music.spotui.ui.navigation.Routes
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.GridBackground
 import com.music.spotui.ui.viewmodel.PlayerViewModel
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -471,5 +475,45 @@ fun Snackbar(showMessage : String) {
             color = Color.Black,
             text = showMessage
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SwipeToPlayNextWrapper(
+    onPlayNext: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.StartToEnd) {
+                onPlayNext()
+            }
+            false
+        }
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = true,
+        enableDismissFromEndToStart = false,
+        backgroundContent = {
+            Box(
+                contentAlignment = Alignment.CenterStart,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0xFF1DB954)) // Spotify Green
+                    .padding(horizontal = 24.dp)
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_queue_add),
+                    contentDescription = "Play next",
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+    ) {
+        content()
     }
 }
