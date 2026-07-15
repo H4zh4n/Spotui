@@ -569,7 +569,7 @@ class PlaybackService : MediaLibraryService() {
 
     private suspend fun childrenOf(parentId: String): List<MediaItem> = try {
         // Enforce a strict fallback timeout for Android Auto responsiveness
-        kotlinx.coroutines.withTimeoutOrNull(1500) {
+        kotlinx.coroutines.withTimeoutOrNull(8000) {
             when {
                 parentId == ROOT -> listOf(
                     folder(
@@ -660,8 +660,8 @@ class PlaybackService : MediaLibraryService() {
         var result: T? = null
         try {
             // Android Auto requires quick responses to avoid infinite loading screens.
-            // A 2000ms timeout ensures we never hang the media browser thread.
-            kotlinx.coroutines.withTimeoutOrNull(2000) {
+            // An 8000ms timeout ensures we never hang the media browser thread.
+            kotlinx.coroutines.withTimeoutOrNull(8000) {
                 flow.collect { response ->
                     if (response is Response.Success) {
                         result = response.data
