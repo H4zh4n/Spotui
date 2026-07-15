@@ -224,6 +224,7 @@ object SongPlayer {
         runCatching {
             ensurePlayer(appContext)
             player?.pause()
+            player?.setMediaItem(buildMetadataMediaItem())
         }
 
         // Podcast episodes are encoded as "episode:<id>" queries — play them via the
@@ -326,6 +327,18 @@ object SongPlayer {
             // when the URL has no extension: TIDAL lossless is a DASH .mpd manifest,
             // and single-file lossless is FLAC.
             .apply { if (mimeType != null) setMimeType(mimeType) }
+            .setMediaMetadata(metadata)
+            .build()
+    }
+
+    private fun buildMetadataMediaItem(): MediaItem {
+        val metadata = androidx.media3.common.MediaMetadata.Builder()
+            .setTitle(metaTitle)
+            .setArtist(metaArtist)
+            .apply { if (metaCover.isNotBlank()) setArtworkUri(android.net.Uri.parse(metaCover)) }
+            .build()
+        return MediaItem.Builder()
+            .apply { currentMediaId?.let { setMediaId(it) } }
             .setMediaMetadata(metadata)
             .build()
     }

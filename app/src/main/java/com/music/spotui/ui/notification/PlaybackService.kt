@@ -446,31 +446,6 @@ class PlaybackService : MediaLibraryService() {
                 .build()
         }
 
-        /**
-         * Intercept next/previous commands before they reach the player.
-         * This is more reliable than the ForwardingPlayer override because it
-         * catches ALL command paths (MediaController, Android Auto, Bluetooth,
-         * and automation apps like MacroDroid).
-         */
-        override fun onPlayerCommandRequest(
-            session: MediaSession,
-            controller: MediaSession.ControllerInfo,
-            playerCommand: Int,
-        ): Int {
-            when (playerCommand) {
-                Player.COMMAND_SEEK_TO_NEXT,
-                Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
-                    SongPlayer.next(applicationContext)
-                    return 1 // MediaSession.Callback.RESULT_PLAYER_COMMAND_HANDLED
-                }
-                Player.COMMAND_SEEK_TO_PREVIOUS,
-                Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
-                    SongPlayer.previous(applicationContext)
-                    return 1 // MediaSession.Callback.RESULT_PLAYER_COMMAND_HANDLED
-                }
-            }
-            return super.onPlayerCommandRequest(session, controller, playerCommand)
-        }
 
         override fun onCustomCommand(
             session: MediaSession,

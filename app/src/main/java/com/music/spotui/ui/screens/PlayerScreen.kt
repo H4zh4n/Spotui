@@ -662,15 +662,22 @@ fun PlayerScreen(navController: NavController) {
                             resolveStatus = playerViewModel.resolveStatus.value,
                             resolveError = playerViewModel.resolveError.value,
                             onArtistClick = {
-                        val artists = songSinger.split(",").map { it.trim() }.filter { it.isNotBlank() }
-                        val ids = playerViewModel.currentArtistIds.value.split(",").map { it.trim() }
-                        if (artists.size == 1) {
-                            val aId = ids.getOrElse(0) { "" }
-                            navController.navigate(com.music.spotui.ui.navigation.artistRoute(artists[0], aId))
-                        } else {
-                            showArtistSheet = true
-                        }
-                    },
+                                val artists = songSinger.split(",").map { it.trim() }
+                                    .filter { it.isNotBlank() }
+                                val ids = playerViewModel.currentArtistIds.value.split(",")
+                                    .map { it.trim() }
+                                if (artists.size == 1) {
+                                    val aId = ids.getOrElse(0) { "" }
+                                    navController.navigate(
+                                        com.music.spotui.ui.navigation.artistRoute(
+                                            artists[0],
+                                            aId
+                                        )
+                                    )
+                                } else {
+                                    showArtistSheet = true
+                                }
+                            },
                             spotifyTrackId = queueSongs.firstOrNull { it.id == songId }?.spotifyTrackId.orEmpty(),
                             onShowSavedIn = { showSavedIn = true },
                         )
@@ -1091,9 +1098,11 @@ fun CustomSlider(
         val trackHeightPx = with(density) { trackHeight.toPx() }
         val thumbRadiusPx = with(density) { 6.dp.toPx() }
 
-        Canvas(modifier = Modifier
-            .fillMaxWidth()
-            .height(trackHeight)) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(trackHeight)
+        ) {
             val trackY = size.height / 2f
             val thumbX = fraction * size.width
 
@@ -1190,7 +1199,8 @@ fun PlayerFull(
                 Color.White
             },
             painter = painterResource(id = R.drawable.ic_player_shuffle),
-            contentDescription = "")
+            contentDescription = ""
+        )
         Icon(
             modifier = Modifier
                 .size(35.dp)
@@ -1206,7 +1216,8 @@ fun PlayerFull(
                 },
             tint = Color.White,
             painter = painterResource(id = R.drawable.ic_player_back),
-            contentDescription = "")
+            contentDescription = ""
+        )
         androidx.compose.foundation.layout.Box(
             modifier = Modifier
                 // requiredSize forces an exact 64×64 square even if the parent Column
@@ -1277,7 +1288,8 @@ fun PlayerFull(
                 },
             tint = Color.White,
             painter = painterResource(id = R.drawable.ic_player_skip),
-            contentDescription = "")
+            contentDescription = ""
+        )
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
@@ -1443,11 +1455,17 @@ fun ArtistsSheet(
     LaunchedEffect(artistIds) {
         artistIds.filter { it.isNotBlank() }.forEach { id ->
             val cachedUrl = artistImageCache[id]
-            android.util.Log.d("ArtistsSheetCache", "Checking in-memory cache for $id -> $cachedUrl")
+            android.util.Log.d(
+                "ArtistsSheetCache",
+                "Checking in-memory cache for $id -> $cachedUrl"
+            )
             if (!cachedUrl.isNullOrBlank()) {
                 artistImages[id] = cachedUrl
             } else {
-                android.util.Log.d("ArtistsSheetCache", "Cache miss for $id, fetching from Spotify...")
+                android.util.Log.d(
+                    "ArtistsSheetCache",
+                    "Cache miss for $id, fetching from Spotify..."
+                )
                 if (com.music.spotui.data.api.SpotifyTokenProvider.ensureToken(context)) {
                     com.metrolist.spotify.Spotify.artist(id).getOrNull()?.let { artist ->
                         val url = artist.images.firstOrNull()?.url.orEmpty()
@@ -1455,10 +1473,16 @@ fun ArtistsSheet(
                         artistImageCache[id] = url
                         artistImages[id] = url
                     } ?: run {
-                        android.util.Log.e("ArtistsSheetCache", "Failed to fetch artist details for $id")
+                        android.util.Log.e(
+                            "ArtistsSheetCache",
+                            "Failed to fetch artist details for $id"
+                        )
                     }
                 } else {
-                    android.util.Log.e("ArtistsSheetCache", "Failed to ensure Spotify token for $id")
+                    android.util.Log.e(
+                        "ArtistsSheetCache",
+                        "Failed to ensure Spotify token for $id"
+                    )
                 }
             }
         }
@@ -1556,11 +1580,22 @@ fun ArtistsSheet(
                                 .clickable {
                                     following = !following
                                     if (following) {
-                                        com.music.spotui.data.preferences.addFollowedArtist(context, aId, name)
+                                        com.music.spotui.data.preferences.addFollowedArtist(
+                                            context,
+                                            aId,
+                                            name
+                                        )
                                     } else {
-                                        com.music.spotui.data.preferences.removeFollowedArtist(context, aId)
+                                        com.music.spotui.data.preferences.removeFollowedArtist(
+                                            context,
+                                            aId
+                                        )
                                     }
-                                    com.music.spotui.data.api.SpotifySync.setArtistFollowed(context, aId, following)
+                                    com.music.spotui.data.api.SpotifySync.setArtistFollowed(
+                                        context,
+                                        aId,
+                                        following
+                                    )
                                 }
                                 .padding(horizontal = 16.dp, vertical = 6.dp),
                         ) {
