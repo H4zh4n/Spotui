@@ -62,6 +62,7 @@ import com.music.spotui.R
 import com.music.spotui.data.api.Response
 import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.components.Loader
+import com.music.spotui.ui.components.Snackbar
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.LikedSongsViewModel
@@ -101,6 +102,15 @@ fun LikedSongsScreen(navController: NavController) {
                 menuSong = null
             },
         )
+    }
+
+    var snackbarMessage by remember { mutableStateOf("") }
+    var snackbarVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(snackbarVisible) {
+        if (snackbarVisible) {
+            kotlinx.coroutines.delay(1500)
+            snackbarVisible = false
+        }
     }
 
     // Spotify's Liked Songs uses a purple → dark gradient.
@@ -199,85 +209,94 @@ fun LikedSongsScreen(navController: NavController) {
                         )
 
                         Row(
-                            horizontalArrangement = Arrangement.End,
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(52.dp)
                                 .padding(20.dp, 0.dp)
                         ) {
-                            // Download all liked songs for offline playback.
                             var likedDownloaded by remember(songs) {
                                 mutableStateOf(songs.isNotEmpty() && SongPlayer.allDownloaded(songs, context))
                             }
-                            if (songs.isNotEmpty()) {
-                                Icon(
-                                    imageVector = if (likedDownloaded)
-                                        Icons.Default.CheckCircle else ImageVector.vectorResource(R.drawable.ic_download),
-                                    tint = if (likedDownloaded) Color(AppPalette.toArgb()) else Color.White,
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .clickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null,
-                                        ) {
-                                            if (!likedDownloaded) {
-                                                SongPlayer.downloadAll(songs, context)
-                                                android.widget.Toast.makeText(
-                                                    context,
-                                                    "Downloading ${songs.size} tracks…",
-                                                    android.widget.Toast.LENGTH_SHORT,
-                                                ).show()
-                                            }
-                                        },
-                                    contentDescription = "Download liked songs",
-                                )
+
+                            if (snackbarVisible) {
+                                Box(modifier = Modifier.weight(1f)) {
+                                    Snackbar(showMessage = snackbarMessage)
+                                }
                                 Spacer(modifier = Modifier.width(16.dp))
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_queue_add),
-                                    tint = Color.White,
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .clickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null,
-                                        ) {
-                                            playerViewModel.addAllToQueue(songs)
-                                            android.widget.Toast.makeText(
-                                                context,
-                                                "${songs.size} track(s) added to queue",
-                                                android.widget.Toast.LENGTH_SHORT,
-                                            ).show()
-                                        },
-                                    contentDescription = "Add to queue",
-                                )
-                                Spacer(modifier = Modifier.width(16.dp))
-                                // Shuffle-play: start liked songs in random order.
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_player_shuffle),
-                                    tint = Color.White,
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .clickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null,
-                                        ) {
-                                            likedSongsViewModel.startShuffled(songs)?.let { first ->
-                                                SongPlayer.playSong(first.url, context)
-                                                likedSongsViewModel.updateSongState(
-                                                    first.coverUri,
-                                                    first.title,
-                                                    first.singer,
-                                                    true,
-                                                    first.id,
-                                                    0,
-                                                    "Liked Songs",
-                                                )
-                                            }
-                                        },
-                                    contentDescription = "Shuffle play",
-                                )
-                                Spacer(modifier = Modifier.width(16.dp))
+                            } else {
+                                Row(
+                                    horizontalArrangement = Arrangement.Start,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    if (songs.isNotEmpty()) {
+                                        Icon(
+                                            imageVector = if (likedDownloaded)
+                                                Icons.Default.CheckCircle else ImageVector.vectorResource(R.drawable.ic_download),
+                                            tint = if (likedDownloaded) Color(AppPalette.toArgb()) else Color.White,
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clickable(
+                                                    interactionSource = remember { MutableInteractionSource() },
+                                                    indication = null,
+                                                ) {
+                                                    if (!likedDownloaded) {
+                                                        SongPlayer.downloadAll(songs, context)
+                                                        snackbarMessage = "Downloading ${songs.size} tracks…"
+                                                        snackbarVisible = true
+                                                    }
+                                                },
+                                            contentDescription = "Download liked songs",
+                                        )
+                                        Spacer(modifier = Modifier.width(18.dp))
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.ic_queue_add),
+                                            tint = Color.White,
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clickable(
+                                                    interactionSource = remember { MutableInteractionSource() },
+                                                    indication = null,
+                                                ) {
+                                                    playerViewModel.addAllToQueue(songs)
+                                                    android.widget.Toast.makeText(
+                                                        context,
+                                                        "${songs.size} track(s) added to queue",
+                                                        android.widget.Toast.LENGTH_SHORT,
+                                                    ).show()
+                                                },
+                                            contentDescription = "Add to queue",
+                                        )
+                                        Spacer(modifier = Modifier.width(18.dp))
+                                        // Shuffle-play: start liked songs in random order.
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.ic_player_shuffle),
+                                            tint = Color.White,
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .clickable(
+                                                    interactionSource = remember { MutableInteractionSource() },
+                                                    indication = null,
+                                                ) {
+                                                    likedSongsViewModel.startShuffled(songs)?.let { first ->
+                                                        SongPlayer.playSong(first.url, context)
+                                                        likedSongsViewModel.updateSongState(
+                                                            first.coverUri,
+                                                            first.title,
+                                                            first.singer,
+                                                            true,
+                                                            first.id,
+                                                            0,
+                                                            "Liked Songs",
+                                                        )
+                                                    }
+                                                },
+                                            contentDescription = "Shuffle play",
+                                        )
+                                    }
+                                }
                             }
                             // Always visible: pause when playing, resume when this
                             // list's track is paused, otherwise start from the top.
