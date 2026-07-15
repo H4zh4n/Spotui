@@ -72,6 +72,12 @@ fun MyNavHost(
                 playerViewModel.updateSongState(
                     song.coverUri, song.title, song.singer, false, song.id, idx, song.album)
                 com.music.spotui.di.SongPlayer.setRestorePoint(song.url, positionMs)
+                // Auto-play on startup: resume playing immediately if enabled.
+                if (com.music.spotui.data.preferences.isAutoPlayEnabled(context)) {
+                    playerViewModel.updateSongState(
+                        song.coverUri, song.title, song.singer, true, song.id, idx, song.album)
+                    com.music.spotui.di.SongPlayer.playSong(song.url, context)
+                }
             }
         }
     }

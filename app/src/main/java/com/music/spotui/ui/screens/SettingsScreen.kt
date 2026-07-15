@@ -55,9 +55,11 @@ import com.music.spotui.data.preferences.getCrossfadeMs
 import com.music.spotui.data.preferences.setCrossfadeMs
 import com.music.spotui.data.preferences.getDownloadQuality
 import com.music.spotui.data.preferences.isVideoFallbackEnabled
+import com.music.spotui.data.preferences.isAutoPlayEnabled
 import com.music.spotui.data.preferences.getWifiQuality
 import com.music.spotui.data.preferences.setCellularQuality
 import com.music.spotui.data.preferences.setDownloadQuality
+import com.music.spotui.data.preferences.setAutoPlayEnabled
 import com.music.spotui.data.preferences.setVideoFallbackEnabled
 import com.music.spotui.data.preferences.setWifiQuality
 import com.music.spotui.data.preferences.getUpdateRepoUrl
@@ -77,6 +79,7 @@ fun SettingsScreen(navController: NavController) {
     var dlQ by remember { mutableStateOf(getDownloadQuality(context)) }
     var crossfadeMs by remember { mutableStateOf(getCrossfadeMs(context).toFloat()) }
     var videoFallback by remember { mutableStateOf(isVideoFallbackEnabled(context)) }
+    var autoPlay by remember { mutableStateOf(isAutoPlayEnabled(context)) }
     var batteryOptExempt by remember { mutableStateOf(BatteryOptimizationHelper.isIgnoringBatteryOptimization(context)) }
     var updateRepoUrl by remember { mutableStateOf(getUpdateRepoUrl(context)) }
 
@@ -211,6 +214,17 @@ fun SettingsScreen(navController: NavController) {
             ) {
                 videoFallback = it
                 setVideoFallbackEnabled(context, it)
+            }
+
+            Spacer(Modifier.height(12.dp))
+            SectionTitle("Playback")
+            SettingsSwitchRow(
+                title = "Auto-play on startup",
+                subtitle = "Resume playing the last track when the app opens",
+                checked = autoPlay,
+            ) {
+                autoPlay = it
+                setAutoPlayEnabled(context, it)
             }
 
             Spacer(Modifier.height(12.dp))
