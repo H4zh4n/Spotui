@@ -379,10 +379,25 @@ fun SumUpAlbumScreen(
                                         interactionSource = remember { MutableInteractionSource() },
                                         indication = null,
                                     ) {
-                                        if (!albumDownloaded && albumSongs.isNotEmpty()) {
-                                            SongPlayer.downloadAll(albumSongs, context)
-                                            snackbarMessage = "Downloading ${albumSongs.size} tracks…"
-                                            snackbarVisible = true
+                                        if (albumSongs.isNotEmpty()) {
+                                            val currentAlbum = album.firstOrNull()
+                                            com.music.spotui.data.preferences.OfflineCollectionsPref.saveCollection(
+                                                context = context,
+                                                id = "album:$albumName|$artist",
+                                                name = albumName,
+                                                coverUri = currentAlbum?.coverUri ?: albumSongs.firstOrNull()?.coverUri ?: "",
+                                                artists = currentAlbum?.artists ?: albumSongs.firstOrNull()?.singer ?: artist,
+                                                isPlaylist = false,
+                                                songs = albumSongs
+                                            )
+                                            if (!albumDownloaded) {
+                                                SongPlayer.downloadAll(albumSongs, context)
+                                                snackbarMessage = "Downloading ${albumSongs.size} tracks…"
+                                                snackbarVisible = true
+                                            } else {
+                                                snackbarMessage = "Album added to offline library"
+                                                snackbarVisible = true
+                                            }
                                         }
                                     },
                                 contentDescription = "Download album",

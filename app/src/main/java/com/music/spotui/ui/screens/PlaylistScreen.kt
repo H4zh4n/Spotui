@@ -359,9 +359,21 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                                                     interactionSource = remember { MutableInteractionSource() },
                                                     indication = null,
                                                 ) {
+                                                    com.music.spotui.data.preferences.OfflineCollectionsPref.saveCollection(
+                                                        context = context,
+                                                        id = playlistId,
+                                                        name = playlist.name,
+                                                        coverUri = playlist.coverUri,
+                                                        artists = playlist.artists,
+                                                        isPlaylist = true,
+                                                        songs = songs
+                                                    )
                                                     if (!playlistDownloaded) {
                                                         SongPlayer.downloadAll(songs, context)
                                                         snackbarMessage = "Downloading ${songs.size} tracks…"
+                                                        snackbarVisible = true
+                                                    } else {
+                                                        snackbarMessage = "Playlist added to offline library"
                                                         snackbarVisible = true
                                                     }
                                                 },
