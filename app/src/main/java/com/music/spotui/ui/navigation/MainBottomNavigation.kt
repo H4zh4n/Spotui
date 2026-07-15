@@ -116,9 +116,13 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
                                     }
                                 },
                                 onClick = {
-                                    navController.navigate(item.route) {
-                                        navController.graph.startDestinationRoute?.let {
-                                            popUpTo(item.route)
+                                    if (currentRoute != item.route) {
+                                        navController.navigate(item.route) {
+                                            navController.graph.startDestinationRoute?.let { startRoute ->
+                                                popUpTo(startRoute) {
+                                                    saveState = true
+                                                }
+                                            }
                                             launchSingleTop = true
                                             restoreState = true
                                         }
