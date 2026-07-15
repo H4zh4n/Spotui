@@ -20,6 +20,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -94,9 +97,15 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
                         val navStack by navController.currentBackStackEntryAsState()
                         val currentRoute = navStack?.destination?.route
 
+                        val rootRoutes = listOf(Routes.Home.route, Routes.Search.route, Routes.Library.route)
+                        var currentTab by rememberSaveable { mutableStateOf(Routes.Home.route) }
+                        if (currentRoute in rootRoutes) {
+                            currentTab = currentRoute!!
+                        }
+
                         navItems.forEach { item ->
                             NavigationBarItem(
-                                selected = currentRoute == item.route,
+                                selected = currentTab == item.route,
                                 icon = {
                                     Icon(
                                         painter = painterResource(
@@ -105,7 +114,7 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
                                     )
                                 },
                                 label = {
-                                    if (currentRoute == item.route) {
+                                    if (currentTab == item.route) {
                                         Text(color = Color.White, text = item.label, fontSize = 11.sp)
                                     } else {
                                         Text(
@@ -116,7 +125,7 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
                                     }
                                 },
                                 onClick = {
-                                    if (currentRoute != item.route) {
+                                    if (currentTab != item.route) {
                                         navController.navigate(item.route) {
                                             navController.graph.startDestinationRoute?.let { startRoute ->
                                                 popUpTo(startRoute) {
@@ -126,6 +135,8 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
                                             launchSingleTop = true
                                             restoreState = true
                                         }
+                                    } else if (currentRoute != item.route) {
+                                        navController.popBackStack(item.route, inclusive = false)
                                     }
                                 },
                                 alwaysShowLabel = true,
