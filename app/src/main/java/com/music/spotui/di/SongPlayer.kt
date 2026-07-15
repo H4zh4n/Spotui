@@ -1502,6 +1502,88 @@ object SongPlayer {
         currentRequest = ""
     }
 
+    fun togglePlay() {
+        if (webPlaybackActive()) {
+            if (SpotifyWebPlayer.isPlaying) pause() else play()
+            return
+        }
+        player?.let {
+            if (it.playWhenReady) pause() else play()
+        }
+    }
+
+    fun next(context: Context) {
+        val state = boundState
+        if (state == null) {
+            android.util.Log.w(TAG, "next: boundState is null")
+            return
+        }
+        val q = state.queue.value
+        if (q.isEmpty()) {
+            android.util.Log.w(TAG, "next: queue is empty")
+            return
+        }
+        val curId = state.songId.value
+        val cur = q.indexOfFirst { it.id == curId }
+            .let { if (it >= 0) it else state.songIndex.value }
+            .coerceIn(0, q.size - 1)
+        android.util.Log.d(TAG, "next: cur=$cur q.size=${q.size} repeat=${state.repeat.value} curId=$curId")
+        val nextIdx: Int
+        if (cur < q.size - 1) {
+            nextIdx = cur + 1
+        } else {
+            if (state.repeat.value == RepeatMode.ALL) {
+                nextIdx = 0
+            } else {
+                android.util.Log.d(TAG, "next: at end, repeat off - not advancing")
+                return
+            }
+        }
+        val song = q[nextIdx]
+        android.util.Log.d(TAG, "next: advancing to idx=$nextIdx song=${song.title}")
+        state.updateSongState(
+            song.coverUri, song.title, song.singer, true,
+            song.id, nextIdx, song.album
+        )
+        playSong(song.url, context, "song/${song.id}")
+    }
+
+    fun previous(context: Context) {
+        val state = boundState
+        if (state == null) {
+            android.util.Log.w(TAG, "previous: boundState is null")
+            return
+        }
+        val q = state.queue.value
+        if (q.isEmpty()) {
+            android.util.Log.w(TAG, "previous: queue is empty")
+            return
+        }
+        val curId = state.songId.value
+        val cur = q.indexOfFirst { it.id == curId }
+            .let { if (it >= 0) it else state.songIndex.value }
+            .coerceIn(0, q.size - 1)
+        android.util.Log.d(TAG, "previous: cur=$cur q.size=${q.size} repeat=${state.repeat.value}")
+        val nextIdx: Int
+        if (cur > 0) {
+            nextIdx = cur - 1
+        } else {
+            if (state.repeat.value == RepeatMode.ALL) {
+                nextIdx = q.size - 1
+            } else {
+                android.util.Log.d(TAG, "previous: at start, repeat off - not going back")
+                return
+            }
+        }
+        val song = q[nextIdx]
+        android.util.Log.d(TAG, "previous: going to idx=$nextIdx song=${song.title}")
+        state.updateSongState(
+            song.coverUri, song.title, song.singer, true,
+            song.id, nextIdx, song.album
+        )
+        playSong(song.url, context, "song/${song.id}")
+    }
+
     fun seekTo(position: Long) {
         cancelCrossfade()
         if (webPlaybackActive()) { SpotifyWebPlayer.seekTo(position); return }

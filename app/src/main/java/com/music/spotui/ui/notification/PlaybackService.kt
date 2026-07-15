@@ -1,8 +1,13 @@
 package com.music.spotui.ui.notification
 
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.compose.runtime.snapshotFlow
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
@@ -233,6 +238,24 @@ class PlaybackService : MediaLibraryService() {
                 currentSongState.updatePlayingState(SpotifyWebPlayer.isPlaying)
             }
         }
+
+        // Register a receiver for legacy music control broadcasts used by
+        // automation apps (MacroDroid, Tasker, etc.).
+        val musicFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_MEDIA_BUTTON)
+            addAction("com.android.music.musicservicecommand")
+            addAction("com.android.music.play")
+            addAction("com.android.music.pause")
+            addAction("com.android.music.next")
+            addAction("com.android.music.previous")
+            addAction("com.android.music.togglepause")
+            addAction("com.android.music.stop")
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(mediaControlReceiver, musicFilter, Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(mediaControlReceiver, musicFilter)
+        }
     }
 
     /** Point the media session at whichever engine is currently producing audio. */
@@ -245,6 +268,50 @@ class PlaybackService : MediaLibraryService() {
             webPlayer ?: return
         } else {
             wrap(SongPlayer.exoPlayer ?: return)
+        }
+    }
+
+    /**
+     * Receives legacy music control broadcasts from automation apps (MacroDroid,
+     * Tasker) that use the "com.android.music.musicservicecommand" pattern or
+     * direct action intents to control media playback.
+     */
+    private val mediaControlReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            android.util.Log.d("PlaybackService", "BroadcastReceiver: action=${intent.action} extras=${intent.extras?.keySet()}")
+            when (intent.action) {
+                Intent.ACTION_MEDIA_BUTTON -> {
+                    val keyEvent = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
+                    android.util.Log.d("PlaybackService", "BroadcastReceiver: ACTION_MEDIA_BUTTON keyCode=${keyEvent?.keyCode}")
+                    if (keyEvent != null && keyEvent.action == KeyEvent.ACTION_DOWN) {
+                        when (keyEvent.keyCode) {
+                            KeyEvent.KEYCODE_MEDIA_NEXT -> SongPlayer.next(context)
+                            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> SongPlayer.previous(context)
+                            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> SongPlayer.togglePlay()
+                            KeyEvent.KEYCODE_MEDIA_PLAY -> SongPlayer.play()
+                            KeyEvent.KEYCODE_MEDIA_PAUSE -> SongPlayer.pause()
+                            KeyEvent.KEYCODE_MEDIA_STOP -> SongPlayer.pause()
+                        }
+                    }
+                    if (isOrderedBroadcast) abortBroadcast()
+                }
+                "com.android.music.musicservicecommand" -> {
+                    when (intent.getStringExtra("command")) {
+                        "play" -> SongPlayer.play()
+                        "pause" -> SongPlayer.pause()
+                        "togglepause", "toggle" -> SongPlayer.togglePlay()
+                        "next" -> SongPlayer.next(context)
+                        "previous" -> SongPlayer.previous(context)
+                        "stop" -> SongPlayer.pause()
+                    }
+                }
+                "com.android.music.play" -> SongPlayer.play()
+                "com.android.music.pause" -> SongPlayer.pause()
+                "com.android.music.next" -> SongPlayer.next(context)
+                "com.android.music.previous" -> SongPlayer.previous(context)
+                "com.android.music.togglepause" -> SongPlayer.togglePlay()
+                "com.android.music.stop" -> SongPlayer.pause()
+            }
         }
     }
 
@@ -277,41 +344,7 @@ class PlaybackService : MediaLibraryService() {
 
     /** Advance the in-app queue one step in the given direction and start it. */
     private fun advance(forward: Boolean) {
-        val queue = currentSongState.queue.value
-        if (queue.isEmpty()) return
-        val curId = currentSongState.songId.value
-        val cur = queue.indexOfFirst { it.id == curId }
-            .let { if (it >= 0) it else currentSongState.songIndex.value }
-            .coerceIn(0, queue.size - 1)
-
-        val nextIdx: Int
-        if (forward) {
-            if (cur < queue.size - 1) {
-                nextIdx = cur + 1
-            } else {
-                if (currentSongState.repeat.value == RepeatMode.ALL) {
-                    nextIdx = 0
-                } else {
-                    return // do nothing at the end of the queue
-                }
-            }
-        } else {
-            if (cur > 0) {
-                nextIdx = cur - 1
-            } else {
-                if (currentSongState.repeat.value == RepeatMode.ALL) {
-                    nextIdx = queue.size - 1
-                } else {
-                    return // do nothing at the beginning of the queue
-                }
-            }
-        }
-        val song = queue[nextIdx]
-        currentSongState.updateSongState(
-            song.coverUri, song.title, song.singer, true,
-            song.id, nextIdx, song.album
-        )
-        SongPlayer.playSong(song.url, applicationContext, "song/${song.id}")
+        if (forward) SongPlayer.next(applicationContext) else SongPlayer.previous(applicationContext)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
@@ -359,6 +392,43 @@ class PlaybackService : MediaLibraryService() {
 
     private inner class LibraryCallback : MediaLibrarySession.Callback {
 
+        /**
+         * Intercept media button events at the earliest point — BEFORE the session
+         * checks command availability or calls onPlayerCommandRequest. This ensures
+         * next/previous work even when MacroDroid dispatches a key event without
+         * being a connected MediaController.
+         */
+        override fun onMediaButtonEvent(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            intent: Intent,
+        ): Boolean {
+            val keyEvent = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
+            android.util.Log.d("PlaybackService", "onMediaButtonEvent: keyEvent=$keyEvent action=${intent.action}")
+            if (keyEvent == null) {
+                android.util.Log.w("PlaybackService", "onMediaButtonEvent: no KeyEvent in intent extras=${intent.extras?.keySet()}")
+                return false
+            }
+            android.util.Log.d("PlaybackService", "onMediaButtonEvent: keyCode=${keyEvent.keyCode} action=${keyEvent.action}")
+            if (keyEvent.action != KeyEvent.ACTION_DOWN) return false
+            when (keyEvent.keyCode) {
+                KeyEvent.KEYCODE_MEDIA_NEXT -> {
+                    android.util.Log.d("PlaybackService", "onMediaButtonEvent: handling KEYCODE_MEDIA_NEXT")
+                    SongPlayer.next(applicationContext)
+                    return true
+                }
+                KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
+                    android.util.Log.d("PlaybackService", "onMediaButtonEvent: handling KEYCODE_MEDIA_PREVIOUS")
+                    SongPlayer.previous(applicationContext)
+                    return true
+                }
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                    android.util.Log.d("PlaybackService", "onMediaButtonEvent: KEYCODE_MEDIA_PLAY_PAUSE (not intercepting)")
+                }
+            }
+            return false
+        }
+
         override fun onConnect(
             session: MediaSession,
             controller: MediaSession.ControllerInfo
@@ -374,6 +444,32 @@ class PlaybackService : MediaLibraryService() {
                 .setAvailablePlayerCommands(baseResult.availablePlayerCommands)
                 .setCustomLayout(buildCustomLayout(currentSongState.repeat.value))
                 .build()
+        }
+
+        /**
+         * Intercept next/previous commands before they reach the player.
+         * This is more reliable than the ForwardingPlayer override because it
+         * catches ALL command paths (MediaController, Android Auto, Bluetooth,
+         * and automation apps like MacroDroid).
+         */
+        override fun onPlayerCommandRequest(
+            session: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            playerCommand: Int,
+        ): Int {
+            when (playerCommand) {
+                Player.COMMAND_SEEK_TO_NEXT,
+                Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
+                    SongPlayer.next(applicationContext)
+                    return 1 // MediaSession.Callback.RESULT_PLAYER_COMMAND_HANDLED
+                }
+                Player.COMMAND_SEEK_TO_PREVIOUS,
+                Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
+                    SongPlayer.previous(applicationContext)
+                    return 1 // MediaSession.Callback.RESULT_PLAYER_COMMAND_HANDLED
+                }
+            }
+            return super.onPlayerCommandRequest(session, controller, playerCommand)
         }
 
         override fun onCustomCommand(
@@ -678,6 +774,7 @@ class PlaybackService : MediaLibraryService() {
 
     override fun onDestroy() {
         serviceScope.cancel()
+        runCatching { unregisterReceiver(mediaControlReceiver) }
         SongPlayer.exoPlayer?.removeListener(playerListener)
         SongPlayer.onPlayerSwapped = null
         SpotifyWebPlayer.onStateChanged = null
