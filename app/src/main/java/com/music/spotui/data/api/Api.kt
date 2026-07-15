@@ -534,7 +534,16 @@ class Api @Inject constructor(
             emit(Response.Success(emptyList())); return@flow
         }
         if (!SpotifyTokenProvider.ensureToken(context)) {
-            emit(Response.Error("Spotify not authenticated — set sp_dc cookie")); return@flow
+            val col = com.music.spotui.data.preferences.OfflineCollectionsPref.getCollection(context, "album:$albumName|$artist")
+            if (col != null) {
+                val downloadedSongs = col.songs.filter {
+                    com.music.spotui.data.preferences.isDownloaded(context, it.id.toString())
+                }
+                emit(Response.Success(downloadedSongs))
+            } else {
+                emit(Response.Error("Spotify not authenticated — set sp_dc cookie"))
+            }
+            return@flow
         }
         // Two albums can share a name (different artists). Search the name and,
         // when we know the artist, pick the candidate whose artists match instead
@@ -566,7 +575,16 @@ class Api @Inject constructor(
             emit(Response.Success(emptyList())); return@flow
         }
         if (!SpotifyTokenProvider.ensureToken(context)) {
-            emit(Response.Error("Spotify not authenticated — set sp_dc cookie")); return@flow
+            val col = com.music.spotui.data.preferences.OfflineCollectionsPref.getCollection(context, playlistId)
+            if (col != null) {
+                val downloadedSongs = col.songs.filter {
+                    com.music.spotui.data.preferences.isDownloaded(context, it.id.toString())
+                }
+                emit(Response.Success(downloadedSongs))
+            } else {
+                emit(Response.Error("Spotify not authenticated — set sp_dc cookie"))
+            }
+            return@flow
         }
         Spotify.playlistTracks(playlistId, limit = 100).fold(
             onSuccess = { first ->
@@ -615,6 +633,13 @@ class Api @Inject constructor(
         HomeCache.library?.let { emit(Response.Success(it)) } ?: emit(Response.Loading())
         if (!SpotifyTokenProvider.ensureToken(context)) {
             if (HomeCache.library == null) {
+                val liked = com.music.spotui.data.entity.LibraryEntry(
+                    spotifyId = LIKED_SONGS_ID,
+                    name = "Liked Songs",
+                    subtitle = "Playlist • Liked songs",
+                    coverUri = "https://misc.scdn.co/liked-songs/liked-songs-640.png",
+                    isPlaylist = true,
+                )
                 val downloaded = com.music.spotui.data.entity.LibraryEntry(
                     spotifyId = DOWNLOADS_ID,
                     name = "Downloaded",
@@ -622,7 +647,17 @@ class Api @Inject constructor(
                     coverUri = "",
                     isPlaylist = true,
                 )
-                emit(Response.Success(listOf(downloaded)))
+                val offlineEntries = com.music.spotui.data.preferences.OfflineCollectionsPref.getOfflineCollections(context).map { col ->
+                    com.music.spotui.data.entity.LibraryEntry(
+                        spotifyId = col.id,
+                        name = col.name,
+                        subtitle = if (col.isPlaylist) "Playlist • Available offline" else "Album • ${col.artists} • Available offline",
+                        coverUri = col.coverUri,
+                        isPlaylist = col.isPlaylist,
+                        artists = col.artists,
+                    )
+                }
+                emit(Response.Success(listOf(liked, downloaded) + offlineEntries))
             } else {
                 emit(Response.Success(HomeCache.library!!))
             }
@@ -664,8 +699,22 @@ class Api @Inject constructor(
             isPlaylist = true,
         )
         val merged = listOf(liked, downloaded) + playlists + albums
-        HomeCache.library = merged
-        emit(Response.Success(merged))
+        val offlineCollections = com.music.spotui.data.preferences.OfflineCollectionsPref.getOfflineCollections(context)
+        val additional = offlineCollections.filter { col ->
+            merged.none { it.spotifyId == col.id || (col.id.startsWith("album:") && it.name.equals(col.name, ignoreCase = true) && it.artists.equals(col.artists, ignoreCase = true)) }
+        }.map { col ->
+            com.music.spotui.data.entity.LibraryEntry(
+                spotifyId = col.id,
+                name = col.name,
+                subtitle = if (col.isPlaylist) "Playlist • Available offline" else "Album • ${col.artists} • Available offline",
+                coverUri = col.coverUri,
+                isPlaylist = col.isPlaylist,
+                artists = col.artists,
+            )
+        }
+        val finalLibrary = merged + additional
+        HomeCache.library = finalLibrary
+        emit(Response.Success(finalLibrary))
     }
 
     /**
@@ -690,7 +739,12 @@ class Api @Inject constructor(
     suspend fun getLikedSongs(): Flow<Response<List<SongsModel>>> = flow {
         emit(Response.Loading())
         if (!SpotifyTokenProvider.ensureToken(context)) {
-            emit(Response.Error("Spotify not authenticated")); return@flow
+            val downloaded = com.music.spotui.data.preferences.getDownloadedSongs(context)
+            val likedOffline = downloaded.filter {
+                com.music.spotui.data.preferences.isSongLiked(context, it.id.toString())
+            }
+            emit(Response.Success(likedOffline))
+            return@flow
         }
         Spotify.likedSongs(limit = 50).fold(
             onSuccess = { first ->
@@ -741,7 +795,19 @@ class Api @Inject constructor(
             emit(Response.Error("missing playlist id")); return@flow
         }
         if (!SpotifyTokenProvider.ensureToken(context)) {
-            emit(Response.Error("Spotify not authenticated — set sp_dc cookie")); return@flow
+            val col = com.music.spotui.data.preferences.OfflineCollectionsPref.getCollection(context, playlistId)
+            if (col != null) {
+                emit(Response.Success(AlbumsModel(
+                    id = stableId("playlist:${col.id}"),
+                    artists = col.artists,
+                    coverUri = col.coverUri,
+                    name = col.name,
+                    time = "Available offline",
+                )))
+            } else {
+                emit(Response.Error("Spotify not authenticated — set sp_dc cookie"))
+            }
+            return@flow
         }
         Spotify.playlist(playlistId).fold(
             onSuccess = { p ->

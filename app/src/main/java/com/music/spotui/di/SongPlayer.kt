@@ -882,6 +882,7 @@ object SongPlayer {
             return false
         }
         com.music.spotui.data.preferences.addDownload(appContext, song, outFile.absolutePath)
+        com.music.spotui.data.preferences.OfflineCollectionsPref.onTrackDownloaded(appContext, song)
         // Eagerly cache lyrics so offline playback doesn't need a network round-trip.
         LyricsApi.removeFromCache(song.title, song.singer)
         val lyricsOk = runCatching {

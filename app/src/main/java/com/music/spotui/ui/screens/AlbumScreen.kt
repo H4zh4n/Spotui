@@ -123,7 +123,7 @@ fun AlbumScreen(navController: NavController, albumName: String, artist: String 
                     LikedSongsScreen(albumsResponse, songsResponse, navController, context)
                 }
                 else{
-                    SumUpAlbumScreen(navController = navController,albumViewModel, albumsResponse, songsResponse, albumName, context)
+                    SumUpAlbumScreen(navController = navController,albumViewModel, albumsResponse, songsResponse, albumName, context, artist)
                 }
             }
         }
@@ -139,7 +139,8 @@ fun SumUpAlbumScreen(
     albums: List<AlbumsModel>,
     songs: List<SongsModel>,
     albumName: String,
-    context: Context
+    context: Context,
+    artist: String = ""
 ) {
     val playerViewModel: PlayerViewModel = hiltViewModel()
     // `songs` is already this album's track list (loaded by AlbumViewModel).
@@ -160,12 +161,28 @@ fun SumUpAlbumScreen(
         ?: listOf(
             AlbumsModel(
                 id = albumName.hashCode() and 0x7fffffff,
-                artists = albumSongs.firstOrNull()?.singer ?: "",
+                artists = albumSongs.firstOrNull()?.singer ?: artist,
                 coverUri = albumSongs.firstOrNull()?.coverUri ?: "",
                 name = albumName,
                 time = "",
             )
         )
+
+    val currentAlbum = album.firstOrNull()
+    LaunchedEffect(albumSongs, currentAlbum) {
+        if (albumSongs.isNotEmpty() && currentAlbum != null) {
+            com.music.spotui.data.preferences.OfflineCollectionsPref.saveCollection(
+                context = context,
+                id = "album:$albumName|$artist",
+                name = albumName,
+                coverUri = currentAlbum.coverUri,
+                artists = currentAlbum.artists,
+                isPlaylist = false,
+                songs = albumSongs
+            )
+        }
+    }
+
     var dominentColor by remember {
         mutableStateOf(Color(AppBackground.toArgb()))
     }

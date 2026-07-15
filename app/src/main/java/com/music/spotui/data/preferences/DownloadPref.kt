@@ -125,6 +125,7 @@ fun clearAllDownloads(context: Context): Int {
     val currentDesc = isDownloadsSortDescending(context)
     prefs.edit().clear().apply()
     setDownloadsSortOption(context, currentSort, currentDesc)
+    OfflineCollectionsPref.clearAll(context)
     return entries.size
 }
 

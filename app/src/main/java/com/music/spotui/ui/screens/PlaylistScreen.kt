@@ -148,6 +148,20 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
             time = "",
         )
 
+    LaunchedEffect(songs, playlist, songsResp, playlistResp) {
+        if (songsResp is Response.Success && playlistResp is Response.Success && songs.isNotEmpty() && playlist != null) {
+            com.music.spotui.data.preferences.OfflineCollectionsPref.saveCollection(
+                context = context,
+                id = playlistId,
+                name = playlist.name,
+                coverUri = playlist.coverUri,
+                artists = playlist.artists,
+                isPlaylist = true,
+                songs = songs
+            )
+        }
+    }
+
     LaunchedEffect(songs) {
         if (songs.isNotEmpty()) {
             SongPlayer.prefetchList(songs.map { it.url }, context)
