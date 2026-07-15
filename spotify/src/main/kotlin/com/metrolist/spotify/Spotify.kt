@@ -90,6 +90,9 @@ object Spotify {
             defaultRequest {
                 url("https://api.spotify.com/v1/")
                 header("User-Agent", randomUserAgent())
+                header("app-platform", "WebPlayer")
+                header("Origin", "https://open.spotify.com")
+                header("Referer", "https://open.spotify.com/")
             }
             expectSuccess = false
         }
@@ -999,21 +1002,31 @@ object Spotify {
     suspend fun createPlaylist(name: String, public: Boolean = false): Result<SpotifyPlaylist> =
         runCatching {
             val token = accessToken ?: throw SpotifyException(401, "Not authenticated")
-            val userId = me().getOrThrow().id
-            if (userId.isBlank()) throw SpotifyException(500, "No user id for createPlaylist")
             val body = buildJsonObject {
                 put("name", name)
                 put("public", public)
             }
-            val response = restClient.post("users/$userId/playlists") {
-                header("Authorization", "Bearer $token")
-                setBody(TextContent(body.toString(), ContentType.Application.Json))
+            var response: io.ktor.client.statement.HttpResponse? = null
+            val maxRetries = 3
+            for (attempt in 0 until maxRetries) {
+                response = restClient.post("me/playlists") {
+                    header("Authorization", "Bearer $token")
+                    setBody(TextContent(body.toString(), ContentType.Application.Json))
+                }
+                if (response.status == HttpStatusCode.TooManyRequests) {
+                    val retryAfter = response.headers["Retry-After"]?.toLongOrNull() ?: (2L * (attempt + 1))
+                    log("W", "createPlaylist -> 429, waiting ${retryAfter}s (attempt ${attempt + 1}/$maxRetries)")
+                    delay(retryAfter * 1000)
+                    continue
+                }
+                break
             }
-            if (response.status.value !in 200..299) {
-                log("W", "createPlaylist($name) HTTP ${response.status.value}: ${response.bodyAsText().take(200)}")
-                throw SpotifyException(response.status.value, "createPlaylist HTTP ${response.status.value}")
+            val resp = response ?: throw SpotifyException(500, "No response from createPlaylist")
+            if (resp.status.value !in 200..299) {
+                log("W", "createPlaylist($name) HTTP ${resp.status.value}: ${resp.bodyAsText().take(200)}")
+                throw SpotifyException(resp.status.value, "createPlaylist HTTP ${resp.status.value}")
             }
-            val playlist = json.decodeFromString<SpotifyPlaylist>(response.bodyAsText())
+            val playlist = json.decodeFromString<SpotifyPlaylist>(resp.bodyAsText())
             log("D", "createPlaylist($name, public=$public) OK — ${playlist.id}")
             playlist
         }

@@ -140,6 +140,7 @@ fun SavedInSheet(
                     .padding(20.dp, 4.dp, 20.dp, 12.dp),
             ) {
                 Text("Saved in", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                /*
                 Text(
                     "New playlist",
                     color = SpotifyGreen,
@@ -151,8 +152,10 @@ fun SavedInSheet(
                         indication = null,
                     ) { creating = true },
                 )
+                */
             }
 
+            /*
             if (creating) {
                 TextField(
                     enabled = !isCreatingPlaylist,
@@ -234,6 +237,7 @@ fun SavedInSheet(
                     )
                 }
             }
+            */
 
             // ── Liked Songs ──
             SavedInRow(
