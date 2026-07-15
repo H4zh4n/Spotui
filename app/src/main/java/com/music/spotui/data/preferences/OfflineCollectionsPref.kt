@@ -105,40 +105,6 @@ object OfflineCollectionsPref {
         }
     }
 
-    fun onTrackDownloaded(context: Context, song: SongsModel) {
-        // If the track belongs to an album, ensure we have an offline collection for that album
-        if (song.album.isNotBlank()) {
-            val albumId = "album:${song.album}|${song.singer}"
-            val existing = getCollection(context, albumId)
-            if (existing == null) {
-                // Save a basic offline album collection containing this track
-                saveCollection(
-                    context = context,
-                    id = albumId,
-                    name = song.album,
-                    coverUri = song.coverUri,
-                    artists = song.singer,
-                    isPlaylist = false,
-                    songs = listOf(song)
-                )
-            } else {
-                // If it exists, but doesn't have the song in its list (for some reason), append it.
-                if (existing.songs.none { it.id == song.id }) {
-                    val updatedSongs = existing.songs + song
-                    saveCollection(
-                        context = context,
-                        id = albumId,
-                        name = existing.name,
-                        coverUri = existing.coverUri,
-                        artists = existing.artists,
-                        isPlaylist = false,
-                        songs = updatedSongs
-                    )
-                }
-            }
-        }
-    }
-
     fun clearAll(context: Context) {
         context.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().clear().apply()
     }
