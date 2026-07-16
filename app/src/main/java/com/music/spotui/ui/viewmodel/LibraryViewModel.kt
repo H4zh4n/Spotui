@@ -33,7 +33,13 @@ class LibraryViewModel @Inject constructor(private val repository: AppRepository
     }
 
     fun load() = viewModelScope.launch(Dispatchers.IO) {
-        repository.provideLibrary().collect { _entries.value = it }
+        repository.provideLibrary().collect { response ->
+            // Keep showing existing data while a background refresh is in-flight,
+            // so the user never sees a skeleton flash or loses scroll position.
+            if (response !is Response.Loading || _entries.value !is Response.Success) {
+                _entries.value = response
+            }
+        }
     }
 
     private fun loadFollowedArtists() = viewModelScope.launch(Dispatchers.IO) {
