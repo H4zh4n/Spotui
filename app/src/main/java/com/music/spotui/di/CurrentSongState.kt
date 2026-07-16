@@ -33,6 +33,15 @@ class CurrentSongState @Inject constructor() {
     private val _playingState: MutableState<Boolean> = mutableStateOf(false)
     val playingState: State<Boolean> get() = _playingState
 
+    // Monotonically increasing counter bumped on every user/UI toggle.
+    // _lastPlayGen stores the gen at the *most recent play command* from the
+    // UI (updateSongState(…, playingState=true, …)).  When ExoPlayer's
+    // onIsPlayingChanged(true) fires later (after buffering), we compare:
+    // if _playGen != _lastPlayGen the user has already toggled again (e.g.
+    // tapped pause) and the callback is stale — drop it.
+    private var _playGen = 0L
+    private var _lastPlayGen = 0L
+
     private val _songIndex: MutableState<Int> = mutableStateOf(0)
     val songIndex : State<Int> get() = _songIndex
 
@@ -173,8 +182,26 @@ class CurrentSongState @Inject constructor() {
 
     /** Sync the play/pause state without touching the rest of the now-playing
      *  metadata — used to reflect the web player's real state (e.g. after the
-     *  system notification's pause button) back into the in-app UI. */
+     *  system notification's pause button) back into the in-app UI.
+     *
+     *  Guards against stale ExoPlayer callbacks: when ExoPlayer reports
+     *  "now playing" it only updates the state if no newer user toggle has
+     *  happened since the last play command (checked via _playGen vs
+     *  _lastPlayGen). */
     fun updatePlayingState(playing: Boolean) {
+        // Drop stale onIsPlayingChanged(true) that fired after the user
+        // already tapped pause.
+        if (playing && _playGen != _lastPlayGen) return
+        _playingState.value = playing
+    }
+
+    /** User-initiated play/pause toggle from album/liked/playlist screens.
+     *  Bumps the generation counter so stale ExoPlayer callbacks know to
+     *  back off. */
+    fun setPlaying(playing: Boolean) {
+        if (_playingState.value == playing) return
+        _playGen++
+        if (playing) _lastPlayGen = _playGen
         _playingState.value = playing
     }
 
@@ -195,6 +222,8 @@ class CurrentSongState @Inject constructor() {
             val queueSong = _queue.value.firstOrNull { it.id == songId }
             _artistIds.value = queueSong?.artistIds.orEmpty()
         }
+        _playGen++
+        if (playingState) _lastPlayGen = _playGen
         _playingState.value = playingState
         _songIndex.value = songIndex
         _songId.value = songId

@@ -134,6 +134,8 @@ class PlaybackService : MediaLibraryService() {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             // Mirror ExoPlayer's real play/pause state into the in-app UI so the
             // on-screen play button stays in sync when the notification controls are used.
+            // updatePlayingState internally guards against stale callbacks: when ExoPlayer
+            // reports "playing" after the user already paused, it's dropped.
             if (!showingWeb) currentSongState.updatePlayingState(isPlaying)
         }
 

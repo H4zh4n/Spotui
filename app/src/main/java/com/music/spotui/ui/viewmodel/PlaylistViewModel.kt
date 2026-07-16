@@ -47,7 +47,7 @@ class PlaylistViewModel @Inject constructor(
     /** Pause/resume global playback (the header play button stays visible while playing). */
     fun setPlaying(playing: Boolean) {
         if (playing) com.music.spotui.di.SongPlayer.play() else com.music.spotui.di.SongPlayer.pause()
-        currentSongState.updatePlayingState(playing)
+        currentSongState.setPlaying(playing)
     }
 
     fun updateSongState(coverUri: String, title: String, singer: String, playingState: Boolean, songId: Int, songIndex: Int = 0, album: String = "") {
