@@ -448,18 +448,23 @@ fun InlineLyrics(
             .fillMaxWidth()
             .padding(16.dp, 8.dp, 16.dp, 40.dp)
             .shadow(
-                elevation = 10.dp,
+                elevation = 8.dp,
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                 clip = false
             )
             .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        accentColor.copy(alpha = 0.45f),
+                        accentColor.copy(alpha = 0.35f)
+                    )
+                )
+            )
+            .background(Color.Black.copy(alpha = 0.45f))
             .border(
                 width = 1.dp,
                 color = Color.White.copy(alpha = 0.25f),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
-            )
-            .background(
-                Color.Black.copy(alpha = 0.65f),
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
             )
             .clickable(
