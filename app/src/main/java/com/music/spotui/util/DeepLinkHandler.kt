@@ -91,13 +91,15 @@ object DeepLinkHandler {
                         )
                         SongPlayer.invalidateResolvedStream(song.url)
                         SongPlayer.playSong(song.url, context)
-                        navController.navigate(Routes.Player.route)
+                        navigateToPlayer(navController)
                     }
                 }
 
                 is SpotifyDeepLink.Playlist -> {
                     withContext(Dispatchers.Main) {
-                        navController.navigate(playlistRoute(link.id))
+                        navController.navigate(playlistRoute(link.id)) {
+                            launchSingleTop = true
+                        }
                     }
                 }
 
@@ -124,7 +126,9 @@ object DeepLinkHandler {
                     }
 
                     withContext(Dispatchers.Main) {
-                        navController.navigate(albumRoute(albumName, artistName))
+                        navController.navigate(albumRoute(albumName, artistName)) {
+                            launchSingleTop = true
+                        }
                     }
                 }
 
@@ -146,7 +150,9 @@ object DeepLinkHandler {
                     }
 
                     withContext(Dispatchers.Main) {
-                        navController.navigate(artistRoute(artistName, link.id))
+                        navController.navigate(artistRoute(artistName, link.id)) {
+                            launchSingleTop = true
+                        }
                     }
                 }
 
@@ -168,7 +174,9 @@ object DeepLinkHandler {
                     }
 
                     withContext(Dispatchers.Main) {
-                        navController.navigate(showRoute(link.id, showName))
+                        navController.navigate(showRoute(link.id, showName)) {
+                            launchSingleTop = true
+                        }
                     }
                 }
 
@@ -181,9 +189,17 @@ object DeepLinkHandler {
                         )
                         SongPlayer.invalidateResolvedStream(song.url)
                         SongPlayer.playSong(song.url, context)
-                        navController.navigate(Routes.Player.route)
+                        navigateToPlayer(navController)
                     }
                 }
+            }
+        }
+    }
+
+    private fun navigateToPlayer(navController: NavController) {
+        if (navController.currentDestination?.route != Routes.Player.route) {
+            navController.navigate(Routes.Player.route) {
+                launchSingleTop = true
             }
         }
     }
