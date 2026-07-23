@@ -6,12 +6,15 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -444,9 +447,20 @@ fun InlineLyrics(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp, 8.dp, 16.dp, 40.dp)
+            .shadow(
+                elevation = 10.dp,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                clip = false
+            )
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.25f),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+            )
             .background(
-                Brush.verticalGradient(listOf(accentColor.copy(alpha = 0.55f), accentColor.copy(alpha = 0.18f))),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                Color.Black.copy(alpha = 0.65f),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
             )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -454,14 +468,20 @@ fun InlineLyrics(
             ) { onExpand() }
             .padding(20.dp)
     ) {
-        Text("Lyrics preview", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Lyrics preview", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
         androidx.compose.foundation.layout.Spacer(modifier = Modifier.size(12.dp))
 
         when (val s = state) {
             is LyricsViewModel.State.Loading ->
-                Text("Loading lyrics…", color = Color.White.copy(alpha = 0.7f), fontSize = 15.sp)
+                Text("Loading lyrics…", color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp)
             is LyricsViewModel.State.NotFound ->
-                Text("No lyrics found for this track", color = Color.White.copy(alpha = 0.7f), fontSize = 15.sp)
+                Text("No lyrics found for this track", color = Color.White.copy(alpha = 0.8f), fontSize = 15.sp)
             is LyricsViewModel.State.Loaded -> {
                 val lyrics = s.lyrics
                 val activeIndex = activeIndexFor(lyrics, positionMs)
@@ -829,9 +849,9 @@ private fun LyricLineText(
         return
     }
     val target = when {
-        !synced -> Color.White.copy(alpha = 0.9f)
+        !synced -> Color.White.copy(alpha = 0.95f)
         isActive -> Color.White
-        else -> Color.White.copy(alpha = 0.45f)
+        else -> Color.White.copy(alpha = 0.60f)
     }
     val color by animateColorAsState(targetValue = target, label = "lyricColor")
     val clickModifier = if (onTap != null) Modifier.clickable(
