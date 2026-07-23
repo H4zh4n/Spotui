@@ -328,6 +328,11 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
     fun updateRepeatState(repeatState : RepeatMode){
         currentSongState.updateRepeatState(repeatState)
     }
+    fun setPlaying(playing: Boolean) {
+        if (playing) com.music.spotui.di.SongPlayer.play() else com.music.spotui.di.SongPlayer.pause()
+        currentSongState.setPlaying(playing)
+    }
+
     fun updateLikeState(likeState : Boolean){
         currentSongState.updateLikeState(likeState)
     }

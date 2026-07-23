@@ -72,6 +72,15 @@ class MainActivity : ComponentActivity() {
         // setContent so the Compose content view doesn't replace/orphan it (an
         // orphaned WebView gets a 0×0 viewport and Spotify won't render/navigate).
         com.music.spotui.di.SpotifyWebPlayer.attach(this)
+
+        // Handle initial deep link intent if launched via Spotify link
+        com.music.spotui.util.DeepLinkHandler.handleIntent(intent)
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        com.music.spotui.util.DeepLinkHandler.handleIntent(intent)
     }
 
     override fun onDestroy() {

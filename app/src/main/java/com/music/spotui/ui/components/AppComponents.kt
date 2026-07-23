@@ -98,13 +98,13 @@ fun Loader() {
 @Composable
 fun MiniPlayer(navController: NavHostController) {
     val miniPlayerViewModel : PlayerViewModel = hiltViewModel()
-    val songTitle = miniPlayerViewModel.currentSongTitle.value
-    val songSinger = miniPlayerViewModel.currentSongSinger.value
-    val songCoverUri = miniPlayerViewModel.currentSongCoverUri.value
-    var songPlayingState = miniPlayerViewModel.currentSongPlayingState.value
-    val songId = miniPlayerViewModel.currentSongId.value
-    val songIndex = miniPlayerViewModel.currentSongIndex.value
-    val songAlbum = miniPlayerViewModel.currentSongAlbum.value
+    val songTitle by miniPlayerViewModel.currentSongTitle
+    val songSinger by miniPlayerViewModel.currentSongSinger
+    val songCoverUri by miniPlayerViewModel.currentSongCoverUri
+    val songPlayingState by miniPlayerViewModel.currentSongPlayingState
+    val songId by miniPlayerViewModel.currentSongId
+    val songIndex by miniPlayerViewModel.currentSongIndex
+    val songAlbum by miniPlayerViewModel.currentSongAlbum
 
     var swipeOffsetY by remember { mutableFloatStateOf(0f) }
     val coroutineScope = rememberCoroutineScope()
@@ -130,7 +130,7 @@ fun MiniPlayer(navController: NavHostController) {
 
                 if (songProgress > 0f && songProgress >= 1f && currentRoute != Routes.Player.route) {
                     navController.navigate(Routes.Player.route)
-                    songPlayingState = false
+                    miniPlayerViewModel.setPlaying(false)
                 }
         }
     }

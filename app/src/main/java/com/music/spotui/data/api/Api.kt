@@ -446,14 +446,17 @@ class Api @Inject constructor(
         if (!SpotifyTokenProvider.ensureToken(context)) {
             emit(Response.Error("Spotify not authenticated — set sp_dc cookie")); return@flow
         }
-        val artist = if (knownArtistId.isBlank()) {
+        val knownId = if (knownArtistId.isNotBlank()) knownArtistId
+                      else if (artistName.matches(Regex("^[a-zA-Z0-9]{22}$"))) artistName
+                      else ""
+        val artist = if (knownId.isBlank()) {
             // Prefer an EXACT name match among the top hits — the first fuzzy
             // hit for a short name like "RAM" can be a different artist entirely.
             val hits = Spotify.search(artistName, types = listOf("artist"), limit = 5).getOrNull()
                 ?.artists?.items.orEmpty()
             hits.firstOrNull { it.name.equals(artistName, ignoreCase = true) } ?: hits.firstOrNull()
         } else null
-        val artistId = knownArtistId.ifBlank { artist?.id.orEmpty() }
+        val artistId = knownId.ifBlank { artist?.id.orEmpty() }
         if (artistId.isBlank()) {
             emit(Response.Error("Artist not found")); return@flow
         }
@@ -545,6 +548,16 @@ class Api @Inject constructor(
             }
             return@flow
         }
+        // If albumName is a Spotify album ID (22-char base62), try fetching directly first.
+        val directAlbum = if (albumName.matches(Regex("^[a-zA-Z0-9]{22}$"))) {
+            Spotify.album(albumName).getOrNull()
+        } else null
+
+        if (directAlbum != null) {
+            emit(Response.Success(directAlbum.tracks?.items.orEmpty().map { it.toSongModel() }))
+            return@flow
+        }
+
         // Two albums can share a name (different artists). Search the name and,
         // when we know the artist, pick the candidate whose artists match instead
         // of blindly taking the first (most-popular) result.

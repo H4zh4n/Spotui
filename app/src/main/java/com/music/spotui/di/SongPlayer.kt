@@ -165,7 +165,8 @@ object SongPlayer {
      * other's resolved stream.
      */
     fun buildSpotifyPlayQuery(spotifyTrackId: String, title: String, artist: String): String {
-        val searchText = listOf(cleanSpotifySearchTitle(title), artist)
+        val cleanArtist = artist.replace(",", " ").replace("  ", " ").trim()
+        val searchText = listOf(cleanSpotifySearchTitle(title), cleanArtist)
             .filter { it.isNotBlank() }
             .joinToString(" ")
         return if (spotifyTrackId.isBlank()) searchText else "$SPOTIFY_TRACK_PREFIX$spotifyTrackId|$searchText"

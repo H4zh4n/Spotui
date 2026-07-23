@@ -50,6 +50,20 @@ fun App() {
         lastRoute = currentRoute
     }
 
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    LaunchedEffect(navController) {
+        // Process any cold-start deep link intent that launched the app
+        com.music.spotui.util.DeepLinkHandler.consumePendingUri()?.let { uri ->
+            com.music.spotui.util.DeepLinkHandler.processUri(uri, context, navController, playerViewModel, scope)
+        }
+        // Process any new deep link intent while the app is active
+        com.music.spotui.util.DeepLinkHandler.deepLinkFlow.collect { uri ->
+            com.music.spotui.util.DeepLinkHandler.processUri(uri, context, navController, playerViewModel, scope)
+        }
+    }
+
     Scaffold(
         modifier = Modifier
             .navigationBarsPadding()

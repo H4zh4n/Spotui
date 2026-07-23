@@ -353,13 +353,13 @@ fun PlayerScreen(navController: NavController) {
     }
 
     val playerViewModel: PlayerViewModel = hiltViewModel()
-    val songTitle = playerViewModel.currentSongTitle.value
-    val songSinger = playerViewModel.currentSongSinger.value
-    val songCoverUri = playerViewModel.currentSongCoverUri.value
-    val songPlayingState = playerViewModel.currentSongPlayingState.value
-    val songId = playerViewModel.currentSongId.value
+    val songTitle by playerViewModel.currentSongTitle
+    val songSinger by playerViewModel.currentSongSinger
+    val songCoverUri by playerViewModel.currentSongCoverUri
+    val songPlayingState by playerViewModel.currentSongPlayingState
+    val songId by playerViewModel.currentSongId
     val context = LocalContext.current
-    val isLiked = remember {
+    val isLiked = remember(songId) {
         mutableStateOf(isSongLiked(context, songId.toString()))
     }
     var showMenu by remember { mutableStateOf(false) }
@@ -434,8 +434,8 @@ fun PlayerScreen(navController: NavController) {
     }
 
     val songsResponse by playerViewModel.songs.collectAsState()
-    val shuffle = playerViewModel.shuffleState.value
-    val repeat = playerViewModel.repeatState.value
+    val shuffle by playerViewModel.shuffleState
+    val repeat by playerViewModel.repeatState
 
     val songs = if (songsResponse is Response.Success) {
         (songsResponse as Response.Success).data
@@ -446,12 +446,12 @@ fun PlayerScreen(navController: NavController) {
     // The queue is whatever list the user actually started playing (album tracks,
     // search results, liked songs) — stored when the song was tapped. Falling back
     // to the global top-tracks feed used to crash / be empty (it's rate-limited).
-    val queueSongs = playerViewModel.queue.value
+    val queueSongs by playerViewModel.queue
 
     // ── Now-playing swipe pager ──
     // Index of the playing track in the queue (fallback to 0 so the pager is valid
     // even before the queue/current id line up).
-    val currentIndex = queueSongs.indexOfFirst { it.id == playerViewModel.currentSongId.value }
+    val currentIndex = queueSongs.indexOfFirst { it.id == songId }
         .let { if (it >= 0) it else 0 }
     val artworkPagerState = rememberPagerState(
         initialPage = currentIndex,
@@ -468,14 +468,16 @@ fun PlayerScreen(navController: NavController) {
         }
     }
     // User settled the pager on a different page → play that track. Compare against the
-    // live current id (not currentIndex captured above) to avoid a replay feedback loop.
-    LaunchedEffect(artworkPagerState, queueSongs) {
+    // live current id to avoid a replay feedback loop.
+    LaunchedEffect(artworkPagerState) {
         snapshotFlow { artworkPagerState.settledPage }
             .distinctUntilChanged()
             .collect { page ->
-                queueSongs.getOrNull(page)?.let { target ->
-                    if (target.id != playerViewModel.currentSongId.value) {
-                        playerViewModel.playSongAt(queueSongs, page, context)
+                val currentQueue = playerViewModel.queue.value
+                val currentId = playerViewModel.currentSongId.value
+                currentQueue.getOrNull(page)?.let { target ->
+                    if (target.id != currentId && artworkPagerState.isScrollInProgress) {
+                        playerViewModel.playSongAt(currentQueue, page, context)
                         isLiked.value = isSongLiked(context, target.id.toString())
                     }
                 }
@@ -483,8 +485,8 @@ fun PlayerScreen(navController: NavController) {
     }
 
     // Warm the stream cache for the adjacent tracks so next/previous start instantly.
-    LaunchedEffect(playerViewModel.currentSongId.value, queueSongs) {
-        val idx = queueSongs.indexOfFirst { it.id == playerViewModel.currentSongId.value }
+    LaunchedEffect(songId, queueSongs) {
+        val idx = queueSongs.indexOfFirst { it.id == songId }
         if (idx >= 0) {
             queueSongs.getOrNull(idx + 1)?.let { SongPlayer.prefetch(it.url, context) }
             queueSongs.getOrNull(idx - 1)?.let { SongPlayer.prefetch(it.url, context) }
@@ -492,15 +494,15 @@ fun PlayerScreen(navController: NavController) {
     }
 
     // Load the current track's Spotify Canvas (full-screen looping video background).
-    LaunchedEffect(playerViewModel.currentSongId.value, queueSongs) {
-        val track = queueSongs.firstOrNull { it.id == playerViewModel.currentSongId.value }
+    LaunchedEffect(songId, queueSongs) {
+        val track = queueSongs.firstOrNull { it.id == songId }
         playerViewModel.loadCanvas(track?.spotifyTrackId.orEmpty())
     }
 
 
 
 
-    LaunchedEffect(playerViewModel.currentSongId.value, songPlayingState) {
+    LaunchedEffect(songId, songPlayingState) {
         while (true) {
             val dur = SongPlayer.getDuration()
             songDurationText = if (dur < 0) "0:00" else playerViewModel.formatDuration(dur)
@@ -1642,14 +1644,15 @@ fun PlayerOptionsSheet(
     val remainingSeconds = remainingMillis / 1000L
     val minutesLeft = (remainingSeconds + 59) / 60
 
-    val title = playerViewModel.currentSongTitle.value
-    val singer = playerViewModel.currentSongSinger.value
-    val cover = playerViewModel.currentSongCoverUri.value
-    val album = playerViewModel.currentSongAlbum.value
-    val songId = playerViewModel.currentSongId.value
+    val title by playerViewModel.currentSongTitle
+    val singer by playerViewModel.currentSongSinger
+    val cover by playerViewModel.currentSongCoverUri
+    val album by playerViewModel.currentSongAlbum
+    val songId by playerViewModel.currentSongId
+    val currentQueue by playerViewModel.queue
     // The full track model (spotify id, real album, stream url) — the state above
     // only carries display strings, and `album` is the *context* name (playlist…).
-    val currentSong = playerViewModel.queue.value.firstOrNull { it.id == songId }
+    val currentSong = currentQueue.firstOrNull { it.id == songId }
     var downloaded by remember(songId) {
         mutableStateOf(
             com.music.spotui.data.preferences.isDownloaded(

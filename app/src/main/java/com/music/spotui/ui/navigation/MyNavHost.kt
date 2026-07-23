@@ -63,6 +63,7 @@ fun MyNavHost(
     // Restore the last session: put the track back into the mini player (paused)
     // and arm the player to resume from the saved position on the first play tap.
     LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(150L)
         if (playerViewModel.currentSongTitle.value.isBlank()) {
             com.music.spotui.data.preferences.loadLastPlayback(context)?.let { (song, positionMs) ->
                 val savedQueue = com.music.spotui.data.preferences.loadLastQueue(context)
