@@ -64,6 +64,10 @@ class PlaylistViewModel @Inject constructor(
 
     fun loadPlaylist(playlistId: String) {
         if (playlistKey == playlistId) return
+        reloadPlaylist(playlistId)
+    }
+
+    fun reloadPlaylist(playlistId: String) {
         playlistKey = playlistId
         viewModelScope.launch(Dispatchers.IO) {
             repository.providePlaylist(playlistId).collect { _playlist.value = it }

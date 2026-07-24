@@ -23,11 +23,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -41,7 +40,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -58,20 +56,23 @@ import com.bumptech.glide.integration.compose.placeholder
 import com.metrolist.spotify.Spotify
 import com.metrolist.spotify.models.SpotifyPlaylist
 import com.music.spotui.R
+import com.music.spotui.data.api.Api
 import com.music.spotui.data.api.SpotifySync
 import com.music.spotui.data.entity.SongsModel
+import com.music.spotui.data.preferences.LocalPlaylist
+import com.music.spotui.data.preferences.LocalPlaylistPref
 import com.music.spotui.data.preferences.addLikedSongId
 import com.music.spotui.data.preferences.isSongLiked
 import com.music.spotui.data.preferences.removeLikedSongId
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private val SpotifyGreen = Color(0xFF1ED760)
 
 /**
- * Spotify's "Saved in" sheet: Liked Songs plus every user playlist, each row
- * toggling the track in/out of it (mirrored to the real Spotify account), and a
- * "New playlist" action that creates one on Spotify with the track in it.
+ * Spotify-style "Saved in" sheet: Liked Songs plus local playlists and Spotify user playlists.
+ * Allows toggling tracks into/out of playlists and creating new local playlists stored on device.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalGlideComposeApi::class)
 @Composable
@@ -83,17 +84,18 @@ fun SavedInSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var liked by remember { mutableStateOf(isSongLiked(context, song.id.toString())) }
-    var playlists by remember { mutableStateOf<List<SpotifyPlaylist>?>(null) }
-    // playlistId → does it contain this track (filled lazily per row).
+    var localPlaylists by remember { mutableStateOf<List<LocalPlaylist>>(emptyList()) }
+    var remotePlaylists by remember { mutableStateOf<List<SpotifyPlaylist>?>(null) }
+    // playlistId → does it contain this track (filled lazily/locally per row).
     val membership = remember { mutableStateMapOf<String, Boolean>() }
     var creating by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
-    var isPublic by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var isCreatingPlaylist by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        playlists = withContext(Dispatchers.IO) {
+        localPlaylists = LocalPlaylistPref.getLocalPlaylists(context)
+        remotePlaylists = withContext(Dispatchers.IO) {
             Spotify.myPlaylists().getOrNull()?.items?.filter { it.id.isNotBlank() } ?: emptyList()
         }
     }
@@ -101,29 +103,14 @@ fun SavedInSheet(
     fun createNow() {
         val name = newName.trim().ifBlank { "My Playlist" }
         isCreatingPlaylist = true
-        val currentIsPublic = isPublic
         newName = ""
-        isPublic = false
-        SpotifySync.createPlaylistWithTrack(context, name, song.spotifyTrackId, public = currentIsPublic) { success ->
-            scope.launch {
-                if (success) {
-                    val updated = withContext(Dispatchers.IO) {
-                        Spotify.myPlaylists().getOrNull()?.items?.filter { it.id.isNotBlank() }
-                    }
-                    if (updated != null) {
-                        playlists = updated
-                        val newPl = updated.find { it.name == name }
-                        if (newPl != null && song.spotifyTrackId.isNotBlank()) {
-                            membership[newPl.id] = true
-                        }
-                    }
-                    creating = false
-                } else {
-                    android.widget.Toast.makeText(context, "Failed to create playlist", android.widget.Toast.LENGTH_SHORT).show()
-                }
-                isCreatingPlaylist = false
-            }
-        }
+        val created = LocalPlaylistPref.createPlaylist(context, name, song)
+        localPlaylists = LocalPlaylistPref.getLocalPlaylists(context)
+        membership[created.id] = true
+        Api.HomeCache.library = null
+        android.widget.Toast.makeText(context, "Playlist '$name' created", android.widget.Toast.LENGTH_SHORT).show()
+        creating = false
+        isCreatingPlaylist = false
     }
 
     ModalBottomSheet(
@@ -140,7 +127,6 @@ fun SavedInSheet(
                     .padding(20.dp, 4.dp, 20.dp, 12.dp),
             ) {
                 Text("Saved in", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                /*
                 Text(
                     "New playlist",
                     color = SpotifyGreen,
@@ -152,10 +138,8 @@ fun SavedInSheet(
                         indication = null,
                     ) { creating = true },
                 )
-                */
             }
 
-            /*
             if (creating) {
                 TextField(
                     enabled = !isCreatingPlaylist,
@@ -179,40 +163,7 @@ fun SavedInSheet(
                         .padding(20.dp, 0.dp, 20.dp, 8.dp)
                         .clip(RoundedCornerShape(8.dp)),
                 )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp, 4.dp, 20.dp, 12.dp)
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Make public",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = if (isPublic) "Anyone can find and listen" else "Only you can view and listen",
-                            color = Color.Gray,
-                            fontSize = 12.sp
-                        )
-                    }
-                    Switch(
-                        enabled = !isCreatingPlaylist,
-                        checked = isPublic,
-                        onCheckedChange = { isPublic = it },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = SpotifyGreen,
-                            uncheckedThumbColor = Color(0xFFB3B3B3),
-                            uncheckedTrackColor = Color(0xFF333333),
-                            checkedBorderColor = Color.Transparent,
-                            uncheckedBorderColor = Color.Transparent,
-                        )
-                    )
-                }
-                Row(modifier = Modifier.padding(20.dp, 0.dp, 20.dp, 8.dp)) {
+                Row(modifier = Modifier.padding(20.dp, 4.dp, 20.dp, 12.dp)) {
                     Text(
                         if (isCreatingPlaylist) "Creating..." else "Create",
                         color = if (isCreatingPlaylist) Color.Gray else SpotifyGreen,
@@ -233,74 +184,110 @@ fun SavedInSheet(
                             enabled = !isCreatingPlaylist,
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                        ) { creating = false; newName = ""; isPublic = false },
+                        ) { creating = false; newName = "" },
                     )
                 }
             }
-            */
 
-            // ── Liked Songs ──
-            SavedInRow(
-                name = "Liked Songs",
-                subtitle = "",
-                saved = liked,
-                cover = {
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(
-                                Brush.linearGradient(listOf(Color(0xFF4A39EA), Color(0xFF868AE1)))
-                            ),
+            LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
+                // ── Liked Songs ──
+                item {
+                    SavedInRow(
+                        name = "Liked Songs",
+                        subtitle = "Liked tracks",
+                        saved = liked,
+                        isLocal = false,
+                        cover = {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(
+                                        Brush.linearGradient(listOf(Color(0xFF4A39EA), Color(0xFF868AE1)))
+                                    ),
+                            ) {
+                                Icon(Icons.Default.Favorite, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                            }
+                        },
                     ) {
-                        Icon(Icons.Default.Favorite, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                        liked = !liked
+                        if (liked) addLikedSongId(context, song.id.toString())
+                        else removeLikedSongId(context, song.id.toString())
+                        SpotifySync.setTrackSaved(context, song.spotifyTrackId, liked)
+                        onLikedChanged(liked)
                     }
-                },
-            ) {
-                liked = !liked
-                if (liked) addLikedSongId(context, song.id.toString())
-                else removeLikedSongId(context, song.id.toString())
-                SpotifySync.setTrackSaved(context, song.spotifyTrackId, liked)
-                onLikedChanged(liked)
-            }
+                }
 
-            when (val list = playlists) {
-                null -> Text("Loading playlists…", color = Color.Gray, fontSize = 14.sp, modifier = Modifier.padding(20.dp, 12.dp))
-                else -> LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
-                    items(list.size) { i ->
-                        val pl = list[i]
-                        // Resolve membership lazily (cached per session in SpotifySync).
-                        LaunchedEffect(pl.id, song.spotifyTrackId) {
-                            if (membership[pl.id] == null && song.spotifyTrackId.isNotBlank()) {
-                                membership[pl.id] = withContext(Dispatchers.IO) {
-                                    SpotifySync.playlistTrackIds(context, pl.id).contains(song.spotifyTrackId)
-                                }
+                // ── Local Playlists ──
+                items(localPlaylists.size, key = { "local_${localPlaylists[it].id}" }) { index ->
+                    val pl = localPlaylists[index]
+                    val saved = membership[pl.id] ?: LocalPlaylistPref.isSongInPlaylist(context, pl.id, song.id, song.spotifyTrackId)
+                    SavedInRow(
+                        name = pl.name,
+                        subtitle = "${pl.songs.size} song" + (if (pl.songs.size == 1) "" else "s"),
+                        saved = saved,
+                        isLocal = true,
+                        cover = {
+                            GlideImage(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(RoundedCornerShape(4.dp)),
+                                model = pl.coverUri,
+                                contentScale = ContentScale.Crop,
+                                failure = placeholder(R.drawable.placeholder),
+                                loading = placeholder(R.drawable.placeholder),
+                                contentDescription = "",
+                            )
+                        },
+                    ) {
+                        val isCurrentlySaved = membership[pl.id] ?: LocalPlaylistPref.isSongInPlaylist(context, pl.id, song.id, song.spotifyTrackId)
+                        if (isCurrentlySaved) {
+                            LocalPlaylistPref.removeSongFromPlaylist(context, pl.id, song.id, song.spotifyTrackId)
+                            membership[pl.id] = false
+                        } else {
+                            LocalPlaylistPref.addSongToPlaylist(context, pl.id, song)
+                            membership[pl.id] = true
+                        }
+                        localPlaylists = LocalPlaylistPref.getLocalPlaylists(context)
+                        Api.HomeCache.library = null
+                    }
+                }
+
+                // ── Remote Spotify Playlists ──
+                val remoteList = remotePlaylists.orEmpty()
+                items(remoteList.size, key = { "remote_${remoteList[it].id}" }) { i ->
+                    val pl = remoteList[i]
+                    LaunchedEffect(pl.id, song.spotifyTrackId) {
+                        if (membership[pl.id] == null && song.spotifyTrackId.isNotBlank()) {
+                            membership[pl.id] = withContext(Dispatchers.IO) {
+                                SpotifySync.playlistTrackIds(context, pl.id).contains(song.spotifyTrackId)
                             }
                         }
-                        val saved = membership[pl.id] == true
-                        SavedInRow(
-                            name = pl.name,
-                            subtitle = pl.tracks?.total?.let { n -> "$n song" + (if (n == 1) "" else "s") } ?: "",
-                            saved = saved,
-                            cover = {
-                                GlideImage(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(RoundedCornerShape(4.dp)),
-                                    model = pl.images.firstOrNull()?.url,
-                                    contentScale = ContentScale.Crop,
-                                    failure = placeholder(R.drawable.placeholder),
-                                    loading = placeholder(R.drawable.placeholder),
-                                    contentDescription = "",
-                                )
-                            },
-                        ) {
-                            if (song.spotifyTrackId.isBlank()) return@SavedInRow
-                            membership[pl.id] = !saved
-                            if (saved) SpotifySync.removeTrackFromPlaylist(context, pl.id, song.spotifyTrackId)
-                            else SpotifySync.addTrackToPlaylist(context, pl.id, song.spotifyTrackId)
-                        }
+                    }
+                    val saved = membership[pl.id] == true
+                    SavedInRow(
+                        name = pl.name,
+                        subtitle = pl.tracks?.total?.let { n -> "$n song" + (if (n == 1) "" else "s") } ?: "",
+                        saved = saved,
+                        isLocal = false,
+                        cover = {
+                            GlideImage(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(RoundedCornerShape(4.dp)),
+                                model = pl.images.firstOrNull()?.url,
+                                contentScale = ContentScale.Crop,
+                                failure = placeholder(R.drawable.placeholder),
+                                loading = placeholder(R.drawable.placeholder),
+                                contentDescription = "",
+                            )
+                        },
+                    ) {
+                        if (song.spotifyTrackId.isBlank()) return@SavedInRow
+                        membership[pl.id] = !saved
+                        if (saved) SpotifySync.removeTrackFromPlaylist(context, pl.id, song.spotifyTrackId)
+                        else SpotifySync.addTrackToPlaylist(context, pl.id, song.spotifyTrackId)
                     }
                 }
             }
@@ -314,6 +301,7 @@ private fun SavedInRow(
     name: String,
     subtitle: String,
     saved: Boolean,
+    isLocal: Boolean = false,
     cover: @Composable () -> Unit,
     onToggle: () -> Unit,
 ) {
@@ -334,8 +322,20 @@ private fun SavedInRow(
                 .padding(start = 14.dp, end = 8.dp),
         ) {
             Text(name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (subtitle.isNotBlank()) {
-                Text(subtitle, color = Color.Gray, fontSize = 13.sp, maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isLocal) {
+                    Icon(
+                        imageVector = Icons.Default.PhoneAndroid,
+                        contentDescription = "Local Storage",
+                        tint = SpotifyGreen,
+                        modifier = Modifier
+                            .size(14.dp)
+                            .padding(end = 3.dp)
+                    )
+                }
+                if (subtitle.isNotBlank()) {
+                    Text(subtitle, color = Color.Gray, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
         if (saved) {

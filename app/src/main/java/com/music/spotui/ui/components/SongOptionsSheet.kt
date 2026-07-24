@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -75,6 +76,8 @@ fun SongOptionsSheet(
     song: SongsModel,
     navController: NavController,
     context: Context,
+    currentPlaylistId: String? = null,
+    onSongRemovedFromPlaylist: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     val playerViewModel: com.music.spotui.ui.viewmodel.PlayerViewModel =
@@ -142,9 +145,21 @@ fun SongOptionsSheet(
             }
             SongMenuRow(
                 Icons.Default.Add, "Add to playlist",
-                enabled = song.spotifyTrackId.isNotBlank(), trailingArrow = true,
+                enabled = true, trailingArrow = true,
             ) {
                 showSavedIn = true
+            }
+            if (currentPlaylistId != null && currentPlaylistId.startsWith("local_pl_")) {
+                SongMenuRow(
+                    icon = Icons.Default.Delete,
+                    label = "Remove from this playlist",
+                    iconTint = Color.White
+                ) {
+                    com.music.spotui.data.preferences.LocalPlaylistPref.removeSongFromPlaylist(context, currentPlaylistId, song.id, song.spotifyTrackId)
+                    com.music.spotui.data.api.Api.HomeCache.library = null
+                    onSongRemovedFromPlaylist?.invoke()
+                    onDismiss()
+                }
             }
             SongMenuRow(
                 icon = if (liked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,

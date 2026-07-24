@@ -29,11 +29,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -193,11 +196,50 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
     }
 
     var menuSong by remember { mutableStateOf<com.music.spotui.data.entity.SongsModel?>(null) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            containerColor = Color(0xFF282828),
+            title = { Text("Delete Playlist", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = { Text("Are you sure you want to delete this playlist?", color = Color.LightGray) },
+            confirmButton = {
+                Text(
+                    "Delete",
+                    color = Color(0xFFFF5252),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    modifier = Modifier
+                        .clickable {
+                            com.music.spotui.data.preferences.LocalPlaylistPref.deletePlaylist(context, playlistId)
+                            com.music.spotui.data.api.Api.HomeCache.library = null
+                            showDeleteDialog = false
+                            navController.navigateUp()
+                        }
+                        .padding(8.dp)
+                )
+            },
+            dismissButton = {
+                Text(
+                    "Cancel",
+                    color = Color.Gray,
+                    fontSize = 15.sp,
+                    modifier = Modifier
+                        .clickable { showDeleteDialog = false }
+                        .padding(8.dp)
+                )
+            }
+        )
+    }
+
     menuSong?.let { sel ->
         com.music.spotui.ui.components.SongOptionsSheet(
             song = sel,
             navController = navController,
             context = context,
+            currentPlaylistId = playlistId,
+            onSongRemovedFromPlaylist = { playlistViewModel.reloadPlaylist(playlistId) },
             onDismiss = { menuSong = null },
         )
     }
@@ -295,14 +337,33 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                                 fontWeight = FontWeight.Medium
                             )
                         }
-                        if (playlist.artists.isNotBlank()) {
-                            Text(
-                                modifier = Modifier.padding(20.dp, 4.dp, 0.dp, 0.dp),
-                                text = "Playlist • ${playlist.artists}",
-                                color = Color.White,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(20.dp, 4.dp, 0.dp, 0.dp)
+                        ) {
+                            if (playlistId.startsWith("local_pl_")) {
+                                Icon(
+                                    imageVector = Icons.Default.PhoneAndroid,
+                                    contentDescription = "Local Playlist",
+                                    tint = Color(0xFF1ED760),
+                                    modifier = Modifier
+                                        .size(14.dp)
+                                        .padding(end = 4.dp)
+                                )
+                                Text(
+                                    text = "Local Playlist",
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            } else if (playlist.artists.isNotBlank()) {
+                                Text(
+                                    text = "Playlist • ${playlist.artists}",
+                                    color = Color.White,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
                         }
 
                         Row(
@@ -405,6 +466,20 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                                                 },
                                             contentDescription = "Shuffle play",
                                         )
+                                        if (playlistId.startsWith("local_pl_")) {
+                                            Spacer(modifier = Modifier.width(18.dp))
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = "Delete Playlist",
+                                                tint = Color.White,
+                                                modifier = Modifier
+                                                    .size(24.dp)
+                                                    .clickable(
+                                                        interactionSource = remember { MutableInteractionSource() },
+                                                        indication = null,
+                                                    ) { showDeleteDialog = true }
+                                            )
+                                        }
                                     }
                                 }
                             }

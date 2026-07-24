@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+import kotlinx.coroutines.Job
+
 @HiltViewModel
 class LibraryViewModel @Inject constructor(private val repository: AppRepository) : ViewModel() {
 
@@ -26,18 +28,23 @@ class LibraryViewModel @Inject constructor(private val repository: AppRepository
         MutableStateFlow(emptyList())
     val followedArtists: StateFlow<List<com.music.spotui.data.entity.ArtistsModel>> = _followedArtists
 
+    private var loadJob: Job? = null
+
     init {
         load()
         loadAccount()
         loadFollowedArtists()
     }
 
-    fun load() = viewModelScope.launch(Dispatchers.IO) {
-        repository.provideLibrary().collect { response ->
-            // Keep showing existing data while a background refresh is in-flight,
-            // so the user never sees a skeleton flash or loses scroll position.
-            if (response !is Response.Loading || _entries.value !is Response.Success) {
-                _entries.value = response
+    fun load() {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch(Dispatchers.IO) {
+            repository.provideLibrary().collect { response ->
+                // Keep showing existing data while a background refresh is in-flight,
+                // so the user never sees a skeleton flash or loses scroll position.
+                if (response !is Response.Loading || _entries.value !is Response.Success) {
+                    _entries.value = response
+                }
             }
         }
     }

@@ -26,17 +26,29 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
+import com.music.spotui.data.preferences.LocalPlaylistPref
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -79,8 +91,80 @@ fun LibraryScreen(navController: NavController) {
     val entries by libraryViewModel.entries.collectAsState()
     val account by libraryViewModel.account.collectAsState()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                libraryViewModel.load()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     // Spotify-style layout toggle: rows or a 3-column grid, persisted across runs.
-    var gridView by remember { mutableStateOf(isLibraryGridView(context))     }
+    var gridView by remember { mutableStateOf(isLibraryGridView(context)) }
+    var showCreateDialog by remember { mutableStateOf(false) }
+
+    if (showCreateDialog) {
+        var playlistNameInput by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showCreateDialog = false },
+            containerColor = Color(0xFF282828),
+            title = { Text("Create Local Playlist", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = {
+                TextField(
+                    value = playlistNameInput,
+                    onValueChange = { playlistNameInput = it },
+                    placeholder = { Text("Playlist name", color = Color.Gray) },
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color(0xFF383838),
+                        unfocusedContainerColor = Color(0xFF383838),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        cursorColor = Color(0xFF1ED760),
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                )
+            },
+            confirmButton = {
+                Text(
+                    "Create",
+                    color = Color(0xFF1ED760),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    modifier = Modifier
+                        .clickable {
+                            val name = playlistNameInput.trim().ifBlank { "My Playlist" }
+                            val created = LocalPlaylistPref.createPlaylist(context, name)
+                            Api.HomeCache.library = null
+                            libraryViewModel.load()
+                            showCreateDialog = false
+                            navController.navigate(playlistRoute(created.id, created.name))
+                        }
+                        .padding(8.dp)
+                )
+            },
+            dismissButton = {
+                Text(
+                    "Cancel",
+                    color = Color.Gray,
+                    fontSize = 15.sp,
+                    modifier = Modifier
+                        .clickable { showCreateDialog = false }
+                        .padding(8.dp)
+                )
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -88,7 +172,7 @@ fun LibraryScreen(navController: NavController) {
             .background(Color(AppBackground.toArgb()))
             .statusBarsPadding()
     ) {
-        // Header: title + account avatar. Built by hand (rather than a fixed-height
+        // Header: title + create playlist + account avatar. Built by hand (rather than a fixed-height
         // TopAppBar) so the title isn't clipped under the status bar.
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -103,6 +187,17 @@ fun LibraryScreen(navController: NavController) {
                 fontSize = 22.sp,
                 modifier = Modifier.weight(1f),
             )
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF2A2A2A))
+                    .clickable { showCreateDialog = true },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Create Playlist", tint = Color.White, modifier = Modifier.size(20.dp))
+            }
+            Spacer(modifier = Modifier.width(10.dp))
             Box(
                 modifier = Modifier
                     .size(34.dp)
@@ -256,7 +351,19 @@ fun SumUpLibraryScreen(
                 )
                 Column(modifier = Modifier.padding(start = 12.dp)) {
                     Text(text = entry.name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(text = entry.subtitle, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (entry.isLocal) {
+                            Icon(
+                                imageVector = Icons.Default.PhoneAndroid,
+                                contentDescription = "Local Storage",
+                                tint = Color(0xFF1ED760),
+                                modifier = Modifier
+                                    .size(14.dp)
+                                    .padding(end = 3.dp)
+                            )
+                        }
+                        Text(text = entry.subtitle, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
         }
@@ -376,7 +483,19 @@ fun LibraryGridScreen(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(text = entry.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(text = entry.subtitle, color = Color.Gray, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (entry.isLocal) {
+                        Icon(
+                            imageVector = Icons.Default.PhoneAndroid,
+                            contentDescription = "Local Storage",
+                            tint = Color(0xFF1ED760),
+                            modifier = Modifier
+                                .size(12.dp)
+                                .padding(end = 3.dp)
+                        )
+                    }
+                    Text(text = entry.subtitle, color = Color.Gray, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
         if (followedArtists.isNotEmpty()) {

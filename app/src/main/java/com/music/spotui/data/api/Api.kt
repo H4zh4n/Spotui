@@ -587,6 +587,13 @@ class Api @Inject constructor(
         if (playlistId.isBlank()) {
             emit(Response.Success(emptyList())); return@flow
         }
+        if (playlistId.startsWith("local_pl_")) {
+            val local = com.music.spotui.data.preferences.LocalPlaylistPref.getLocalPlaylist(context, playlistId)
+            if (local != null) {
+                emit(Response.Success(local.songs))
+                return@flow
+            }
+        }
         if (!SpotifyTokenProvider.ensureToken(context)) {
             val col = com.music.spotui.data.preferences.OfflineCollectionsPref.getCollection(context, playlistId)
             if (col != null) {
@@ -643,7 +650,26 @@ class Api @Inject constructor(
      * GQL endpoint (not rate-limited). Process-cached for instant re-entry.
      */
     suspend fun getLibrary(): Flow<Response<List<com.music.spotui.data.entity.LibraryEntry>>> = flow {
-        HomeCache.library?.let { emit(Response.Success(it)) } ?: emit(Response.Loading())
+        val localEntries = com.music.spotui.data.preferences.LocalPlaylistPref.getLocalPlaylists(context).map { pl ->
+            com.music.spotui.data.entity.LibraryEntry(
+                spotifyId = pl.id,
+                name = pl.name,
+                subtitle = "Local Playlist • ${pl.songs.size} song" + (if (pl.songs.size == 1) "" else "s"),
+                coverUri = pl.coverUri,
+                isPlaylist = true,
+                isLocal = true,
+            )
+        }
+        if (HomeCache.library != null) {
+            val nonLocal = HomeCache.library!!.filterNot { it.isLocal }
+            val likedAndDownloaded = nonLocal.filter { it.spotifyId == LIKED_SONGS_ID || it.spotifyId == DOWNLOADS_ID }
+            val restNonLocal = nonLocal.filterNot { it.spotifyId == LIKED_SONGS_ID || it.spotifyId == DOWNLOADS_ID }
+            val updatedLibrary = likedAndDownloaded + localEntries + restNonLocal
+            HomeCache.library = updatedLibrary
+            emit(Response.Success(updatedLibrary))
+        } else {
+            emit(Response.Loading())
+        }
         if (!SpotifyTokenProvider.ensureToken(context)) {
             if (HomeCache.library == null) {
                 val liked = com.music.spotui.data.entity.LibraryEntry(
@@ -670,7 +696,7 @@ class Api @Inject constructor(
                         artists = col.artists,
                     )
                 }
-                emit(Response.Success(listOf(liked, downloaded) + offlineEntries))
+                emit(Response.Success(listOf(liked, downloaded) + localEntries + offlineEntries))
             } else {
                 emit(Response.Success(HomeCache.library!!))
             }
@@ -711,7 +737,7 @@ class Api @Inject constructor(
             coverUri = "",
             isPlaylist = true,
         )
-        val merged = listOf(liked, downloaded) + playlists + albums
+        val merged = listOf(liked, downloaded) + localEntries + playlists + albums
         val offlineCollections = com.music.spotui.data.preferences.OfflineCollectionsPref.getOfflineCollections(context)
         val additional = offlineCollections.filter { col ->
             merged.none { it.spotifyId == col.id || (col.id.startsWith("album:") && it.name.equals(col.name, ignoreCase = true) && it.artists.equals(col.artists, ignoreCase = true)) }
@@ -806,6 +832,19 @@ class Api @Inject constructor(
         emit(Response.Loading())
         if (playlistId.isBlank()) {
             emit(Response.Error("missing playlist id")); return@flow
+        }
+        if (playlistId.startsWith("local_pl_")) {
+            val local = com.music.spotui.data.preferences.LocalPlaylistPref.getLocalPlaylist(context, playlistId)
+            if (local != null) {
+                emit(Response.Success(AlbumsModel(
+                    id = stableId("playlist:${local.id}"),
+                    artists = "Local Playlist",
+                    coverUri = local.coverUri,
+                    name = local.name,
+                    time = "${local.songs.size} song" + (if (local.songs.size == 1) "" else "s"),
+                )))
+                return@flow
+            }
         }
         if (!SpotifyTokenProvider.ensureToken(context)) {
             val col = com.music.spotui.data.preferences.OfflineCollectionsPref.getCollection(context, playlistId)

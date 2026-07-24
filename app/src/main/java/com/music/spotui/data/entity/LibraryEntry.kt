@@ -12,4 +12,5 @@ data class LibraryEntry(
     val coverUri: String,
     val isPlaylist: Boolean,
     val artists: String = "",
+    val isLocal: Boolean = false,
 )
