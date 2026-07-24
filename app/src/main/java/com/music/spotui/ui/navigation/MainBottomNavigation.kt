@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -62,11 +63,11 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
                 contentAlignment = Alignment.BottomCenter,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(160.dp)
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
                                 Color.Transparent,
+                                Color.Black,
                                 Color.Black
                             ),
                             startY = 0f
@@ -74,7 +75,9 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
                     )
             ) {
 
-                Column {
+                Column(
+                    modifier = Modifier.navigationBarsPadding()
+                ) {
 
                     AnimatedVisibility(
                         visible = bottomBarPlayerState.value,

@@ -297,7 +297,7 @@ fun SumUpLibraryScreen(
                 }
             }
         }
-        item { Spacer(modifier = Modifier.height(130.dp)) }
+        item { Spacer(modifier = Modifier.height(160.dp)) }
     }
 }
 

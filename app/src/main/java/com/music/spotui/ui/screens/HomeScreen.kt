@@ -182,7 +182,7 @@ fun HomeFeedContent(navController: NavController, feed: HomeFeedModel) {
         items(carousels.size) { i ->
             HomeFeedSection(navController, carousels[i])
         }
-        item { Spacer(modifier = Modifier.height(120.dp)) }
+        item { Spacer(modifier = Modifier.height(160.dp)) }
     }
 }
 
@@ -758,7 +758,7 @@ fun ImageCard(
                 }
             }
         }
-        Spacer(modifier = Modifier.height(100.dp))
+        Spacer(modifier = Modifier.height(160.dp))
     }
 }
 

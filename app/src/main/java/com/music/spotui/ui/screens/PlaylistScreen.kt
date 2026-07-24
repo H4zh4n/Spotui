@@ -624,7 +624,7 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                     }
                 }
 
-                item { Spacer(modifier = Modifier.padding(80.dp)) }
+                item { Spacer(modifier = Modifier.height(160.dp)) }
             }
         }
         if (showSortSheet) {

@@ -3,6 +3,7 @@ package com.music.spotui
 import android.annotation.SuppressLint
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -65,9 +66,7 @@ fun App() {
     }
 
     Scaffold(
-        modifier = Modifier
-            .navigationBarsPadding()
-        ,
+        modifier = Modifier.fillMaxSize(),
         bottomBar = {
             MainBottomNavigation(navController = navController, bottomBarState = bottomBarState, bottomBarPlayerState)
         }

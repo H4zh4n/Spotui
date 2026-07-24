@@ -296,7 +296,7 @@ fun SumUpSearchScreen(
         }
 
         item{
-            Spacer(modifier = Modifier.height(130.dp))
+            Spacer(modifier = Modifier.height(160.dp))
         }
 
     }

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -133,7 +134,7 @@ fun SpotifyLoginScreen(navController: NavController) {
         // form or credential injection. We just watch for the sp_dc cookie (polled
         // above) to know when the user has signed in, then exchange it for a token.
         AndroidView(
-            modifier = Modifier.fillMaxSize().statusBarsPadding().padding(top = 40.dp),
+            modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(top = 40.dp),
             factory = { ctx ->
                 val cookieManager = CookieManager.getInstance()
                 cookieManager.setAcceptCookie(true)

@@ -462,7 +462,7 @@ private fun ArtistOverviewContent(
             }
         }
 
-        item { Spacer(Modifier.height(120.dp)) }
+            item { Spacer(Modifier.height(160.dp)) }
     }
 }
 
@@ -765,7 +765,7 @@ fun ArtistReleasesScreen(navController: NavController, artistName: String) {
                     }
                 }
             }
-            item { Spacer(Modifier.height(120.dp)) }
+        item { Spacer(Modifier.height(160.dp)) }
         }
     }
 }

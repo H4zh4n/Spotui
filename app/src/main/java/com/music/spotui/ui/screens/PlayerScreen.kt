@@ -586,7 +586,8 @@ fun PlayerScreen(navController: NavController) {
                     verticalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier
                         .fillParentMaxHeight()
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .navigationBarsPadding(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Spacer(modifier = Modifier.statusBarsPadding())
@@ -649,10 +650,9 @@ fun PlayerScreen(navController: NavController) {
                     //Spacer(modifier = Modifier.padding(30.dp))
 
                     Column(
-                        verticalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier
-                            .height(300.dp)
-                            .padding(0.dp, 0.dp, 0.dp, 50.dp)
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp)
                     ) {
                         // Reads each 300ms tick (songProgress recomposition) so it reflects
                         // the current engine — Spotify vs Lossless (SpotiFLAC) vs YouTube.
@@ -721,7 +721,7 @@ fun PlayerScreen(navController: NavController) {
                             steps = 0,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp, 20.dp, 16.dp, 0.dp),
+                                .padding(16.dp, 12.dp, 16.dp, 0.dp),
                             colors = null
                         )
 
@@ -751,7 +751,7 @@ fun PlayerScreen(navController: NavController) {
                         }
 
 
-                        Spacer(modifier = Modifier.padding(5.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                         PlayerFull(
                             songPlayingState,
                             playerViewModel,
@@ -763,6 +763,8 @@ fun PlayerScreen(navController: NavController) {
                         )
                     }
 
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     // Spotify-style bottom row: current audio device (Connect) on the left,
                     // share + queue on the right.
                     PlayerConnectRow(
@@ -770,6 +772,8 @@ fun PlayerScreen(navController: NavController) {
                         context = context,
                         currentTrack = queueSongs.firstOrNull { it.id == playerViewModel.currentSongId.value },
                     )
+
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     //PlayerEndInfo()
                 }
