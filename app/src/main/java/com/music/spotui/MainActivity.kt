@@ -22,6 +22,7 @@ import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.notification.PlaybackService
 import com.music.spotui.ui.theme.SpotuiTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -80,6 +81,11 @@ class MainActivity : ComponentActivity() {
         // setContent so the Compose content view doesn't replace/orphan it (an
         // orphaned WebView gets a 0×0 viewport and Spotify won't render/navigate).
         com.music.spotui.di.SpotifyWebPlayer.attach(this)
+
+        // Perform background auto-backup if a backup directory is configured.
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            com.music.spotui.util.BackupHelper.performAutoBackup(applicationContext)
+        }
 
         // Handle initial deep link intent if launched via Spotify link
         com.music.spotui.util.DeepLinkHandler.handleIntent(intent)

@@ -1,9 +1,11 @@
 package com.music.spotui.ui.screens
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,16 +14,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Save
+import com.music.spotui.data.preferences.BackupPref
+import com.music.spotui.util.BackupHelper
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -93,6 +102,54 @@ fun SettingsScreen(navController: NavController) {
     var updateRepoUrl by remember { mutableStateOf(getUpdateRepoUrl(context)) }
     var isDefaultLinkHandler by remember { mutableStateOf(DefaultLinkHelper.isAppDefaultLinkHandler(context)) }
     var showDefaultGuide by remember { mutableStateOf(false) }
+
+    var backupDirUri by remember { mutableStateOf(BackupPref.getDirectoryUri(context)) }
+    var folderName by remember(backupDirUri) { mutableStateOf(BackupHelper.getFolderDisplayName(context, backupDirUri)) }
+    var isAutoBackup by remember { mutableStateOf(BackupPref.isAutoBackupEnabled(context)) }
+    var isRestoring by remember { mutableStateOf(false) }
+    var isBackingUp by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    val dirPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        if (uri != null) {
+            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            runCatching { context.contentResolver.takePersistableUriPermission(uri, flags) }
+            BackupPref.setDirectoryUri(context, uri.toString())
+            backupDirUri = uri.toString()
+            folderName = BackupHelper.getFolderDisplayName(context, uri.toString())
+            scope.launch {
+                val autoOk = BackupHelper.performAutoBackup(context)
+                val msg = if (autoOk) "Backup folder set to $folderName (Auto-backup created)" else "Backup folder set to $folderName"
+                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    val restoreFileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            isRestoring = true
+            scope.launch {
+                val (success, message) = BackupHelper.restoreFromFileUri(context, uri)
+                isRestoring = false
+                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+                if (success) {
+                    wifiQ = getWifiQuality(context)
+                    cellQ = getCellularQuality(context)
+                    dlQ = getDownloadQuality(context)
+                    crossfadeMs = getCrossfadeMs(context).toFloat()
+                    videoFallback = isVideoFallbackEnabled(context)
+                    autoPlay = isAutoPlayEnabled(context)
+                    updateRepoUrl = getUpdateRepoUrl(context)
+                    backupDirUri = BackupPref.getDirectoryUri(context)
+                    isAutoBackup = BackupPref.isAutoBackupEnabled(context)
+                }
+            }
+        }
+    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -366,6 +423,137 @@ fun SettingsScreen(navController: NavController) {
                     )
                 },
             )
+            Spacer(Modifier.height(12.dp))
+            SectionTitle("Backup & Restore")
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable(enabled = !isBackingUp) {
+                            if (backupDirUri.isNullOrBlank()) {
+                                dirPickerLauncher.launch(null)
+                            } else {
+                                isBackingUp = true
+                                scope.launch {
+                                    val (success, message) = BackupHelper.performManualBackup(context)
+                                    isBackingUp = false
+                                    android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                        .background(Color(0xFF1A1A20))
+                        .padding(horizontal = 12.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Back Up Now", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            when {
+                                isBackingUp -> "Creating backup in background…"
+                                backupDirUri.isNullOrBlank() -> "Tap to choose folder & back up"
+                                else -> "Folder: $folderName"
+                            },
+                            color = if (backupDirUri.isNullOrBlank()) Color(0xFFFFB74D) else Color(0xFFB3B3B3),
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                        )
+                    }
+                    if (isBackingUp) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = AppPalette,
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Filled.Save,
+                            contentDescription = "Back Up Now",
+                            tint = AppPalette,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+
+                if (!backupDirUri.isNullOrBlank()) {
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF1A1A20))
+                            .clickable(enabled = !isBackingUp) { dirPickerLauncher.launch(null) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Folder,
+                            contentDescription = "Change Backup Folder",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(enabled = !isRestoring) {
+                        restoreFileLauncher.launch(arrayOf("application/json", "*/*"))
+                    }
+                    .background(Color(0xFF1A1A20))
+                    .padding(horizontal = 12.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Restore from File", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (isRestoring) "Restoring backup in background…" else "Import playlists and settings from a Spotui backup file",
+                        color = Color(0xFFB3B3B3),
+                        fontSize = 12.sp,
+                    )
+                }
+                if (isRestoring) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = AppPalette,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.FolderOpen,
+                        contentDescription = "Restore",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            SettingsSwitchRow(
+                title = "Automatic backup",
+                subtitle = if (backupDirUri.isNullOrBlank()) "Automatically backs up settings and playlists when app opens" else "Auto-backup saved to $folderName",
+                checked = isAutoBackup,
+            ) { enabled ->
+                if (enabled && backupDirUri.isNullOrBlank()) {
+                    dirPickerLauncher.launch(null)
+                } else {
+                    isAutoBackup = enabled
+                    BackupPref.setAutoBackupEnabled(context, enabled)
+                    if (enabled) {
+                        scope.launch { BackupHelper.performAutoBackup(context) }
+                    }
+                }
+            }
+
             Spacer(Modifier.height(12.dp))
             SectionTitle("Account")
             Text(
