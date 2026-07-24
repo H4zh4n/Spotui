@@ -65,6 +65,9 @@ class MainActivity : ComponentActivity() {
 
                 // New-release check (GitHub): prompts Upgrade / Dismiss / Don't show again.
                 com.music.spotui.ui.components.UpdatePrompt()
+
+                // Default link handler prompt: helps user enable open.spotify.com defaults.
+                com.music.spotui.ui.components.DefaultAppPrompt()
             }
         }
 

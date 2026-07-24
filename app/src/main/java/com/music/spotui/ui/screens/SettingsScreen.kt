@@ -66,6 +66,15 @@ import com.music.spotui.data.preferences.getUpdateRepoUrl
 import com.music.spotui.data.preferences.setUpdateRepoUrl
 import com.music.spotui.data.preferences.resetUpdateRepoUrl
 import com.music.spotui.data.preferences.DEFAULT_UPDATE_REPO_URL
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.music.spotui.ui.components.DefaultAppPrompt
+import com.music.spotui.util.DefaultLinkHelper
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 
@@ -82,6 +91,19 @@ fun SettingsScreen(navController: NavController) {
     var autoPlay by remember { mutableStateOf(isAutoPlayEnabled(context)) }
     var batteryOptExempt by remember { mutableStateOf(BatteryOptimizationHelper.isIgnoringBatteryOptimization(context)) }
     var updateRepoUrl by remember { mutableStateOf(getUpdateRepoUrl(context)) }
+    var isDefaultLinkHandler by remember { mutableStateOf(DefaultLinkHelper.isAppDefaultLinkHandler(context)) }
+    var showDefaultGuide by remember { mutableStateOf(false) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isDefaultLinkHandler = DefaultLinkHelper.isAppDefaultLinkHandler(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     val batteryOptLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -169,6 +191,46 @@ fun SettingsScreen(navController: NavController) {
             }
 
             Spacer(Modifier.height(12.dp))
+            SectionTitle("Link handling")
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable {
+                        if (isDefaultLinkHandler) {
+                            DefaultLinkHelper.openSpotuiDefaultSettings(context)
+                        } else {
+                            showDefaultGuide = true
+                        }
+                    }
+                    .background(Color(0xFF1A1A20))
+                    .padding(horizontal = 12.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Open Spotify links by default", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (isDefaultLinkHandler) "Spotui handles Spotify URLs by default" else "Not default — tap to open setup guide",
+                        color = if (isDefaultLinkHandler) Color(0xFF81C784) else Color(0xFFB3B3B3),
+                        fontSize = 12.sp,
+                    )
+                }
+                if (isDefaultLinkHandler) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = "Enabled",
+                        tint = AppPalette,
+                        modifier = Modifier.size(20.dp)
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.OpenInNew,
+                        contentDescription = "Open Settings",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
             SectionTitle("Audio quality")
             QualityPicker(
                 title = "Streaming over Wi-Fi",
@@ -324,6 +386,16 @@ fun SettingsScreen(navController: NavController) {
                     .padding(vertical = 14.dp)
             )
             Spacer(Modifier.height(40.dp))
+        }
+
+        if (showDefaultGuide) {
+            DefaultAppPrompt(
+                forceShow = true,
+                onDismiss = {
+                    showDefaultGuide = false
+                    isDefaultLinkHandler = DefaultLinkHelper.isAppDefaultLinkHandler(context)
+                }
+            )
         }
     }
 }
