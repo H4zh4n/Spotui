@@ -5,8 +5,8 @@
     <style name="splashScreenTheme" parent="Theme.SplashScreen">
         <!-- Same disco-ball artwork as the launcher icon, so the splash flash
              matches the icon the user tapped (not the old equalizer logo). -->
-        <item name="windowSplashScreenBackground">@color/ic_launcher_background</item>
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
         <item name="postSplashScreenTheme">@style/Theme.Spotui</item>
         <item name="android:windowActionBar">false</item>
         <item name="android:windowNoTitle">true</item>
