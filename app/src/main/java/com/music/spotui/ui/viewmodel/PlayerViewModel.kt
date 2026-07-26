@@ -216,6 +216,11 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
         }
     }
 
+    /** Clears the current Canvas URL so the squared artwork shows instead of a black screen. */
+    fun clearCanvas() {
+        _canvasUrl.value = null
+    }
+
     fun goToArtist(trackId: String, fallbackName: String, navigate: (route: String) -> Unit) {
         viewModelScope.launch {
             val route = withContext(Dispatchers.IO) {

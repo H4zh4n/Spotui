@@ -496,7 +496,11 @@ fun PlayerScreen(navController: NavController) {
     // Load the current track's Spotify Canvas (full-screen looping video background).
     LaunchedEffect(songId, queueSongs) {
         val track = queueSongs.firstOrNull { it.id == songId }
-        playerViewModel.loadCanvas(track?.spotifyTrackId.orEmpty())
+        // Downloaded tracks are meant for offline use — skip the Canvas video
+        // (which needs network to stream) and always show the squared artwork.
+        val downloaded = track != null &&
+            com.music.spotui.data.preferences.isDownloaded(context, track.id.toString())
+        playerViewModel.loadCanvas(if (downloaded) "" else track?.spotifyTrackId.orEmpty())
     }
 
 
@@ -560,6 +564,7 @@ fun PlayerScreen(navController: NavController) {
             CanvasVideo(
                 url = canvasUrl,
                 modifier = Modifier.fillMaxSize(),
+                onError = { playerViewModel.clearCanvas() },
             )
             Box(
                 modifier = Modifier
@@ -2409,7 +2414,7 @@ fun PlayerMenuRow(
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
-private fun CanvasVideo(url: String, modifier: Modifier = Modifier) {
+private fun CanvasVideo(url: String, modifier: Modifier = Modifier, onError: (() -> Unit)? = null) {
     val context = LocalContext.current
     val exo = remember(url) {
         androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
@@ -2421,7 +2426,13 @@ private fun CanvasVideo(url: String, modifier: Modifier = Modifier) {
         }
     }
     androidx.compose.runtime.DisposableEffect(url) {
-        onDispose { exo.release() }
+        val listener = object : androidx.media3.common.Player.Listener {
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                onError?.invoke()
+            }
+        }
+        exo.addListener(listener)
+        onDispose { exo.removeListener(listener); exo.release() }
     }
     androidx.compose.ui.viewinterop.AndroidView(
         modifier = modifier,
