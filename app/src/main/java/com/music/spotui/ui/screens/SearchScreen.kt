@@ -43,6 +43,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
@@ -739,6 +741,7 @@ fun SearchStickyBar(
     onFocusChange: (Boolean) -> Unit = {},
     onTextChange: (String) -> Unit,
 ) {
+    val focusRequester = remember { FocusRequester() }
 
     Row(verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -752,11 +755,15 @@ fun SearchStickyBar(
         Icon(
             painterResource(id = R.drawable.ic_search_big),
             tint = Color.Black,
-            contentDescription = "")
+            contentDescription = "",
+            modifier = Modifier.clickable { focusRequester.requestFocus() }
+        )
 
         TextField(
             enabled = true,
-            modifier = Modifier.onFocusChanged { onFocusChange(it.isFocused) },
+            modifier = Modifier
+                .onFocusChanged { onFocusChange(it.isFocused) }
+                .focusRequester(focusRequester),
             value = text,
             textStyle = TextStyle.Default.copy(fontSize = 16.sp, color = Color.Black, fontWeight = FontWeight(500)),
             colors = TextFieldDefaults.colors(
