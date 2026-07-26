@@ -20,3 +20,4 @@ app/release/
 /.idea/*
 /.github/git-commit-instructions.md
 /app/build/
+/.artifacts/
