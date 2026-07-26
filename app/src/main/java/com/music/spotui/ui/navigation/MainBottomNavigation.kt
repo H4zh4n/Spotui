@@ -47,7 +47,7 @@ class NoRippleInteractionSource : MutableInteractionSource {
 }
 
 @Composable
-fun MainBottomNavigation(navController: NavHostController, bottomBarState: MutableState<Boolean>, bottomBarPlayerState : MutableState<Boolean>) {
+fun MainBottomNavigation(navController: NavHostController, bottomBarState: MutableState<Boolean>, bottomBarPlayerState : MutableState<Boolean>, onSearchReselected: () -> Unit = {}) {
 
     val navItems = listOf(
         Routes.Home,
@@ -140,6 +140,8 @@ fun MainBottomNavigation(navController: NavHostController, bottomBarState: Mutab
                                         }
                                     } else if (currentRoute != item.route) {
                                         navController.popBackStack(item.route, inclusive = false)
+                                    } else if (item.route == Routes.Search.route) {
+                                        onSearchReselected()
                                     }
                                 },
                                 alwaysShowLabel = true,

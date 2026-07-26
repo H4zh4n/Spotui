@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -84,7 +85,7 @@ import com.music.spotui.ui.components.SwipeToPlayNextWrapper
 
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
-fun SearchScreen(navController: NavController) {
+fun SearchScreen(navController: NavController, searchFocusTrigger: Int = 0) {
     val searchViewModel : SearchViewModel = hiltViewModel()
     val results by searchViewModel.results.collectAsState()
 
@@ -96,7 +97,7 @@ fun SearchScreen(navController: NavController) {
             .fillMaxSize()
             .background(Color(AppBackground.toArgb()))
     ) {
-        SumUpSearchScreen(navController = navController, searchResults, searchViewModel)
+        SumUpSearchScreen(navController = navController, searchResults, searchViewModel, searchFocusTrigger = searchFocusTrigger)
     }
 }
 
@@ -108,6 +109,7 @@ fun SumUpSearchScreen(
     navController: NavController,
     results: SearchResults,
     searchViewModel: SearchViewModel,
+    searchFocusTrigger: Int = 0,
 ) {
     val context = LocalContext.current
 
@@ -152,6 +154,7 @@ fun SumUpSearchScreen(
             SearchStickyBar(
                 text,
                 onFocusChange = { searchFocused = it },
+                searchFocusTrigger = searchFocusTrigger,
             ) {
                 text = it
                 searchViewModel.search(it)
@@ -739,9 +742,19 @@ fun SearchTopBar() {
 fun SearchStickyBar(
     text: String,
     onFocusChange: (Boolean) -> Unit = {},
+    searchFocusTrigger: Int = 0,
     onTextChange: (String) -> Unit,
 ) {
     val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    // When the search tab is re-tapped, focus the text field and show the keyboard.
+    LaunchedEffect(searchFocusTrigger) {
+        if (searchFocusTrigger > 0) {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
+    }
 
     Row(verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier

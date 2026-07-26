@@ -40,7 +40,8 @@ import com.music.spotui.ui.viewmodel.PlayerViewModel
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun MyNavHost(
-    navHostController: NavHostController
+    navHostController: NavHostController,
+    searchFocusTrigger: Int = 0,
 ) {
 
     val playerViewModel : PlayerViewModel = hiltViewModel()
@@ -99,7 +100,7 @@ fun MyNavHost(
             HomeScreen(navHostController)
         }
         composable(Routes.Search.route){
-            SearchScreen(navHostController)
+            SearchScreen(navHostController, searchFocusTrigger = searchFocusTrigger)
         }
         composable(Routes.Library.route) {
             LibraryScreen(navHostController)
