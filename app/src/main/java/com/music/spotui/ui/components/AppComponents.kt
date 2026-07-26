@@ -510,14 +510,23 @@ fun SwipeToPlayNextWrapper(
     onPlayNext: () -> Unit,
     content: @Composable () -> Unit
 ) {
+    var hasFired by remember { mutableStateOf(false) }
+
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
-            if (value == SwipeToDismissBoxValue.StartToEnd) {
+            if (value == SwipeToDismissBoxValue.StartToEnd && !hasFired) {
+                hasFired = true
                 onPlayNext()
             }
             false
         }
     )
+
+    LaunchedEffect(dismissState.currentValue) {
+        if (dismissState.currentValue == SwipeToDismissBoxValue.Settled) {
+            hasFired = false
+        }
+    }
 
     SwipeToDismissBox(
         state = dismissState,

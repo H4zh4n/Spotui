@@ -487,6 +487,7 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                             // list's track is paused, otherwise start from the top.
                             if (songs.isNotEmpty()) {
                                 val playing = playlistViewModel.currentSongPlayingState.value
+                                val currentInList = songs.any { it.id == playlistViewModel.currentSongId.value }
                                 Box(
                                     contentAlignment = Alignment.Center,
                                     modifier = Modifier
@@ -498,18 +499,16 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                                             indication = null
                                         ) {
                                             when {
-                                                playing -> playlistViewModel.setPlaying(false)
-                                                songs.any { it.id == playlistViewModel.currentSongId.value } ->
-                                                    playlistViewModel.setPlaying(true)
-                                                else -> {
-                                                    playlistViewModel.updateQueue(songs)
-                                                    SongPlayer.playSong(songs[0].url, context)
+                                                currentInList -> playlistViewModel.setPlaying(!playing)
+                                                filteredSongs.isNotEmpty() -> {
+                                                    playlistViewModel.updateQueue(filteredSongs)
+                                                    SongPlayer.playSong(filteredSongs[0].url, context)
                                                     playlistViewModel.updateSongState(
-                                                        songs[0].coverUri,
-                                                        songs[0].title,
-                                                        songs[0].singer,
+                                                        filteredSongs[0].coverUri,
+                                                        filteredSongs[0].title,
+                                                        filteredSongs[0].singer,
                                                         true,
-                                                        songs[0].id,
+                                                        filteredSongs[0].id,
                                                         0,
                                                         playlist.name
                                                     )
@@ -521,9 +520,9 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                                         modifier = Modifier.size(25.dp),
                                         tint = Color.Black,
                                         painter = painterResource(
-                                            id = if (playing) R.drawable.ic_playing else R.drawable.play_svgrepo_com,
+                                            id = if (currentInList && playing) R.drawable.ic_playing else R.drawable.play_svgrepo_com,
                                         ),
-                                        contentDescription = if (playing) "Pause" else "Play"
+                                        contentDescription = if (currentInList && playing) "Pause" else "Play"
                                     )
                                 }
                             }

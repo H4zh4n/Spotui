@@ -302,6 +302,7 @@ fun LikedSongsScreen(navController: NavController) {
                             // list's track is paused, otherwise start from the top.
                             if (songs.isNotEmpty()) {
                                 val playing = likedSongsViewModel.currentSongPlayingState.value
+                                val currentInList = songs.any { it.id == likedSongsViewModel.currentSongId.value }
                                 Box(
                                     contentAlignment = Alignment.Center,
                                     modifier = Modifier
@@ -313,9 +314,7 @@ fun LikedSongsScreen(navController: NavController) {
                                             indication = null
                                         ) {
                                             when {
-                                                playing -> likedSongsViewModel.setPlaying(false)
-                                                songs.any { it.id == likedSongsViewModel.currentSongId.value } ->
-                                                    likedSongsViewModel.setPlaying(true)
+                                                currentInList -> likedSongsViewModel.setPlaying(!playing)
                                                 else -> {
                                                     likedSongsViewModel.updateQueue(songs)
                                                     SongPlayer.playSong(songs[0].url, context)
@@ -336,9 +335,9 @@ fun LikedSongsScreen(navController: NavController) {
                                         modifier = Modifier.size(25.dp),
                                         tint = Color.Black,
                                         painter = painterResource(
-                                            id = if (playing) R.drawable.ic_playing else R.drawable.play_svgrepo_com,
+                                            id = if (currentInList && playing) R.drawable.ic_playing else R.drawable.play_svgrepo_com,
                                         ),
-                                        contentDescription = if (playing) "Pause" else "Play"
+                                        contentDescription = if (currentInList && playing) "Pause" else "Play"
                                     )
                                 }
                             }

@@ -456,6 +456,7 @@ fun SumUpAlbumScreen(
                         // album's track is paused, otherwise start from the top.
                         if (albumSongs.isNotEmpty()) {
                             val playing = albumViewModel.currentSongPlayingState.value
+                            val currentInList = albumSongs.any { it.id == albumViewModel.currentSongId.value }
                             androidx.compose.foundation.layout.Box(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier
@@ -467,9 +468,7 @@ fun SumUpAlbumScreen(
                                         indication = null
                                     ) {
                                         when {
-                                            playing -> albumViewModel.setPlaying(false)
-                                            albumSongs.any { it.id == albumViewModel.currentSongId.value } ->
-                                                albumViewModel.setPlaying(true)
+                                            currentInList -> albumViewModel.setPlaying(!playing)
                                             else -> {
                                                 albumViewModel.updateQueue(albumSongs)
                                                 SongPlayer.playSong(albumSongs[0].url, context)
@@ -491,9 +490,9 @@ fun SumUpAlbumScreen(
                                         .size(25.dp),
                                     tint = Color.Black,
                                     painter = painterResource(
-                                        id = if (playing) R.drawable.ic_playing else R.drawable.play_svgrepo_com,
+                                        id = if (currentInList && playing) R.drawable.ic_playing else R.drawable.play_svgrepo_com,
                                     ),
-                                    contentDescription = if (playing) "Pause" else "Play")
+                                    contentDescription = if (currentInList && playing) "Pause" else "Play")
                             }
                         }
                     }
