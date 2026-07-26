@@ -14,7 +14,6 @@ import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
-import androidx.media3.common.Timeline
 import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.LibraryResult
@@ -63,6 +62,7 @@ class PlaybackService : MediaLibraryService() {
 
     @Inject
     lateinit var currentSongState: CurrentSongState
+
     @Inject
     lateinit var repository: AppRepository
 
@@ -161,6 +161,10 @@ class PlaybackService : MediaLibraryService() {
 
         // Order notification buttons: [repeat | prev | play/pause | next | close]
         val notificationProvider = object : DefaultMediaNotificationProvider(this) {
+            init {
+                setSmallIcon(R.drawable.ic_spotui_notification)
+            }
+
             override fun getMediaButtons(
                 session: MediaSession,
                 playerCommands: Player.Commands,
@@ -169,10 +173,19 @@ class PlaybackService : MediaLibraryService() {
             ): ImmutableList<CommandButton> {
                 val base =
                     super.getMediaButtons(session, playerCommands, customLayout, showPauseButton)
-                android.util.Log.d("PlaybackService", "getMediaButtons: playerCommands=$playerCommands")
-                android.util.Log.d("PlaybackService", "getMediaButtons: baseButtons size=${base.size}")
+                android.util.Log.d(
+                    "PlaybackService",
+                    "getMediaButtons: playerCommands=$playerCommands"
+                )
+                android.util.Log.d(
+                    "PlaybackService",
+                    "getMediaButtons: baseButtons size=${base.size}"
+                )
                 for (b in base) {
-                    android.util.Log.d("PlaybackService", "getMediaButtons: button displayName=${b.displayName}, customAction=${b.sessionCommand?.customAction}, playerCommand=${b.playerCommand}")
+                    android.util.Log.d(
+                        "PlaybackService",
+                        "getMediaButtons: button displayName=${b.displayName}, customAction=${b.sessionCommand?.customAction}, playerCommand=${b.playerCommand}"
+                    )
                 }
                 val repeatBtn = base.find { it.sessionCommand?.customAction == "ACTION_REPEAT" }
                 val closeBtn = base.find { it.sessionCommand?.customAction == "ACTION_CLOSE" }
@@ -209,7 +222,6 @@ class PlaybackService : MediaLibraryService() {
         mediaSession = MediaLibrarySession.Builder(this, wrap(base), LibraryCallback())
             .setSessionActivity(sessionActivity)
             .build()
-
 
 
         // When a crossfade promotes a new ExoPlayer instance, re-bind the session to it
@@ -280,11 +292,17 @@ class PlaybackService : MediaLibraryService() {
      */
     private val mediaControlReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            android.util.Log.d("PlaybackService", "BroadcastReceiver: action=${intent.action} extras=${intent.extras?.keySet()}")
+            android.util.Log.d(
+                "PlaybackService",
+                "BroadcastReceiver: action=${intent.action} extras=${intent.extras?.keySet()}"
+            )
             when (intent.action) {
                 Intent.ACTION_MEDIA_BUTTON -> {
                     val keyEvent = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
-                    android.util.Log.d("PlaybackService", "BroadcastReceiver: ACTION_MEDIA_BUTTON keyCode=${keyEvent?.keyCode}")
+                    android.util.Log.d(
+                        "PlaybackService",
+                        "BroadcastReceiver: ACTION_MEDIA_BUTTON keyCode=${keyEvent?.keyCode}"
+                    )
                     if (keyEvent != null && keyEvent.action == KeyEvent.ACTION_DOWN) {
                         when (keyEvent.keyCode) {
                             KeyEvent.KEYCODE_MEDIA_NEXT -> SongPlayer.next(context)
@@ -297,6 +315,7 @@ class PlaybackService : MediaLibraryService() {
                     }
                     if (isOrderedBroadcast) abortBroadcast()
                 }
+
                 "com.android.music.musicservicecommand" -> {
                     when (intent.getStringExtra("command")) {
                         "play" -> SongPlayer.play()
@@ -307,6 +326,7 @@ class PlaybackService : MediaLibraryService() {
                         "stop" -> SongPlayer.pause()
                     }
                 }
+
                 "com.android.music.play" -> SongPlayer.play()
                 "com.android.music.pause" -> SongPlayer.pause()
                 "com.android.music.next" -> SongPlayer.next(context)
@@ -332,6 +352,7 @@ class PlaybackService : MediaLibraryService() {
             override fun isCommandAvailable(command: Int): Boolean = when (command) {
                 COMMAND_SEEK_TO_NEXT, COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
                 COMMAND_SEEK_TO_PREVIOUS, COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> true
+
                 else -> super.isCommandAvailable(command)
             }
 
@@ -406,26 +427,46 @@ class PlaybackService : MediaLibraryService() {
             intent: Intent,
         ): Boolean {
             val keyEvent = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
-            android.util.Log.d("PlaybackService", "onMediaButtonEvent: keyEvent=$keyEvent action=${intent.action}")
+            android.util.Log.d(
+                "PlaybackService",
+                "onMediaButtonEvent: keyEvent=$keyEvent action=${intent.action}"
+            )
             if (keyEvent == null) {
-                android.util.Log.w("PlaybackService", "onMediaButtonEvent: no KeyEvent in intent extras=${intent.extras?.keySet()}")
+                android.util.Log.w(
+                    "PlaybackService",
+                    "onMediaButtonEvent: no KeyEvent in intent extras=${intent.extras?.keySet()}"
+                )
                 return false
             }
-            android.util.Log.d("PlaybackService", "onMediaButtonEvent: keyCode=${keyEvent.keyCode} action=${keyEvent.action}")
+            android.util.Log.d(
+                "PlaybackService",
+                "onMediaButtonEvent: keyCode=${keyEvent.keyCode} action=${keyEvent.action}"
+            )
             if (keyEvent.action != KeyEvent.ACTION_DOWN) return false
             when (keyEvent.keyCode) {
                 KeyEvent.KEYCODE_MEDIA_NEXT -> {
-                    android.util.Log.d("PlaybackService", "onMediaButtonEvent: handling KEYCODE_MEDIA_NEXT")
+                    android.util.Log.d(
+                        "PlaybackService",
+                        "onMediaButtonEvent: handling KEYCODE_MEDIA_NEXT"
+                    )
                     SongPlayer.next(applicationContext)
                     return true
                 }
+
                 KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
-                    android.util.Log.d("PlaybackService", "onMediaButtonEvent: handling KEYCODE_MEDIA_PREVIOUS")
+                    android.util.Log.d(
+                        "PlaybackService",
+                        "onMediaButtonEvent: handling KEYCODE_MEDIA_PREVIOUS"
+                    )
                     SongPlayer.previous(applicationContext)
                     return true
                 }
+
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                    android.util.Log.d("PlaybackService", "onMediaButtonEvent: KEYCODE_MEDIA_PLAY_PAUSE (not intercepting)")
+                    android.util.Log.d(
+                        "PlaybackService",
+                        "onMediaButtonEvent: KEYCODE_MEDIA_PLAY_PAUSE (not intercepting)"
+                    )
                 }
             }
             return false
