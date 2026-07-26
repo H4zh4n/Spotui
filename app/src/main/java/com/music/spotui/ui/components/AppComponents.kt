@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -94,6 +95,22 @@ fun Loader() {
 
 }
 
+@Composable
+fun ExplicitBadge(
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.TextUnit = 9.sp,
+) {
+    Text(
+        text = "E",
+        color = Color(0xFFB3B3B3),
+        fontSize = size,
+        fontWeight = FontWeight.Bold,
+        modifier = modifier
+            .background(Color(0xFF333333), RoundedCornerShape(3.dp))
+            .padding(horizontal = 4.dp, vertical = 1.dp),
+    )
+}
+
 @OptIn(ExperimentalGlideComposeApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun MiniPlayer(navController: NavHostController) {
@@ -105,6 +122,9 @@ fun MiniPlayer(navController: NavHostController) {
     val songId by miniPlayerViewModel.currentSongId
     val songIndex by miniPlayerViewModel.currentSongIndex
     val songAlbum by miniPlayerViewModel.currentSongAlbum
+    val isCurrentSongExplicit by remember(songId) {
+        mutableStateOf(miniPlayerViewModel.queue.value.firstOrNull { it.id == songId }?.explicit == true)
+    }
 
     var swipeOffsetY by remember { mutableFloatStateOf(0f) }
     val coroutineScope = rememberCoroutineScope()
@@ -278,7 +298,13 @@ fun MiniPlayer(navController: NavHostController) {
                     modifier = Modifier
                         .widthIn(Dp.Unspecified, 200.dp)
                 ) {
-                    Text(text = songTitle, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isCurrentSongExplicit) {
+                            ExplicitBadge()
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        Text(text = songTitle, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis )
+                    }
                     Text(text = songSinger, color = Color.LightGray, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
             }

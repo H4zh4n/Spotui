@@ -233,14 +233,20 @@ private fun QueueRow(
         )
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = song.title,
-                color = if (highlight) Color(AppPalette.toArgb()) else Color.White,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (song.explicit) {
+                    com.music.spotui.ui.components.ExplicitBadge()
+                    Spacer(Modifier.width(4.dp))
+                }
+                Text(
+                    text = song.title,
+                    color = if (highlight) Color(AppPalette.toArgb()) else Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             Text(
                 text = song.singer,
                 color = Color.Gray,

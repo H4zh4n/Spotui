@@ -531,7 +531,13 @@ private fun PopularTrackRow(
                 contentDescription = "",
             )
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = song.title, color = titleColor, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (song.explicit) {
+                        com.music.spotui.ui.components.ExplicitBadge()
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    Text(text = song.title, color = titleColor, fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                }
                 item.playcount?.let {
                     Text(text = grouped(it), color = Color.Gray, fontSize = 12.sp, maxLines = 1)
                 } ?: Text(text = song.singer, color = Color.Gray, fontSize = 12.sp, maxLines = 1)

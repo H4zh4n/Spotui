@@ -682,6 +682,7 @@ fun PlayerScreen(navController: NavController) {
                             },
                             spotifyTrackId = queueSongs.firstOrNull { it.id == songId }?.spotifyTrackId.orEmpty(),
                             onShowSavedIn = { showSavedIn = true },
+                            isExplicit = queueSongs.firstOrNull { it.id == songId }?.explicit == true,
                         )
 
                         // Smooth scrubbing: while dragging, the thumb follows the finger
@@ -878,6 +879,7 @@ fun PlayerInfo(
     onArtistClick: (() -> Unit)? = null,
     spotifyTrackId: String = "",
     onShowSavedIn: (() -> Unit)? = null,
+    isExplicit: Boolean = false,
 ) {
 
     var snackbarMessage by remember {
@@ -917,15 +919,21 @@ fun PlayerInfo(
 //                            contentDescription = ""
 //                        )
                 Column {
-                    Text(
-                        modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE),
-                        text = songTitle,
-                        color = Color.White,
-                        fontSize = 19.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        softWrap = false,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isExplicit) {
+                            com.music.spotui.ui.components.ExplicitBadge(size = 11.sp)
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        Text(
+                            modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE),
+                            text = songTitle,
+                            color = Color.White,
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
+                    }
                     Text(
                         text = songSinger,
                         color = Color.Gray,

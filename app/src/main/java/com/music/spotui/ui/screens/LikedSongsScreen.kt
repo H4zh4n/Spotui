@@ -396,13 +396,19 @@ fun LikedSongsScreen(navController: NavController) {
                                 contentDescription = ""
                             )
                             Column(modifier = Modifier.padding(start = 12.dp).width(280.dp)) {
-                                Text(
-                                    text = song.title,
-                                    color = currentColor,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 1
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (song.explicit) {
+                                        com.music.spotui.ui.components.ExplicitBadge()
+                                        Spacer(Modifier.width(4.dp))
+                                    }
+                                    Text(
+                                        text = song.title,
+                                        color = currentColor,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1
+                                    )
+                                }
                                 Text(
                                     text = song.singer,
                                     color = Color.Gray,

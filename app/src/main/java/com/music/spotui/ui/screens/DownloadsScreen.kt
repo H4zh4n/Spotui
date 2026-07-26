@@ -371,13 +371,19 @@ fun DownloadsScreen(navController: NavController) {
                                 .padding(start = 12.dp)
                                 .weight(1f)
                         ) {
-                            Text(
-                                text = song.title,
-                                color = Color.White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (song.explicit) {
+                                    com.music.spotui.ui.components.ExplicitBadge()
+                                    Spacer(Modifier.width(4.dp))
+                                }
+                                Text(
+                                    text = song.title,
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1
+                                )
+                            }
                             Spacer(modifier = Modifier.height(4.dp))
                             androidx.compose.material3.LinearProgressIndicator(
                                 progress = { (pct.coerceIn(0, 100)) / 100f },
@@ -464,13 +470,19 @@ fun DownloadsScreen(navController: NavController) {
                                         .padding(start = 12.dp)
                                         .width(280.dp)
                                 ) {
-                                    Text(
-                                        text = song.title,
-                                        color = currentColor,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (song.explicit) {
+                                            com.music.spotui.ui.components.ExplicitBadge()
+                                            Spacer(Modifier.width(4.dp))
+                                        }
+                                        Text(
+                                            text = song.title,
+                                            color = currentColor,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1
+                                        )
+                                    }
                                     Text(
                                         text = song.singer,
                                         color = Color.Gray,

@@ -479,7 +479,13 @@ fun SearchSongRow(
                     contentDescription = "",
                 )
                 Column {
-                    Text(text = song.title, color = currentPlayingIndicatorColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (song.explicit) {
+                            com.music.spotui.ui.components.ExplicitBadge()
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        Text(text = song.title, color = currentPlayingIndicatorColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                    }
                     Text(text = "Song • ${song.singer}", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                 }
             }

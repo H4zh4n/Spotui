@@ -1041,6 +1041,8 @@ object SongPlayer {
         VersionMarker("instrumental", markerPattern("""instrumental|no vocals|инструментал|без вокала"""), true),
         VersionMarker("mashup", markerPattern("""mashup|mash up|bootleg|rework|flip|мешап|мэшап|бутлег"""), true),
         VersionMarker("fan edit", markerPattern("""fan edit|fanmade|right version|edit audio|перезалив|перезалит\w*"""), true),
+        VersionMarker("clean", markerPattern("""\bclean\b|clean version|edited version|пensored"""), false),
+        VersionMarker("explicit", markerPattern("""\bexplicit\b|explicit version|uncensored|uncut"""), false),
         VersionMarker("extended", markerPattern("""extended mix|extended version|12 inch|12"""), false),
         VersionMarker("radio edit", markerPattern("""radio edit|single edit|edit version"""), false),
         VersionMarker("remaster", markerPattern("""remaster|remastered|anniversary edition"""), false),
@@ -1127,16 +1129,21 @@ object SongPlayer {
         )
     }
 
-    private fun CandidateScore.isAcceptableMatch(): Boolean {
+    private fun CandidateScore.isAcceptableMatch(wantExplicit: Boolean? = null): Boolean {
         val durationStrong = durationScore?.let { it >= 0.94 } ?: false
         val albumUseful = albumScore?.let { it >= 0.45 } ?: false
         val hasDuration = durationScore != null
-        val minScore = when {
+        val baseMinScore = when {
             hasDuration && item.isVideoSong -> 1.55
             hasDuration -> 2.25
             item.isVideoSong -> 0.78
             else -> 1.35
         }
+        // Penalise candidates whose explicit flag doesn't match the Spotify track.
+        // This makes it harder for a clean version to pass the gate when an
+        // explicit one is expected (and vice-versa).
+        val explicitMismatch = wantExplicit != null && item.explicit != wantExplicit
+        val minScore = if (explicitMismatch) baseMinScore + 0.6 else baseMinScore
 
         // Duration is deliberately weighted heavily, as in spotify_to_ytmusic,
         // but these gates prevent a same-length wrong-artist song from winning.
@@ -1198,7 +1205,12 @@ object SongPlayer {
         if (forPlayback) {
             updateResolveStatus(true, "Searching YouTube videos...")
         }
-        val searchText = searchTextForPlayback(query)
+        val wantExplicit = explicitRegistry[query]
+        val baseSearchText = searchTextForPlayback(query)
+        // Append "explicit" to the YouTube search query when Spotify says the
+        // track is explicit — increases the chance YouTube returns the correct
+        // version instead of the clean/radio edit.
+        val searchText = if (wantExplicit == true) "$baseSearchText explicit" else baseSearchText
         // A raw YouTube videoId is 11 chars with no spaces — accept it directly.
         if (searchText.length == 11 && !searchText.contains(' ')) return listOf(searchText)
         val hits = YouTube.search(searchText, filter)
@@ -1219,7 +1231,7 @@ object SongPlayer {
         // wrong-artist song with the same name almost always has a different
         // length, so it never ties the real track once duration is in the score.
         fun norm(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
-        val qn = norm(searchText)
+        val qn = norm(baseSearchText)
         val exactMeta = ensureSpotifyMatchMetadata(query)
         val wantSec = durationRegistry[query]?.let { it / 1000 }
         val scored = hits.map { h ->
@@ -1245,12 +1257,22 @@ object SongPlayer {
             val durOk = wantSec != null && d != null && kotlin.math.abs(d - wantSec) <= 4
             return artistOk || durOk
         }
-        val wantExplicit = explicitRegistry[query]
         fun explicitFirst(list: List<SongItem>) =
             if (wantExplicit != null) list.sortedByDescending { it.explicit == wantExplicit } else list
         val ordered = if (transferScored.isNotEmpty()) {
             val accepted = transferScored
-                .filter { it.isAcceptableMatch() }
+                .filter { it.isAcceptableMatch(wantExplicit) }
+                .let { pool ->
+                    // Hard filter: when the Spotify track has an explicit flag and at
+                    // least one acceptable candidate matches, discard the rest so a
+                    // clean version can never win over an available explicit one.
+                    if (wantExplicit != null) {
+                        val matching = pool.filter { it.item.explicit == wantExplicit }
+                        if (matching.isNotEmpty()) matching else pool
+                    } else {
+                        pool
+                    }
+                }
                 .sortedWith(
                     compareByDescending<CandidateScore> { it.item.explicit == wantExplicit || wantExplicit == null }
                         .thenByDescending { it.score }

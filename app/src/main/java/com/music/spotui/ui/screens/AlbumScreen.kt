@@ -580,14 +580,20 @@ fun SumUpAlbumScreen(
         //                            contentDescription = ""
         //                        )
                                 Column {
-                                    Text(
-                                        text = albumSongs[song].title,
-                                        color = currentPlayingIndicatorColor,
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (albumSongs[song].explicit) {
+                                            com.music.spotui.ui.components.ExplicitBadge()
+                                            Spacer(Modifier.width(4.dp))
+                                        }
+                                        Text(
+                                            text = albumSongs[song].title,
+                                            color = currentPlayingIndicatorColor,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                        )
+                                    }
                                     Text(
                                         text = albumSongs[song].singer,
                                         color = Color.Gray,
