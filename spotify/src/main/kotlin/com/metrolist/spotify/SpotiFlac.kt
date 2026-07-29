@@ -156,6 +156,7 @@ object SpotiFlac {
     // ── Live server status (spotbye.qzz.io/api/status → "spotiflac" section) ──
     private const val STATUS_URL = "https://spotbye.qzz.io/api/status"
     private val allProviders = setOf("tidal", "qobuz", "amazon")
+    private val providerCooldowns = java.util.concurrent.ConcurrentHashMap<String, Long>()
     @Volatile private var upProvidersCache: Set<String>? = null
     @Volatile private var upProvidersAt = 0L
 
@@ -211,13 +212,15 @@ object SpotiFlac {
 
         // PRIMARY login-free path: resolve the TIDAL id (via Odesli) to a FLAC URL
         // through the monochrome / squid.wtf public backends. No account needed.
-        ids.tidalId?.takeIf { it.isNotBlank() }?.let { tidalId ->
-            sawMatch = true
-            when (val r = resolveTidalMonochrome(tidalId, preferHiRes)) {
-                is Result.Success -> return r
-                is Result.Cooldown -> sawCooldown = r.message
-                is Result.Error -> log("W", "tidal (monochrome) error: ${r.message}")
-                is Result.NotFound -> Unit
+        if ((providerCooldowns["tidal"] ?: 0L) <= System.currentTimeMillis()) {
+            ids.tidalId?.takeIf { it.isNotBlank() }?.let { tidalId ->
+                sawMatch = true
+                when (val r = resolveTidalMonochrome(tidalId, preferHiRes)) {
+                    is Result.Success -> return r
+                    is Result.Cooldown -> sawCooldown = r.message
+                    is Result.Error -> log("W", "tidal (monochrome) error: ${r.message}")
+                    is Result.NotFound -> Unit
+                }
             }
         }
 
@@ -230,6 +233,10 @@ object SpotiFlac {
         for ((provider, base, id) in attempts) {
             if (id.isNullOrBlank()) continue
             if (provider !in upProviders) continue // skip providers the status API reports down
+            if ((providerCooldowns[provider] ?: 0L) > System.currentTimeMillis()) {
+                log("D", "skipping $provider (on 60s cooldown)")
+                continue
+            }
             sawMatch = true
             when (val r = communityDownload(provider, base, id, quality)) {
                 is Result.Success -> return r
@@ -338,7 +345,8 @@ object SpotiFlac {
                     json.parseToJsonElement(runCatching { r.bodyAsText() }.getOrDefault(""))
                         .jsonObject["detail"]?.jsonPrimitive?.contentOrNull
                 }.getOrNull() ?: "Lossless servers are busy. Try again shortly."
-                log("W", "$provider on cooldown (503)")
+                providerCooldowns[provider] = System.currentTimeMillis() + 60_000L
+                log("W", "$provider on cooldown (503) — backing off $provider for 60s")
                 return Result.Cooldown(msg)
             }
             if (r.status.value in intArrayOf(429, 502, 504) && attempt < maxAttempts) {
@@ -360,6 +368,7 @@ object SpotiFlac {
 
         val track = communityTrackFrom(bodyText, provider, quality)
             ?: return Result.NotFound.also { log("W", "$provider: no usable url in response") }
+        providerCooldowns.remove(provider)
         val q = if (quality == "24") "24-bit" else "16-bit"
         log("D", "$provider FLAC resolved ($q, ${track.container})")
         return Result.Success(track)

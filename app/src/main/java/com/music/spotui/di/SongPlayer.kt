@@ -80,9 +80,6 @@ object SongPlayer {
         boundState?.updateResolveState(isResolving, status)
     }
     private val qualityCache = java.util.concurrent.ConcurrentHashMap<String, String>()
-    // When SpotiFLAC returns Cooldown, record the timestamp so subsequent plays
-    // within 60s skip the lossless attempt entirely (avoids burning 4s per tap).
-    @Volatile private var losslessCooldownUntil = 0L
     // Maps a "title artist" play query -> the track's real Spotify id, so the
     // lossless resolver can be seeded from a play site that only has the query.
     // Populated centrally whenever the queue changes (see CurrentSongState).
@@ -530,7 +527,6 @@ object SongPlayer {
         // The candidates/search step of resolveYtPlayback also runs in this scope;
         // if FLAC succeeds, that search result is just discarded.
         val shouldTryFlac = losslessStreaming && quality.lossless &&
-            System.currentTimeMillis() >= losslessCooldownUntil &&
             com.metrolist.spotify.SpotiFlac.anyLosslessServerUp()
         val shouldTryYoutube = youtubeEnabled
 
@@ -607,8 +603,7 @@ object SongPlayer {
                     return flacResult.track.url
                 }
                 is com.metrolist.spotify.SpotiFlac.Result.Cooldown -> {
-                    losslessCooldownUntil = System.currentTimeMillis() + 60_000L
-                    Log.d(TAG, "lossless on cooldown (skipping for 60s), using YouTube for: $song")
+                    Log.d(TAG, "lossless provider on cooldown (${flacResult.message}), using YouTube for: $song")
                 }
                 null -> Log.w(TAG, "lossless timed out, using YouTube for: $song")
                 else -> Log.w(TAG, "lossless miss ($flacResult), using YouTube for: $song")
