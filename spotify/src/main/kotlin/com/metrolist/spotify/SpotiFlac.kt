@@ -12,6 +12,9 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.readBytes
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -144,9 +147,9 @@ object SpotiFlac {
         HttpClient(OkHttp) {
             engine {
                 config {
-                    connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
-                    readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
-                    writeTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                    connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                    readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+                    writeTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
                 }
             }
             expectSuccess = false
@@ -207,49 +210,55 @@ object SpotiFlac {
                 ProviderIds()
             }
 
-        var sawCooldown: String? = null
-        var sawMatch = false
+        val candidates = mutableListOf<suspend () -> Result>()
 
-        // PRIMARY login-free path: resolve the TIDAL id (via Odesli) to a FLAC URL
-        // through the monochrome / squid.wtf public backends. No account needed.
-        if ((providerCooldowns["tidal"] ?: 0L) <= System.currentTimeMillis()) {
-            ids.tidalId?.takeIf { it.isNotBlank() }?.let { tidalId ->
-                sawMatch = true
-                when (val r = resolveTidalMonochrome(tidalId, preferHiRes)) {
-                    is Result.Success -> return r
-                    is Result.Cooldown -> sawCooldown = r.message
-                    is Result.Error -> log("W", "tidal (monochrome) error: ${r.message}")
-                    is Result.NotFound -> Unit
+        if ((providerCooldowns["tidal"] ?: 0L) <= System.currentTimeMillis() && !ids.tidalId.isNullOrBlank()) {
+            candidates.add { resolveTidalMonochrome(ids.tidalId, preferHiRes) }
+            if ("tidal" in upProviders) {
+                candidates.add { communityDownload("tidal", TIDAL_BASE, ids.tidalId, quality) }
+            }
+        }
+        if ((providerCooldowns["qobuz"] ?: 0L) <= System.currentTimeMillis() && !ids.qobuzId.isNullOrBlank() && "qobuz" in upProviders) {
+            candidates.add { communityDownload("qobuz", QOBUZ_BASE, ids.qobuzId, quality) }
+        }
+        if ((providerCooldowns["amazon"] ?: 0L) <= System.currentTimeMillis() && !ids.amazonId.isNullOrBlank() && "amazon" in upProviders) {
+            candidates.add { communityDownload("amazon", AMAZON_BASE, ids.amazonId, quality) }
+        }
+
+        if (candidates.isEmpty()) {
+            return Result.NotFound
+        }
+
+        return coroutineScope {
+            val channel = Channel<Result>(candidates.size)
+            val jobs = candidates.map { task ->
+                launch {
+                    val r = task()
+                    channel.send(r)
                 }
             }
-        }
 
-        // Order: Tidal & Amazon need only Odesli; Qobuz needs an ISRC match.
-        val attempts = listOf(
-            Triple("tidal", TIDAL_BASE, ids.tidalId),
-            Triple("qobuz", QOBUZ_BASE, ids.qobuzId),
-            Triple("amazon", AMAZON_BASE, ids.amazonId),
-        )
-        for ((provider, base, id) in attempts) {
-            if (id.isNullOrBlank()) continue
-            if (provider !in upProviders) continue // skip providers the status API reports down
-            if ((providerCooldowns[provider] ?: 0L) > System.currentTimeMillis()) {
-                log("D", "skipping $provider (on 60s cooldown)")
-                continue
-            }
-            sawMatch = true
-            when (val r = communityDownload(provider, base, id, quality)) {
-                is Result.Success -> return r
-                is Result.Cooldown -> sawCooldown = r.message
-                is Result.NotFound -> Unit
-                is Result.Error -> log("W", "$provider error: ${r.message}")
-            }
-        }
+            var winner: Result.Success? = null
+            var lastCooldown: Result.Cooldown? = null
+            var receivedCount = 0
 
-        return when {
-            sawCooldown != null -> Result.Cooldown(sawCooldown)
-            !sawMatch -> Result.NotFound
-            else -> Result.NotFound
+            for (r in channel) {
+                receivedCount++
+                when (r) {
+                    is Result.Success -> {
+                        winner = r
+                        jobs.forEach { it.cancel() }
+                        break
+                    }
+                    is Result.Cooldown -> {
+                        lastCooldown = r
+                    }
+                    else -> Unit
+                }
+                if (receivedCount >= candidates.size) break
+            }
+
+            winner ?: lastCooldown ?: Result.NotFound
         }
     }
 
