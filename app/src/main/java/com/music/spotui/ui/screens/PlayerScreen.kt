@@ -64,6 +64,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -668,6 +669,7 @@ fun PlayerScreen(navController: NavController) {
                             isResolving = playerViewModel.isResolving.value,
                             resolveStatus = playerViewModel.resolveStatus.value,
                             resolveError = playerViewModel.resolveError.value,
+                            resolveDetailNote = playerViewModel.resolveDetailNote.value,
                             onArtistClick = {
                                 val artists = songSinger.split(",").map { it.trim() }
                                     .filter { it.isNotBlank() }
@@ -881,6 +883,7 @@ fun PlayerInfo(
     isResolving: Boolean = false,
     resolveStatus: String = "",
     resolveError: String? = null,
+    resolveDetailNote: String? = null,
     onArtistClick: (() -> Unit)? = null,
     spotifyTrackId: String = "",
     onShowSavedIn: (() -> Unit)? = null,
@@ -893,12 +896,61 @@ fun PlayerInfo(
     var snackbarVisible by remember {
         mutableStateOf(false)
     }
+    var showStreamDetailDialog by remember {
+        mutableStateOf(false)
+    }
 
     LaunchedEffect(snackbarVisible) {
         delay(1500)
         snackbarVisible = false
     }
 
+    if (showStreamDetailDialog) {
+        AlertDialog(
+            onDismissRequest = { showStreamDetailDialog = false },
+            title = {
+                Text("Stream Resolution Info", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column {
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                        Text("Engine / Source:", color = Color(0xFFB3B3B3), fontSize = 13.sp, modifier = Modifier.width(115.dp))
+                        Text(if (source.isBlank()) "Standard" else source, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    if (quality.isNotBlank()) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            Text("Audio Quality:", color = Color(0xFFB3B3B3), fontSize = 13.sp, modifier = Modifier.width(115.dp))
+                            Text(quality, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    if (!resolveDetailNote.isNullOrBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Resolution Process:", color = Color(0xFFB3B3B3), fontSize = 12.sp)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            resolveDetailNote,
+                            color = Color(0xFFFFB74D),
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0x22FFB74D))
+                                .padding(10.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showStreamDetailDialog = false }) {
+                    Text("Close", color = AppPalette)
+                }
+            },
+            containerColor = Color(0xFF141418),
+            titleContentColor = Color.White,
+            textContentColor = Color.White,
+        )
+    }
 
     Row(
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -957,7 +1009,7 @@ fun PlayerInfo(
                         if (isResolvingState) "Resolving" else if (hasError) "Error" else source
                     if (displaySource.isNotBlank()) {
                         // Source badge: green = real Spotify; other colors = not Spotify
-                        // (Lossless via SpotiFLAC's Tidal/Qobuz/Amazon mirrors, or YouTube).
+                        // (Lossless via SpotiFLAC's Tidal/Qobuz/Amazon/Deezer mirrors, or YouTube).
                         val badgeColor = when {
                             hasError -> Color(0xFFFF6B6B)
                             isResolvingState -> Color(0xFF3DABFF)
@@ -968,7 +1020,9 @@ fun PlayerInfo(
                         }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(top = 3.dp),
+                            modifier = Modifier
+                                .padding(top = 3.dp)
+                                .clickable { showStreamDetailDialog = true },
                         ) {
                             Box(
                                 modifier = Modifier
@@ -977,15 +1031,11 @@ fun PlayerInfo(
                                     .background(badgeColor)
                             )
                             Text(
-                                // Don't advertise the fallback engine — just "Streamed".
-                                // Append the stream quality (codec/bitrate or FLAC depth)
-                                // so the user can see what they're actually hearing.
                                 text = when {
                                     hasError -> resolveError!!
                                     isResolvingState -> resolveStatus
                                     else -> {
-                                        (if (source == "YouTube") "Streamed" else source) +
-                                                (if (quality.isNotBlank()) " • $quality" else "")
+                                        source + (if (quality.isNotBlank()) " • $quality" else "")
                                     }
                                 },
                                 color = badgeColor,

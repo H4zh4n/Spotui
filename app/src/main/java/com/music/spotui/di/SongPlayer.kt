@@ -540,7 +540,7 @@ object SongPlayer {
             if (shouldTryFlac) {
                 currentSource = "Lossless"
                 currentQuality = ""
-                updateResolveStatus(true, "Checking lossless source...")
+                updateResolveStatus(true, "Searching Lossless (Tidal, Qobuz, Deezer, Amazon)...")
             } else if (shouldTryYoutube) {
                 currentSource = "YouTube"
                 currentQuality = ""
@@ -584,29 +584,41 @@ object SongPlayer {
             }
         } else null
 
+        var flacFailReason: String? = null
+
         // Check FLAC first
         if (flacDeferred != null) {
             val flacResult = flacDeferred.await()
             when (flacResult) {
                 is com.metrolist.spotify.SpotiFlac.Result.Success -> {
                     Log.d(TAG, "lossless ${flacResult.track.provider} ${flacResult.track.quality}-bit for: $song")
+                    val providerName = flacResult.track.provider.replaceFirstChar { it.uppercase() }
                     val flacQuality = "FLAC ${flacResult.track.quality}-bit"
                     if (forPlayback) {
-                        currentSource = "Lossless • ${flacResult.track.provider}"
+                        currentSource = "Lossless • $providerName"
                         currentQuality = flacQuality
+                        val note = "Source: $providerName • Format: $flacQuality • Container: ${flacResult.track.container.uppercase()}"
+                        boundState?.updateResolveDetailNote(note)
                         updateResolveStatus(false)
                     }
                     streamCache[song] = flacResult.track.url
-                    sourceCache[song] = "Lossless • ${flacResult.track.provider}"
+                    sourceCache[song] = "Lossless • $providerName"
                     qualityCache[song] = flacQuality
                     ytDeferred?.cancelAndJoin()
                     return flacResult.track.url
                 }
                 is com.metrolist.spotify.SpotiFlac.Result.Cooldown -> {
+                    flacFailReason = "Provider cooldown (${flacResult.message})"
                     Log.d(TAG, "lossless provider on cooldown (${flacResult.message}), using YouTube for: $song")
                 }
-                null -> Log.w(TAG, "lossless timed out, using YouTube for: $song")
-                else -> Log.w(TAG, "lossless miss ($flacResult), using YouTube for: $song")
+                null -> {
+                    flacFailReason = "Lossless timeout"
+                    Log.w(TAG, "lossless timed out, using YouTube for: $song")
+                }
+                else -> {
+                    flacFailReason = "Track unavailable on FLAC mirrors"
+                    Log.w(TAG, "lossless miss ($flacResult), using YouTube for: $song")
+                }
             }
         }
 
@@ -620,6 +632,12 @@ object SongPlayer {
         if (forPlayback) {
             currentSource = "YouTube"
             currentQuality = ""
+            val note = if (flacFailReason != null) {
+                "FLAC unavailable ($flacFailReason) → Switched to YouTube fallback"
+            } else {
+                "Source: YouTube • Quality: ${quality.audioQuality}"
+            }
+            boundState?.updateResolveDetailNote(note)
             // Show resolve status only if YouTube is not fully loaded yet.
             if (ytDeferred != null && !ytDeferred.isCompleted) {
                 updateResolveStatus(true, "Locating YouTube source...")
@@ -913,14 +931,16 @@ object SongPlayer {
         val isrc = runCatching {
             com.metrolist.spotify.Spotify.track(song.spotifyTrackId).getOrNull()?.isrc
         }.getOrNull()
-        val flac = when (
-            val r = com.metrolist.spotify.SpotiFlac.resolve(
+        val dlTimeoutMs = com.music.spotui.data.preferences.getDownloadLosslessTimeout(appContext).timeoutMs
+        val flacResult = kotlinx.coroutines.withTimeoutOrNull(dlTimeoutMs) {
+            com.metrolist.spotify.SpotiFlac.resolve(
                 song.spotifyTrackId, isrc, preferHiRes = losslessHiRes,
             )
-        ) {
-            is com.metrolist.spotify.SpotiFlac.Result.Success -> r.track
+        }
+        val flac = when (flacResult) {
+            is com.metrolist.spotify.SpotiFlac.Result.Success -> flacResult.track
             is com.metrolist.spotify.SpotiFlac.Result.Cooldown -> {
-                Log.w(TAG, "FLAC download on cooldown for ${song.title}: ${r.message}")
+                Log.w(TAG, "FLAC download on cooldown for ${song.title}: ${flacResult.message}")
                 return false
             }
             else -> return false
