@@ -325,8 +325,8 @@ fun SettingsScreen(navController: NavController) {
                 val up = runCatching { com.metrolist.spotify.SpotiFlac.upLosslessProviders() }.getOrNull()
                 losslessStatus = when {
                     up == null -> "Lossless servers: status unavailable"
-                    up.isEmpty() -> "Lossless servers: 0/3 up — streaming (YouTube)"
-                    else -> "Lossless servers: ${up.size}/3 up (${up.sorted().joinToString(", ")})"
+                    up.isEmpty() -> "Lossless servers: 0 up — streaming (YouTube)"
+                    else -> "Lossless servers: ${up.size} up (${up.sorted().joinToString(", ")})"
                 }
             }
             Text(

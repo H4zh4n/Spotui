@@ -68,6 +68,7 @@ object SpotiFlac {
     private const val TIDAL_BASE = "https://tdl-foss.spotbye.qzz.io"
     private const val QOBUZ_BASE = "https://qbz-foss.spotbye.qzz.io"
     private const val AMAZON_BASE = "https://amz-foss.spotbye.qzz.io"
+    private const val DEEZER_BASE = "https://dz-foss.spotbye.qzz.io"
     private const val DL_PATH = "/api/dl"
     private const val UA = "SpotiFLAC"
 
@@ -158,7 +159,7 @@ object SpotiFlac {
 
     // ── Live server status (spotbye.qzz.io/api/status → "spotiflac" section) ──
     private const val STATUS_URL = "https://spotbye.qzz.io/api/status"
-    private val allProviders = setOf("tidal", "qobuz", "amazon")
+    private val allProviders = setOf("tidal", "qobuz", "amazon", "deezer")
     private val providerCooldowns = java.util.concurrent.ConcurrentHashMap<String, Long>()
     @Volatile private var upProvidersCache: Set<String>? = null
     @Volatile private var upProvidersAt = 0L
@@ -224,6 +225,9 @@ object SpotiFlac {
         if ((providerCooldowns["amazon"] ?: 0L) <= System.currentTimeMillis() && !ids.amazonId.isNullOrBlank() && "amazon" in upProviders) {
             candidates.add { communityDownload("amazon", AMAZON_BASE, ids.amazonId, quality) }
         }
+        if ((providerCooldowns["deezer"] ?: 0L) <= System.currentTimeMillis() && !ids.deezerId.isNullOrBlank() && "deezer" in upProviders) {
+            candidates.add { communityDownload("deezer", DEEZER_BASE, ids.deezerId, quality) }
+        }
 
         if (candidates.isEmpty()) {
             return Result.NotFound
@@ -266,11 +270,13 @@ object SpotiFlac {
         val tidalId: String? = null,
         val amazonId: String? = null,
         val qobuzId: String? = null,
+        val deezerId: String? = null,
     )
 
     private suspend fun resolveProviderIds(spotifyTrackId: String, isrc: String?): ProviderIds {
         var tidalId: String? = null
         var amazonId: String? = null
+        var deezerId: String? = null
 
         // Odesli: spotify track -> all-platform links/ids.
         val odesli = runCatching {
@@ -278,20 +284,38 @@ object SpotiFlac {
                 parameter("url", "spotify:track:$spotifyTrackId")
                 header("User-Agent", "Mozilla/5.0")
             }
-            json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            if (resp.status.value in 200..299) {
+                json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            } else null
         }.getOrNull()
 
         odesli?.get("linksByPlatform")?.jsonObject?.let { platforms ->
             tidalId = entityId(platforms, "tidal", "TIDAL_SONG::")
             amazonId = entityId(platforms, "amazonMusic", "AMAZON_SONG::")
+            deezerId = entityId(platforms, "deezer", "DEEZER_SONG::")
         }
 
         // Qobuz: resolve via ISRC signed search.
         val qobuzId = isrc?.takeIf { it.isNotBlank() }?.let { qobuzIdForIsrc(it) }
 
-        log("D", "ids tidal=$tidalId amazon=$amazonId qobuz=$qobuzId")
-        return ProviderIds(tidalId = tidalId, amazonId = amazonId, qobuzId = qobuzId)
+        // Deezer fallback: if Odesli missed or failed, resolve via Deezer public ISRC API.
+        if (deezerId == null && !isrc.isNullOrBlank()) {
+            deezerId = deezerIdForIsrc(isrc)
+        }
+
+        log("D", "ids tidal=$tidalId amazon=$amazonId qobuz=$qobuzId deezer=$deezerId")
+        return ProviderIds(tidalId = tidalId, amazonId = amazonId, qobuzId = qobuzId, deezerId = deezerId)
     }
+
+    private suspend fun deezerIdForIsrc(isrc: String): String? = runCatching {
+        val resp = client.get("https://api.deezer.com/2.0/track/isrc:${isrc.trim()}") {
+            header("User-Agent", "Mozilla/5.0")
+            header("Accept", "application/json")
+        }
+        if (resp.status.value !in 200..299) return@runCatching null
+        val root = json.parseToJsonElement(resp.bodyAsText()).jsonObject
+        root["id"]?.jsonPrimitive?.contentOrNull
+    }.getOrElse { log("W", "deezer isrc search failed: ${it.message}"); null }
 
     private fun entityId(platforms: JsonObject, platform: String, prefix: String): String? {
         val unique = platforms[platform]?.jsonObject?.get("entityUniqueId")
