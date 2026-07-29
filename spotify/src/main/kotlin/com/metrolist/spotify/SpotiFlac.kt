@@ -16,6 +16,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -309,7 +310,7 @@ object SpotiFlac {
         val channel = Channel<Result>(candidates.size)
         val jobs = candidates.map { task ->
             launch {
-                val r = task()
+                val r = withTimeoutOrNull(2500L) { task() } ?: Result.NotFound
                 channel.send(r)
             }
         }

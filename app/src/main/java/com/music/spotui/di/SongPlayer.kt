@@ -550,17 +550,17 @@ object SongPlayer {
 
         val flacDeferred = if (shouldTryFlac) {
             scope.async {
-                val flacSpotifyId = trackIdRegistry[song] ?: spotifyTrackIdForPlayback(song)
-                if (flacSpotifyId == null) {
-                    return@async null
-                }
-                val isrc = isrcRegistry[flacSpotifyId] ?: runCatching {
-                    com.metrolist.spotify.Spotify.track(flacSpotifyId).getOrNull()?.isrc?.also {
-                        isrcRegistry[flacSpotifyId] = it
-                    }
-                }.getOrNull()
-                val timeoutMs = com.music.spotui.data.preferences.getLosslessTimeout(appContext).timeoutMs
+                val timeoutMs = com.music.spotui.data.preferences.currentLosslessTimeout(appContext).timeoutMs
                 kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
+                    val flacSpotifyId = trackIdRegistry[song] ?: spotifyTrackIdForPlayback(song)
+                    if (flacSpotifyId == null) {
+                        return@withTimeoutOrNull null
+                    }
+                    val isrc = isrcRegistry[flacSpotifyId] ?: runCatching {
+                        com.metrolist.spotify.Spotify.track(flacSpotifyId).getOrNull()?.isrc?.also {
+                            isrcRegistry[flacSpotifyId] = it
+                        }
+                    }.getOrNull()
                     com.metrolist.spotify.SpotiFlac.resolve(
                         flacSpotifyId,
                         isrc = isrc,
