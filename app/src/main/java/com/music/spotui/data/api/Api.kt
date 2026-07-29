@@ -63,6 +63,9 @@ class Api @Inject constructor(
     private fun SpotifyTrack.toSongModel(): SongsModel {
         val singer = artists.joinToString(", ") { it.name }
         val cover = album?.images?.firstOrNull()?.url ?: ""
+        isrc?.takeIf { it.isNotBlank() }?.let {
+            com.music.spotui.di.SongPlayer.registerIsrc(id, it)
+        }
         return SongsModel(
             id = stableId("track:$id"),
             title = name.take(128),

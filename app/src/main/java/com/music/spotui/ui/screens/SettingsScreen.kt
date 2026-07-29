@@ -4,7 +4,9 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +27,9 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import com.music.spotui.data.preferences.BackupPref
+import com.music.spotui.data.preferences.LosslessTimeout
+import com.music.spotui.data.preferences.getLosslessTimeout
+import com.music.spotui.data.preferences.setLosslessTimeout
 import com.music.spotui.util.BackupHelper
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -95,6 +100,7 @@ fun SettingsScreen(navController: NavController) {
     var wifiQ by remember { mutableStateOf(getWifiQuality(context)) }
     var cellQ by remember { mutableStateOf(getCellularQuality(context)) }
     var dlQ by remember { mutableStateOf(getDownloadQuality(context)) }
+    var losslessTimeout by remember { mutableStateOf(getLosslessTimeout(context)) }
     var crossfadeMs by remember { mutableStateOf(getCrossfadeMs(context).toFloat()) }
     var videoFallback by remember { mutableStateOf(isVideoFallbackEnabled(context)) }
     var autoPlay by remember { mutableStateOf(isAutoPlayEnabled(context)) }
@@ -293,17 +299,23 @@ fun SettingsScreen(navController: NavController) {
                 title = "Streaming over Wi-Fi",
                 selected = wifiQ,
                 showFlacWarning = wifiQ == StreamQuality.LOSSLESS,
+                losslessTimeout = losslessTimeout,
+                onSelectTimeout = { losslessTimeout = it; setLosslessTimeout(context, it) },
             ) { wifiQ = it; setWifiQuality(context, it) }
 
             QualityPicker(
                 title = "Streaming over cellular",
                 selected = cellQ,
                 showFlacWarning = cellQ == StreamQuality.LOSSLESS,
+                losslessTimeout = losslessTimeout,
+                onSelectTimeout = { losslessTimeout = it; setLosslessTimeout(context, it) },
             ) { cellQ = it; setCellularQuality(context, it) }
 
             QualityPicker(
                 title = "Download quality",
                 selected = dlQ,
+                losslessTimeout = losslessTimeout,
+                onSelectTimeout = { losslessTimeout = it; setLosslessTimeout(context, it) },
             ) { dlQ = it; setDownloadQuality(context, it) }
 
             // Live lossless-server status (spotbye). Lossless only resolves when a
@@ -634,6 +646,8 @@ private fun QualityPicker(
     title: String,
     selected: StreamQuality,
     showFlacWarning: Boolean = false,
+    losslessTimeout: LosslessTimeout? = null,
+    onSelectTimeout: ((LosslessTimeout) -> Unit)? = null,
     onSelect: (StreamQuality) -> Unit
 ) {
     Column(modifier = Modifier.padding(vertical = 8.dp)) {
@@ -664,19 +678,49 @@ private fun QualityPicker(
                         )
                     }
                 }
-                if (isSel && q == StreamQuality.LOSSLESS && showFlacWarning) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = "Lossless streams are resolved per-session and aren't cached to disk, which may add a few seconds of loading time when playing music.",
-                        color = Color(0xFFFFB74D),
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0x33FFB74D))
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                    )
+                if (isSel && q == StreamQuality.LOSSLESS) {
+                    if (showFlacWarning) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "Lossless streams are resolved per-session and aren't cached to disk, which may add a few seconds of loading time when playing music.",
+                            color = Color(0xFFFFB74D),
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0x33FFB74D))
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                        )
+                    }
+                    if (losslessTimeout != null && onSelectTimeout != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Lossless resolution wait time", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            LosslessTimeout.values().forEach { t ->
+                                val selectedT = t == losslessTimeout
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { onSelectTimeout(t) }
+                                        .background(if (selectedT) AppPalette.copy(alpha = 0.2f) else Color(0xFF1E1E24))
+                                        .border(1.dp, if (selectedT) AppPalette else Color.Transparent, RoundedCornerShape(8.dp))
+                                        .padding(vertical = 8.dp, horizontal = 10.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(t.label, color = if (selectedT) Color.White else Color(0xFFB3B3B3), fontSize = 13.sp, fontWeight = if (selectedT) FontWeight.Bold else FontWeight.Normal)
+                                        Text(t.detail, color = Color(0xFF999999), fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(2.dp))

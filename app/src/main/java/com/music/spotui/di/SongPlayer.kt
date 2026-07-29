@@ -87,12 +87,20 @@ object SongPlayer {
     // lossless resolver can be seeded from a play site that only has the query.
     // Populated centrally whenever the queue changes (see CurrentSongState).
     private val trackIdRegistry = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val isrcRegistry = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val alternativeKeyRegistry = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     /** Register query→spotifyTrackId pairs so lossless can be resolved by query. */
     fun registerLossless(pairs: List<Pair<String, String>>) {
         pairs.forEach { (query, spotifyId) ->
             if (query.isNotBlank() && spotifyId.isNotBlank()) trackIdRegistry[query] = spotifyId
+        }
+    }
+
+    /** Register spotifyTrackId -> ISRC mapping so Qobuz matching can succeed during streaming. */
+    fun registerIsrc(spotifyTrackId: String, isrc: String) {
+        if (spotifyTrackId.isNotBlank() && isrc.isNotBlank()) {
+            isrcRegistry[spotifyTrackId] = isrc
         }
     }
 
@@ -550,10 +558,16 @@ object SongPlayer {
                 if (flacSpotifyId == null) {
                     return@async null
                 }
-                kotlinx.coroutines.withTimeoutOrNull(4_000) {
+                val isrc = isrcRegistry[flacSpotifyId] ?: runCatching {
+                    com.metrolist.spotify.Spotify.track(flacSpotifyId).getOrNull()?.isrc?.also {
+                        isrcRegistry[flacSpotifyId] = it
+                    }
+                }.getOrNull()
+                val timeoutMs = com.music.spotui.data.preferences.getLosslessTimeout(appContext).timeoutMs
+                kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
                     com.metrolist.spotify.SpotiFlac.resolve(
                         flacSpotifyId,
-                        isrc = null,
+                        isrc = isrc,
                         preferHiRes = losslessHiRes,
                     )
                 }

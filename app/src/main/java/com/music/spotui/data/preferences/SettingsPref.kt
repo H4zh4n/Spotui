@@ -20,10 +20,20 @@ enum class StreamQuality(
     LOSSLESS("Lossless", "FLAC when available, else High", AudioQuality.HIGH, true),
 }
 
+enum class LosslessTimeout(
+    val label: String,
+    val detail: String,
+    val timeoutMs: Long,
+) {
+    SHORT("Short wait", "Fast (4s) cutoff", 4_000L),
+    LONG("Long wait", "Patient (8s) cutoff", 8_000L),
+}
+
 private const val PREF = "settings_prefs"
 private const val KEY_WIFI_Q = "stream_quality_wifi"
 private const val KEY_CELL_Q = "stream_quality_cellular"
 private const val KEY_DL_Q = "download_quality"
+private const val KEY_LOSSLESS_TIMEOUT = "lossless_timeout"
 private const val KEY_PRELOAD = "preload_enabled"
 private const val KEY_CROSSFADE_MS = "crossfade_duration_ms"
 private const val KEY_CROSSFADE_DJ = "crossfade_dj_mode"
@@ -56,6 +66,13 @@ fun setCellularQuality(c: Context, q: StreamQuality) = writeQ(c, KEY_CELL_Q, q)
 
 fun getDownloadQuality(c: Context): StreamQuality = readQ(c, KEY_DL_Q, StreamQuality.LOSSLESS)
 fun setDownloadQuality(c: Context, q: StreamQuality) = writeQ(c, KEY_DL_Q, q)
+
+fun getLosslessTimeout(c: Context): LosslessTimeout =
+    runCatching { LosslessTimeout.valueOf(prefs(c).getString(KEY_LOSSLESS_TIMEOUT, LosslessTimeout.LONG.name)!!) }
+        .getOrDefault(LosslessTimeout.LONG)
+
+fun setLosslessTimeout(c: Context, timeout: LosslessTimeout) =
+    prefs(c).edit().putString(KEY_LOSSLESS_TIMEOUT, timeout.name).apply()
 
 /** Library layout: false = rows (default), true = Spotify-style 3-column grid. */
 fun isLibraryGridView(c: Context): Boolean = prefs(c).getBoolean(KEY_LIBRARY_GRID, false)
