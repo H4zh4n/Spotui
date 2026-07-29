@@ -31,9 +31,12 @@ import com.music.spotui.data.preferences.LosslessTimeout
 import com.music.spotui.data.preferences.getLosslessTimeout
 import com.music.spotui.data.preferences.setLosslessTimeout
 import com.music.spotui.util.BackupHelper
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.material3.Icon
@@ -108,6 +111,9 @@ fun SettingsScreen(navController: NavController) {
     var updateRepoUrl by remember { mutableStateOf(getUpdateRepoUrl(context)) }
     var isDefaultLinkHandler by remember { mutableStateOf(DefaultLinkHelper.isAppDefaultLinkHandler(context)) }
     var showDefaultGuide by remember { mutableStateOf(false) }
+    var showProviderStatusDialog by remember { mutableStateOf(false) }
+    var providerStatuses by remember { mutableStateOf(emptyList<com.metrolist.spotify.SpotiFlac.ProviderStatus>()) }
+    var isRefreshingStatuses by remember { mutableStateOf(false) }
 
     var backupDirUri by remember { mutableStateOf(BackupPref.getDirectoryUri(context)) }
     var folderName by remember(backupDirUri) { mutableStateOf(BackupHelper.getFolderDisplayName(context, backupDirUri)) }
@@ -318,23 +324,41 @@ fun SettingsScreen(navController: NavController) {
                 onSelectTimeout = { losslessTimeout = it; setLosslessTimeout(context, it) },
             ) { dlQ = it; setDownloadQuality(context, it) }
 
-            // Live lossless-server status (spotbye). Lossless only resolves when a
-            // server is up; otherwise playback goes straight to YouTube.
-            var losslessStatus by remember { mutableStateOf("Lossless servers: checking…") }
+            var losslessStatusSummary by remember { mutableStateOf("Checking lossless mirrors…") }
             LaunchedEffect(Unit) {
-                val up = runCatching { com.metrolist.spotify.SpotiFlac.upLosslessProviders() }.getOrNull()
-                losslessStatus = when {
-                    up == null -> "Lossless servers: status unavailable"
-                    up.isEmpty() -> "Lossless servers: 0 up — streaming (YouTube)"
-                    else -> "Lossless servers: ${up.size} up (${up.sorted().joinToString(", ")})"
-                }
+                providerStatuses = com.metrolist.spotify.SpotiFlac.getProviderStatuses()
+                val upCount = providerStatuses.count { it.isUp && !it.isCooldown }
+                losslessStatusSummary = "$upCount/5 online • Tap to inspect providers"
             }
-            Text(
-                losslessStatus,
-                color = Color(0xFFB3B3B3),
-                fontSize = 12.sp,
-                modifier = Modifier.padding(start = 4.dp, top = 6.dp),
-            )
+
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable {
+                        scope.launch {
+                            isRefreshingStatuses = true
+                            providerStatuses = com.metrolist.spotify.SpotiFlac.getProviderStatuses()
+                            isRefreshingStatuses = false
+                            showProviderStatusDialog = true
+                        }
+                    }
+                    .background(Color(0xFF1E1E24))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Lossless Provider Status", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(losslessStatusSummary, color = Color(0xFFB3B3B3), fontSize = 12.sp)
+                }
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = "Inspect Status",
+                    tint = AppPalette,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
 
             Spacer(Modifier.height(12.dp))
             SectionTitle("Matching")
@@ -595,6 +619,88 @@ fun SettingsScreen(navController: NavController) {
                     showDefaultGuide = false
                     isDefaultLinkHandler = DefaultLinkHelper.isAppDefaultLinkHandler(context)
                 }
+            )
+        }
+
+        if (showProviderStatusDialog) {
+            AlertDialog(
+                onDismissRequest = { showProviderStatusDialog = false },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Lossless Provider Status", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        if (isRefreshingStatuses) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = AppPalette)
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Refresh,
+                                contentDescription = "Refresh",
+                                tint = Color.White,
+                                modifier = Modifier
+                                    .size(22.dp)
+                                    .clickable {
+                                        scope.launch {
+                                            isRefreshingStatuses = true
+                                            com.metrolist.spotify.SpotiFlac.clearStatusCache()
+                                            providerStatuses = com.metrolist.spotify.SpotiFlac.getProviderStatuses()
+                                            isRefreshingStatuses = false
+                                        }
+                                    }
+                            )
+                        }
+                    }
+                },
+                text = {
+                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                        Text(
+                            "Real-time availability of lossless audio mirrors (Tidal, Qobuz, Amazon, Deezer, Monochrome). Playback automatically resolves from the fastest available online provider.",
+                            color = Color(0xFFB3B3B3),
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        providerStatuses.forEach { status ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFF1A1A20))
+                                    .padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(status.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(status.detail, color = Color(0xFF999999), fontSize = 11.sp)
+                                }
+                                Spacer(Modifier.width(6.dp))
+                                val (statusText, statusBg, statusFg) = when {
+                                    status.isCooldown -> Triple("Cooldown (${status.cooldownRemainingSec}s)", Color(0x33FFB74D), Color(0xFFFFB74D))
+                                    status.isUp -> Triple("Online", Color(0x3381C784), Color(0xFF81C784))
+                                    else -> Triple("Offline", Color(0x33E57373), Color(0xFFE57373))
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(statusBg)
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(statusText, color = statusFg, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showProviderStatusDialog = false }) {
+                        Text("Close", color = AppPalette)
+                    }
+                },
+                containerColor = Color(0xFF141418),
+                titleContentColor = Color.White,
+                textContentColor = Color.White,
             )
         }
     }

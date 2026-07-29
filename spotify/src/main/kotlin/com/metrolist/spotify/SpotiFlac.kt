@@ -185,6 +185,68 @@ object SpotiFlac {
         return result
     }
 
+    data class ProviderStatus(
+        val id: String,
+        val name: String,
+        val isUp: Boolean,
+        val isCooldown: Boolean,
+        val cooldownRemainingSec: Int = 0,
+        val detail: String = "",
+    )
+
+    fun clearStatusCache() {
+        upProvidersCache = null
+        upProvidersAt = 0L
+    }
+
+    /**
+     * Live status of each individual provider (Tidal, Qobuz, Amazon, Deezer, Monochrome)
+     * including up/down status and active 503 cooldowns.
+     */
+    suspend fun getProviderStatuses(): List<ProviderStatus> {
+        val up = upLosslessProviders()
+        val now = System.currentTimeMillis()
+
+        val providers = listOf(
+            Triple("tidal", "Tidal (Community)", "High-res & CD quality FLAC"),
+            Triple("qobuz", "Qobuz (Community)", "24-bit Hi-Res & CD quality FLAC via ISRC"),
+            Triple("amazon", "Amazon Music (Community)", "24-bit Ultra HD FLAC"),
+            Triple("deezer", "Deezer (Community)", "16-bit CD quality FLAC via ISRC"),
+        )
+
+        val list = mutableListOf<ProviderStatus>()
+
+        for ((id, name, desc) in providers) {
+            val isUp = id in up
+            val cooldownUntil = providerCooldowns[id] ?: 0L
+            val isCooldown = cooldownUntil > now
+            val cdSec = if (isCooldown) ((cooldownUntil - now) / 1000).toInt() else 0
+            list.add(
+                ProviderStatus(
+                    id = id,
+                    name = name,
+                    isUp = isUp,
+                    isCooldown = isCooldown,
+                    cooldownRemainingSec = cdSec,
+                    detail = desc,
+                )
+            )
+        }
+
+        val monoInstances = runCatching { monochromeInstances() }.getOrDefault(emptyList())
+        list.add(
+            ProviderStatus(
+                id = "monochrome",
+                name = "Tidal (Monochrome)",
+                isUp = monoInstances.isNotEmpty(),
+                isCooldown = false,
+                detail = "${monoInstances.size} live public mirror instances",
+            )
+        )
+
+        return list
+    }
+
     /** True if any SpotiFLAC lossless server is up — gate lossless attempts on this. */
     suspend fun anyLosslessServerUp(): Boolean = upLosslessProviders().isNotEmpty()
 
