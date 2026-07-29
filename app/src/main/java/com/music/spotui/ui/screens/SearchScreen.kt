@@ -113,12 +113,31 @@ fun SumUpSearchScreen(
 ) {
     val context = LocalContext.current
 
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     var text by remember {
         mutableStateOf("")
     }
     // Recents are the *items opened from results* (songs/artists/albums), not the
     // typed queries, and only appear once the user taps into the search bar.
-    var searchFocused by remember { mutableStateOf(false) }
+    var isTextFieldFocused by remember { mutableStateOf(false) }
+    var searchActive by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isTextFieldFocused) {
+        if (isTextFieldFocused) {
+            searchActive = true
+        }
+    }
+
+    androidx.activity.compose.BackHandler(enabled = isTextFieldFocused || searchActive || text.isNotEmpty()) {
+        isTextFieldFocused = false
+        searchActive = false
+        focusManager.clearFocus()
+        if (text.isNotEmpty()) {
+            text = ""
+            searchViewModel.search("")
+        }
+    }
+
     var recents by remember {
         mutableStateOf(com.music.spotui.data.preferences.getRecentItems(context))
     }
@@ -153,7 +172,7 @@ fun SumUpSearchScreen(
         stickyHeader {
             SearchStickyBar(
                 text,
-                onFocusChange = { searchFocused = it },
+                onFocusChange = { isTextFieldFocused = it },
                 searchFocusTrigger = searchFocusTrigger,
             ) {
                 text = it
@@ -162,7 +181,7 @@ fun SumUpSearchScreen(
         }
 
         if (text.isBlank()) {
-            if (searchFocused && recents.isNotEmpty()) {
+            if ((isTextFieldFocused || searchActive) && recents.isNotEmpty()) {
                 // ── Recent searches: the items the user opened (Spotify-style),
                 // shown only once the search bar is focused ──
                 item {
@@ -748,9 +767,12 @@ fun SearchStickyBar(
     val focusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
 
+    var lastHandledTrigger by remember { mutableStateOf(searchFocusTrigger) }
+
     // When the search tab is re-tapped, focus the text field and show the keyboard.
     LaunchedEffect(searchFocusTrigger) {
-        if (searchFocusTrigger > 0) {
+        if (searchFocusTrigger > 0 && searchFocusTrigger != lastHandledTrigger) {
+            lastHandledTrigger = searchFocusTrigger
             focusRequester.requestFocus()
             keyboardController?.show()
         }
