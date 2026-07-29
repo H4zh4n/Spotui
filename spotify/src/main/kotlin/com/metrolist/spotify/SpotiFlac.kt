@@ -12,6 +12,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.readBytes
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -174,12 +175,23 @@ object SpotiFlac {
         val up = runCatching {
             val r = client.get(STATUS_URL) { header("User-Agent", UA) }
             if (r.status.value !in 200..299) return@runCatching null
-            json.parseToJsonElement(r.bodyAsText()).jsonObject["spotiflac"]
+            val obj = json.parseToJsonElement(r.bodyAsText()).jsonObject
+
+            val spotiflacUp = obj["spotiflac"]
                 ?.jsonObject?.get("status")?.jsonObject
                 ?.filterValues { it.jsonPrimitive.contentOrNull.equals("up", true) }
-                ?.keys?.toSet()
+                ?.keys?.toSet().orEmpty()
+
+            val nextUp = obj["next"]
+                ?.jsonObject?.get("status")?.jsonObject
+                ?.filterValues { it.jsonPrimitive.contentOrNull.equals("up", true) }
+                ?.keys?.map { key -> key.substringBefore("_") }?.toSet().orEmpty()
+
+            val combined = spotiflacUp + nextUp
+            if (combined.isEmpty()) null else combined
         }.getOrNull()
-        val result = up ?: allProviders // unreachable status API → don't block lossless
+
+        val result = up ?: allProviders // unreachable or empty status API → fail open to allProviders
         upProvidersCache = result
         upProvidersAt = System.currentTimeMillis()
         return result
@@ -259,19 +271,18 @@ object SpotiFlac {
         spotifyTrackId: String,
         isrc: String?,
         preferHiRes: Boolean = true,
-    ): Result {
-        val upProviders = upLosslessProviders()
+    ): Result = coroutineScope {
+        val upProvidersDeferred = async { upLosslessProviders() }
+        val idsDeferred = async { runCatching { resolveProviderIds(spotifyTrackId, isrc) }.getOrDefault(ProviderIds()) }
+
+        val upProviders = upProvidersDeferred.await()
         // All lossless servers down → don't waste time; caller falls back to YouTube.
         if (upProviders.isEmpty()) {
             log("D", "all lossless servers down — skipping lossless")
-            return Result.NotFound
+            return@coroutineScope Result.NotFound
         }
         val quality = if (preferHiRes) "24" else "16"
-        val ids = runCatching { resolveProviderIds(spotifyTrackId, isrc) }
-            .getOrElse {
-                log("E", "id resolution failed: ${it.message}")
-                ProviderIds()
-            }
+        val ids = idsDeferred.await()
 
         val candidates = mutableListOf<suspend () -> Result>()
 
@@ -292,40 +303,38 @@ object SpotiFlac {
         }
 
         if (candidates.isEmpty()) {
-            return Result.NotFound
+            return@coroutineScope Result.NotFound
         }
 
-        return coroutineScope {
-            val channel = Channel<Result>(candidates.size)
-            val jobs = candidates.map { task ->
-                launch {
-                    val r = task()
-                    channel.send(r)
-                }
+        val channel = Channel<Result>(candidates.size)
+        val jobs = candidates.map { task ->
+            launch {
+                val r = task()
+                channel.send(r)
             }
-
-            var winner: Result.Success? = null
-            var lastCooldown: Result.Cooldown? = null
-            var receivedCount = 0
-
-            for (r in channel) {
-                receivedCount++
-                when (r) {
-                    is Result.Success -> {
-                        winner = r
-                        jobs.forEach { it.cancel() }
-                        break
-                    }
-                    is Result.Cooldown -> {
-                        lastCooldown = r
-                    }
-                    else -> Unit
-                }
-                if (receivedCount >= candidates.size) break
-            }
-
-            winner ?: lastCooldown ?: Result.NotFound
         }
+
+        var winner: Result.Success? = null
+        var lastCooldown: Result.Cooldown? = null
+        var receivedCount = 0
+
+        for (r in channel) {
+            receivedCount++
+            when (r) {
+                is Result.Success -> {
+                    winner = r
+                    jobs.forEach { it.cancel() }
+                    break
+                }
+                is Result.Cooldown -> {
+                    lastCooldown = r
+                }
+                else -> Unit
+            }
+            if (receivedCount >= candidates.size) break
+        }
+
+        winner ?: lastCooldown ?: Result.NotFound
     }
 
     private data class ProviderIds(
@@ -335,21 +344,32 @@ object SpotiFlac {
         val deezerId: String? = null,
     )
 
-    private suspend fun resolveProviderIds(spotifyTrackId: String, isrc: String?): ProviderIds {
+    private suspend fun resolveProviderIds(spotifyTrackId: String, isrc: String?): ProviderIds = coroutineScope {
+        val odesliDeferred = async {
+            runCatching {
+                val resp = client.get("https://api.song.link/v1-alpha.1/links") {
+                    parameter("url", "spotify:track:$spotifyTrackId")
+                    header("User-Agent", "Mozilla/5.0")
+                }
+                if (resp.status.value in 200..299) {
+                    json.parseToJsonElement(resp.bodyAsText()).jsonObject
+                } else null
+            }.getOrNull()
+        }
+
+        val qobuzDeferred = async {
+            isrc?.takeIf { it.isNotBlank() }?.let { qobuzIdForIsrc(it) }
+        }
+
+        val deezerIsrcDeferred = async {
+            isrc?.takeIf { it.isNotBlank() }?.let { deezerIdForIsrc(it) }
+        }
+
+        val odesli = odesliDeferred.await()
+        val qobuzId = qobuzDeferred.await()
+        var deezerId: String? = null
         var tidalId: String? = null
         var amazonId: String? = null
-        var deezerId: String? = null
-
-        // Odesli: spotify track -> all-platform links/ids.
-        val odesli = runCatching {
-            val resp = client.get("https://api.song.link/v1-alpha.1/links") {
-                parameter("url", "spotify:track:$spotifyTrackId")
-                header("User-Agent", "Mozilla/5.0")
-            }
-            if (resp.status.value in 200..299) {
-                json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            } else null
-        }.getOrNull()
 
         odesli?.get("linksByPlatform")?.jsonObject?.let { platforms ->
             tidalId = entityId(platforms, "tidal", "TIDAL_SONG::")
@@ -357,16 +377,12 @@ object SpotiFlac {
             deezerId = entityId(platforms, "deezer", "DEEZER_SONG::")
         }
 
-        // Qobuz: resolve via ISRC signed search.
-        val qobuzId = isrc?.takeIf { it.isNotBlank() }?.let { qobuzIdForIsrc(it) }
-
-        // Deezer fallback: if Odesli missed or failed, resolve via Deezer public ISRC API.
-        if (deezerId == null && !isrc.isNullOrBlank()) {
-            deezerId = deezerIdForIsrc(isrc)
+        if (deezerId == null) {
+            deezerId = deezerIsrcDeferred.await()
         }
 
         log("D", "ids tidal=$tidalId amazon=$amazonId qobuz=$qobuzId deezer=$deezerId")
-        return ProviderIds(tidalId = tidalId, amazonId = amazonId, qobuzId = qobuzId, deezerId = deezerId)
+        ProviderIds(tidalId = tidalId, amazonId = amazonId, qobuzId = qobuzId, deezerId = deezerId)
     }
 
     private suspend fun deezerIdForIsrc(isrc: String): String? = runCatching {
