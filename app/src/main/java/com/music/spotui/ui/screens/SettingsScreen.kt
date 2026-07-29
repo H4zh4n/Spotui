@@ -28,8 +28,12 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import com.music.spotui.data.preferences.BackupPref
 import com.music.spotui.data.preferences.LosslessTimeout
-import com.music.spotui.data.preferences.getLosslessTimeout
-import com.music.spotui.data.preferences.setLosslessTimeout
+import com.music.spotui.data.preferences.getCellularLosslessTimeout
+import com.music.spotui.data.preferences.getDownloadLosslessTimeout
+import com.music.spotui.data.preferences.getWifiLosslessTimeout
+import com.music.spotui.data.preferences.setCellularLosslessTimeout
+import com.music.spotui.data.preferences.setDownloadLosslessTimeout
+import com.music.spotui.data.preferences.setWifiLosslessTimeout
 import com.music.spotui.util.BackupHelper
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
@@ -103,7 +107,9 @@ fun SettingsScreen(navController: NavController) {
     var wifiQ by remember { mutableStateOf(getWifiQuality(context)) }
     var cellQ by remember { mutableStateOf(getCellularQuality(context)) }
     var dlQ by remember { mutableStateOf(getDownloadQuality(context)) }
-    var losslessTimeout by remember { mutableStateOf(getLosslessTimeout(context)) }
+    var wifiLosslessTimeout by remember { mutableStateOf(getWifiLosslessTimeout(context)) }
+    var cellLosslessTimeout by remember { mutableStateOf(getCellularLosslessTimeout(context)) }
+    var dlLosslessTimeout by remember { mutableStateOf(getDownloadLosslessTimeout(context)) }
     var crossfadeMs by remember { mutableStateOf(getCrossfadeMs(context).toFloat()) }
     var videoFallback by remember { mutableStateOf(isVideoFallbackEnabled(context)) }
     var autoPlay by remember { mutableStateOf(isAutoPlayEnabled(context)) }
@@ -305,23 +311,23 @@ fun SettingsScreen(navController: NavController) {
                 title = "Streaming over Wi-Fi",
                 selected = wifiQ,
                 showFlacWarning = wifiQ == StreamQuality.LOSSLESS,
-                losslessTimeout = losslessTimeout,
-                onSelectTimeout = { losslessTimeout = it; setLosslessTimeout(context, it) },
+                losslessTimeout = wifiLosslessTimeout,
+                onSelectTimeout = { wifiLosslessTimeout = it; setWifiLosslessTimeout(context, it) },
             ) { wifiQ = it; setWifiQuality(context, it) }
 
             QualityPicker(
                 title = "Streaming over cellular",
                 selected = cellQ,
                 showFlacWarning = cellQ == StreamQuality.LOSSLESS,
-                losslessTimeout = losslessTimeout,
-                onSelectTimeout = { losslessTimeout = it; setLosslessTimeout(context, it) },
+                losslessTimeout = cellLosslessTimeout,
+                onSelectTimeout = { cellLosslessTimeout = it; setCellularLosslessTimeout(context, it) },
             ) { cellQ = it; setCellularQuality(context, it) }
 
             QualityPicker(
                 title = "Download quality",
                 selected = dlQ,
-                losslessTimeout = losslessTimeout,
-                onSelectTimeout = { losslessTimeout = it; setLosslessTimeout(context, it) },
+                losslessTimeout = dlLosslessTimeout,
+                onSelectTimeout = { dlLosslessTimeout = it; setDownloadLosslessTimeout(context, it) },
             ) { dlQ = it; setDownloadQuality(context, it) }
 
             var losslessStatusSummary by remember { mutableStateOf("Checking lossless mirrors…") }

@@ -33,7 +33,9 @@ private const val PREF = "settings_prefs"
 private const val KEY_WIFI_Q = "stream_quality_wifi"
 private const val KEY_CELL_Q = "stream_quality_cellular"
 private const val KEY_DL_Q = "download_quality"
-private const val KEY_LOSSLESS_TIMEOUT = "lossless_timeout"
+private const val KEY_WIFI_LOSSLESS_TIMEOUT = "lossless_timeout_wifi"
+private const val KEY_CELL_LOSSLESS_TIMEOUT = "lossless_timeout_cellular"
+private const val KEY_DL_LOSSLESS_TIMEOUT = "lossless_timeout_download"
 private const val KEY_PRELOAD = "preload_enabled"
 private const val KEY_CROSSFADE_MS = "crossfade_duration_ms"
 private const val KEY_CROSSFADE_DJ = "crossfade_dj_mode"
@@ -67,12 +69,28 @@ fun setCellularQuality(c: Context, q: StreamQuality) = writeQ(c, KEY_CELL_Q, q)
 fun getDownloadQuality(c: Context): StreamQuality = readQ(c, KEY_DL_Q, StreamQuality.LOSSLESS)
 fun setDownloadQuality(c: Context, q: StreamQuality) = writeQ(c, KEY_DL_Q, q)
 
-fun getLosslessTimeout(c: Context): LosslessTimeout =
-    runCatching { LosslessTimeout.valueOf(prefs(c).getString(KEY_LOSSLESS_TIMEOUT, LosslessTimeout.LONG.name)!!) }
+fun getWifiLosslessTimeout(c: Context): LosslessTimeout =
+    runCatching { LosslessTimeout.valueOf(prefs(c).getString(KEY_WIFI_LOSSLESS_TIMEOUT, LosslessTimeout.SHORT.name)!!) }
+        .getOrDefault(LosslessTimeout.SHORT)
+
+fun setWifiLosslessTimeout(c: Context, timeout: LosslessTimeout) =
+    prefs(c).edit().putString(KEY_WIFI_LOSSLESS_TIMEOUT, timeout.name).apply()
+
+fun getCellularLosslessTimeout(c: Context): LosslessTimeout =
+    runCatching { LosslessTimeout.valueOf(prefs(c).getString(KEY_CELL_LOSSLESS_TIMEOUT, LosslessTimeout.SHORT.name)!!) }
+        .getOrDefault(LosslessTimeout.SHORT)
+
+fun setCellularLosslessTimeout(c: Context, timeout: LosslessTimeout) =
+    prefs(c).edit().putString(KEY_CELL_LOSSLESS_TIMEOUT, timeout.name).apply()
+
+fun getDownloadLosslessTimeout(c: Context): LosslessTimeout =
+    runCatching { LosslessTimeout.valueOf(prefs(c).getString(KEY_DL_LOSSLESS_TIMEOUT, LosslessTimeout.LONG.name)!!) }
         .getOrDefault(LosslessTimeout.LONG)
 
-fun setLosslessTimeout(c: Context, timeout: LosslessTimeout) =
-    prefs(c).edit().putString(KEY_LOSSLESS_TIMEOUT, timeout.name).apply()
+fun setDownloadLosslessTimeout(c: Context, timeout: LosslessTimeout) =
+    prefs(c).edit().putString(KEY_DL_LOSSLESS_TIMEOUT, timeout.name).apply()
+
+fun getLosslessTimeout(c: Context): LosslessTimeout = currentLosslessTimeout(c)
 
 /** Library layout: false = rows (default), true = Spotify-style 3-column grid. */
 fun isLibraryGridView(c: Context): Boolean = prefs(c).getBoolean(KEY_LIBRARY_GRID, false)
@@ -140,4 +158,9 @@ fun resetUpdateRepoUrl(c: Context) =
 fun currentStreamingQuality(c: Context): StreamQuality {
     val cm = c.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     return if (cm.isActiveNetworkMetered) getCellularQuality(c) else getWifiQuality(c)
+}
+
+fun currentLosslessTimeout(c: Context): LosslessTimeout {
+    val cm = c.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    return if (cm.isActiveNetworkMetered) getCellularLosslessTimeout(c) else getWifiLosslessTimeout(c)
 }
