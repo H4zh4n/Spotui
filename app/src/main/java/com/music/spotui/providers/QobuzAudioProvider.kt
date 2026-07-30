@@ -56,7 +56,8 @@ object QobuzAudioProvider {
     private const val REJECT_SCORE = -1_000_000
     private val AMAZON_DATE = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'", Locale.US)
 
-    const val DEFAULT_KENNY_BASE_URL = "https://qobuz-api.binimum.org"
+    const val DEFAULT_KENNY_BASE_URL = "https://qobuz.kennyy.com.br"
+    private const val DEFAULT_KENNY_MIRROR_URL = "https://qobuz2.kennyy.com.br"
 
     data class Query(
         val mediaId: String,
@@ -155,7 +156,7 @@ object QobuzAudioProvider {
     private fun kennyEndpoints(customResolverEndpoints: String?): List<KennyEndpoint> {
         var customIndex = 0
         val bases = resolverEndpointBases(customResolverEndpoints)
-            .ifEmpty { listOf(DEFAULT_KENNY_BASE_URL) }
+            .ifEmpty { listOf(DEFAULT_KENNY_BASE_URL, DEFAULT_KENNY_MIRROR_URL) }
         return bases
             .map { baseUrl ->
                 customIndex += 1

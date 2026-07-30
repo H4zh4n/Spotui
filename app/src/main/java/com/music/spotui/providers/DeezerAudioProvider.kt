@@ -64,7 +64,7 @@ object DeezerAudioProvider {
     private const val MIN_MATCH_SCORE = 90
     private const val REJECT_SCORE = -1_000_000
 
-    const val DEFAULT_RESOLVER_BASE_URL = "https://deezer-api.binimum.org"
+    const val DEFAULT_RESOLVER_BASE_URL = "https://yesitworkssomehow-funny-deeza-api-and-yeah.hf.space/get_url"
 
     data class Query(
         val mediaId: String,

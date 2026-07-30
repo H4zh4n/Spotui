@@ -220,10 +220,21 @@ object TidalAudioProvider {
         return entries.all { token -> token.normalizedResolverEndpointOrNull() != null }
     }
 
+    val DEFAULT_RESOLVER_ENDPOINTS = listOf(
+        "https://api.monochrome.tf",
+        "https://monochrome-api.samidy.com",
+        "https://hifi.geeked.wtf",
+        "https://wolf.qqdl.site",
+        "https://maus.qqdl.site",
+        "https://vogel.qqdl.site",
+        "https://katze.qqdl.site",
+        "https://tidal.kinoplus.online",
+    )
+
     private fun downloadApiEndpoints(customResolverEndpoints: String?): List<TidalDownloadEndpoint> {
         var customIndex = 0
         val bases = resolverEndpointBases(customResolverEndpoints)
-            .ifEmpty { listOf(DEFAULT_RESOLVER_BASE_URL) }
+            .ifEmpty { DEFAULT_RESOLVER_ENDPOINTS }
         return bases
             .map { baseUrl ->
                 customIndex += 1
@@ -269,6 +280,14 @@ object TidalAudioProvider {
             .readTimeout(20, TimeUnit.SECONDS)
             .callTimeout(25, TimeUnit.SECONDS)
             .build()
+
+    private val fastClient by lazy {
+        client.newBuilder()
+            .connectTimeout(3, TimeUnit.SECONDS)
+            .readTimeout(5, TimeUnit.SECONDS)
+            .callTimeout(5, TimeUnit.SECONDS)
+            .build()
+    }
 
     private val trackCache = ConcurrentHashMap<String, CachedTrack>()
     private val searchCache = ConcurrentHashMap<String, CachedSearch>()
@@ -878,6 +897,7 @@ object TidalAudioProvider {
                 .newBuilder()
                 .addPathSegment("trackManifests")
                 .addQueryParameter("id", track.trackId)
+                .addQueryParameter("quality", quality)
                 .apply {
                     manifestFormats.forEach { format ->
                         addQueryParameter("formats", format)
@@ -906,7 +926,7 @@ object TidalAudioProvider {
                 .header("User-Agent", DOWNLOAD_USER_AGENT)
                 .build()
 
-        client.newCall(request).execute().use { response ->
+        fastClient.newCall(request).execute().use { response ->
             val responseBody = response.body.string()
             if (response.code == 429) {
                 val headerRetryAfterMs = response.header("Retry-After")
