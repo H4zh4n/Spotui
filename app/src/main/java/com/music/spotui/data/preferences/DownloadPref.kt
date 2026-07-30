@@ -95,6 +95,9 @@ fun isDownloaded(context: Context, songId: String): Boolean =
 
 fun getDownloadedSongs(context: Context): List<SongsModel> {
     val entries = getDownloadedEntries(context)
+    entries.forEach { (song, _) ->
+        com.music.spotui.util.ArtworkHelper.ensureDownloadedCover(context, song)
+    }
     val sortOption = getDownloadsSortOption(context)
     val descending = isDownloadsSortDescending(context)
     return when (sortOption) {
@@ -109,7 +112,10 @@ fun downloadedPathForQuery(context: Context, query: String): String? {
     val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
     for (v in prefs.all.values) {
         val (song, path) = (v as? String)?.let(::parse) ?: continue
-        if (song.url == query && path.isNotBlank() && File(path).exists()) return path
+        if (song.url == query && path.isNotBlank() && File(path).exists()) {
+            com.music.spotui.util.ArtworkHelper.ensureDownloadedCover(context, song)
+            return path
+        }
     }
     return null
 }

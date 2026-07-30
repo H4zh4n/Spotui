@@ -161,6 +161,38 @@ object SongPlayer {
         metaTitle = title
         metaArtist = artist
         metaCover = coverUri
+        refreshArtworkInBackground(currentMediaId, coverUri)
+    }
+
+    private fun refreshArtworkInBackground(songIdStr: String?, coverUrl: String) {
+        if (coverUrl.isBlank() || coverUrl.startsWith("file:") || coverUrl.startsWith("content:")) return
+        val ctx = appCtx ?: com.music.spotui.MyApplication.instance
+        val cleanId = songIdStr?.removePrefix("song/")?.removePrefix("playlist/")?.removePrefix("album/")?.trim()
+        scope.launch(Dispatchers.IO) {
+            val file = runCatching {
+                com.bumptech.glide.Glide.with(ctx)
+                    .downloadOnly()
+                    .load(coverUrl)
+                    .submit()
+                    .get()
+            }.getOrNull()
+            if (file != null && file.exists()) {
+                val dir = java.io.File(ctx.filesDir, "downloads")
+                if (!cleanId.isNullOrBlank() && com.music.spotui.data.preferences.isDownloaded(ctx, cleanId)) {
+                    val dest = java.io.File(dir, "${cleanId}_cover.jpg")
+                    if (!dest.exists()) runCatching { file.copyTo(dest, overwrite = true) }
+                }
+                withContext(Dispatchers.Main) {
+                    val p = player ?: return@withContext
+                    val item = p.currentMediaItem ?: return@withContext
+                    val localUri = android.net.Uri.fromFile(file)
+                    if (item.mediaMetadata.artworkUri == localUri) return@withContext
+                    val updatedMeta = item.mediaMetadata.buildUpon().setArtworkUri(localUri).build()
+                    val updatedItem = item.buildUpon().setMediaMetadata(updatedMeta).build()
+                    p.replaceMediaItem(p.currentMediaItemIndex.coerceAtLeast(0), updatedItem)
+                }
+            }
+        }
     }
 
     /**
