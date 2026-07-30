@@ -32,11 +32,17 @@ class WebMediaPlayer(
         val cover = currentSongState.coverUri.value
         val id = currentSongState.songId.value.toString()
 
-        val metadata = MediaMetadata.Builder()
+        val metadataBuilder = MediaMetadata.Builder()
             .setTitle(title)
             .setArtist(artist)
-            .apply { if (cover.isNotBlank()) setArtworkUri(Uri.parse(cover)) }
-            .build()
+        com.music.spotui.util.ArtworkHelper.attachArtwork(
+            metadataBuilder,
+            com.music.spotui.MyApplication.instance,
+            cover,
+            id,
+            currentSongState.songUrl.value
+        )
+        val metadata = metadataBuilder.build()
         val mediaItem = MediaItem.Builder()
             .setMediaId(id)
             .setMediaMetadata(metadata)

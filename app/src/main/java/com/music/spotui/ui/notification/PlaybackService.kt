@@ -736,41 +736,39 @@ class PlaybackService : MediaLibraryService() {
         title: String,
         coverUri: String = "",
         mediaType: Int = MediaMetadata.MEDIA_TYPE_FOLDER_MIXED
-    ): MediaItem =
-        MediaItem.Builder()
+    ): MediaItem {
+        val builder = MediaMetadata.Builder()
+            .setTitle(title)
+            .setIsBrowsable(true)
+            .setIsPlayable(false)
+            .setMediaType(mediaType)
+        if (coverUri.isNotBlank()) {
+            com.music.spotui.util.ArtworkHelper.attachArtwork(
+                builder, this, coverUri, id.removePrefix("song/").removePrefix("playlist/").removePrefix("album/")
+            )
+        }
+        return MediaItem.Builder()
             .setMediaId(id)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(title)
-                    .setIsBrowsable(true)
-                    .setIsPlayable(false)
-                    .setMediaType(mediaType)
-                    .apply { if (coverUri.isNotBlank()) setArtworkUri(android.net.Uri.parse(coverUri)) }
-                    .build(),
-            )
+            .setMediaMetadata(builder.build())
             .build()
+    }
 
-    private fun playable(song: SongsModel): MediaItem =
-        MediaItem.Builder()
+    private fun playable(song: SongsModel): MediaItem {
+        val builder = MediaMetadata.Builder()
+            .setTitle(song.title)
+            .setArtist(song.singer)
+            .setAlbumTitle(song.album)
+            .setIsBrowsable(false)
+            .setIsPlayable(true)
+            .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+        com.music.spotui.util.ArtworkHelper.attachArtwork(
+            builder, this, song.coverUri, song.id.toString(), song.url
+        )
+        return MediaItem.Builder()
             .setMediaId("song/${song.id}")
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(song.title)
-                    .setArtist(song.singer)
-                    .setAlbumTitle(song.album)
-                    .setIsBrowsable(false)
-                    .setIsPlayable(true)
-                    .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                    .apply {
-                        if (song.coverUri.isNotBlank()) setArtworkUri(
-                            android.net.Uri.parse(
-                                song.coverUri
-                            )
-                        )
-                    }
-                    .build(),
-            )
+            .setMediaMetadata(builder.build())
             .build()
+    }
 
     private fun <T> future(block: suspend () -> T): ListenableFuture<T> {
         val f = SettableFuture.create<T>()

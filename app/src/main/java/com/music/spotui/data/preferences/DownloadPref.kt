@@ -84,6 +84,9 @@ fun removeDownload(context: Context, songId: String) {
     prefs.getString(songId, null)?.let { json ->
         parse(json)?.second?.let { path -> runCatching { File(path).delete() } }
     }
+    val dir = File(context.filesDir, "downloads")
+    runCatching { File(dir, "${songId}_cover.jpg").delete() }
+    runCatching { File(dir, "${songId}.jpg").delete() }
     prefs.edit().remove(songId).apply()
 }
 
@@ -120,7 +123,12 @@ fun getDownloadedEntries(context: Context): List<Pair<SongsModel, String>> =
 fun clearAllDownloads(context: Context): Int {
     val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
     val entries = getDownloadedEntries(context)
-    entries.forEach { (_, path) -> if (path.isNotBlank()) runCatching { File(path).delete() } }
+    entries.forEach { (song, path) ->
+        if (path.isNotBlank()) runCatching { File(path).delete() }
+        val dir = File(context.filesDir, "downloads")
+        runCatching { File(dir, "${song.id}_cover.jpg").delete() }
+        runCatching { File(dir, "${song.id}.jpg").delete() }
+    }
     val currentSort = getDownloadsSortOption(context)
     val currentDesc = isDownloadsSortDescending(context)
     prefs.edit().clear().apply()

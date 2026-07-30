@@ -320,11 +320,14 @@ object SongPlayer {
     // Build a MediaItem carrying the current track's metadata so the system media
     // notification (MediaSession) shows the right title / artist / artwork.
     private fun buildMediaItem(streamUrl: String, mimeType: String? = null): MediaItem {
-        val metadata = androidx.media3.common.MediaMetadata.Builder()
+        val metadataBuilder = androidx.media3.common.MediaMetadata.Builder()
             .setTitle(metaTitle)
             .setArtist(metaArtist)
-            .apply { if (metaCover.isNotBlank()) setArtworkUri(android.net.Uri.parse(metaCover)) }
-            .build()
+        val ctx = appCtx ?: com.music.spotui.MyApplication.instance
+        com.music.spotui.util.ArtworkHelper.attachArtwork(
+            metadataBuilder, ctx, metaCover, currentMediaId, streamUrl
+        )
+        val metadata = metadataBuilder.build()
         return MediaItem.Builder()
             .apply { currentMediaId?.let { setMediaId(it) } }
             .setUri(streamUrl)
@@ -910,6 +913,7 @@ object SongPlayer {
             return false
         }
         com.music.spotui.data.preferences.addDownload(appContext, song, outFile.absolutePath)
+        downloadCoverImage(song.coverUri, java.io.File(dir, "${song.id}_cover.jpg"))
         // Eagerly cache lyrics so offline playback doesn't need a network round-trip.
         LyricsApi.removeFromCache(song.title, song.singer)
         val lyricsOk = runCatching {
@@ -917,6 +921,24 @@ object SongPlayer {
         }.getOrNull() != null
         if (!lyricsOk) LyricsApi.removeFromCache(song.title, song.singer)
         return true
+    }
+
+    private fun downloadCoverImage(coverUrl: String, destFile: java.io.File) {
+        if (coverUrl.isBlank() || destFile.exists()) return
+        runCatching {
+            val conn = (java.net.URL(coverUrl).openConnection() as java.net.HttpURLConnection).apply {
+                connectTimeout = 10000
+                readTimeout = 10000
+                instanceFollowRedirects = true
+            }
+            if (conn.responseCode in 200..299) {
+                conn.inputStream.use { input ->
+                    destFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -966,6 +988,7 @@ object SongPlayer {
             return false
         }
         com.music.spotui.data.preferences.addDownload(appContext, song, outFile.absolutePath)
+        downloadCoverImage(song.coverUri, java.io.File(dir, "${song.id}_cover.jpg"))
         // Eagerly cache lyrics so offline playback doesn't need a network round-trip.
         LyricsApi.removeFromCache(song.title, song.singer)
         val lyricsOk = runCatching {
