@@ -35,6 +35,14 @@ import com.music.spotui.data.preferences.setCellularLosslessTimeout
 import com.music.spotui.data.preferences.setDownloadLosslessTimeout
 import com.music.spotui.data.preferences.setWifiLosslessTimeout
 import com.music.spotui.util.BackupHelper
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.text.style.TextOverflow
+import com.music.spotui.data.preferences.AudioProviderOrderItem
+import com.music.spotui.data.preferences.getAudioProviderOrder
+import com.music.spotui.data.preferences.setAudioProviderOrder
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -120,6 +128,8 @@ fun SettingsScreen(navController: NavController) {
     var showProviderStatusDialog by remember { mutableStateOf(false) }
     var providerStatuses by remember { mutableStateOf(emptyList<com.metrolist.spotify.SpotiFlac.ProviderStatus>()) }
     var isRefreshingStatuses by remember { mutableStateOf(false) }
+    var providerOrder by remember { mutableStateOf(getAudioProviderOrder(context)) }
+    var showProviderOrderDialog by remember { mutableStateOf(false) }
 
     var backupDirUri by remember { mutableStateOf(BackupPref.getDirectoryUri(context)) }
     var folderName by remember(backupDirUri) { mutableStateOf(BackupHelper.getFolderDisplayName(context, backupDirUri)) }
@@ -361,6 +371,28 @@ fun SettingsScreen(navController: NavController) {
                 Icon(
                     imageVector = Icons.Filled.Refresh,
                     contentDescription = "Inspect Status",
+                    tint = AppPalette,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { showProviderOrderDialog = true }
+                    .background(Color(0xFF1E1E24))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Audio Provider Priority", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text(providerOrder.joinToString(" → ") { it.displayName }, color = Color(0xFFB3B3B3), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Icon(
+                    imageVector = Icons.Filled.SwapVert,
+                    contentDescription = "Priority Order",
                     tint = AppPalette,
                     modifier = Modifier.size(18.dp)
                 )
@@ -702,6 +734,61 @@ fun SettingsScreen(navController: NavController) {
                 confirmButton = {
                     TextButton(onClick = { showProviderStatusDialog = false }) {
                         Text("Close", color = AppPalette)
+                    }
+                },
+                containerColor = Color(0xFF141418),
+                titleContentColor = Color.White,
+                textContentColor = Color.White,
+            )
+        }
+
+        if (showProviderOrderDialog) {
+            AlertDialog(
+                onDismissRequest = { showProviderOrderDialog = false },
+                title = { Text("Audio Provider Priority", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        Text("Higher providers are attempted first when resolving high-res & lossless streams:", color = Color.Gray, fontSize = 12.sp)
+                        Spacer(Modifier.height(8.dp))
+                        providerOrder.forEachIndexed { index, item ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("${index + 1}. ${item.displayName}", color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                                if (index > 0) {
+                                    IconButton(onClick = {
+                                        val mutable = providerOrder.toMutableList()
+                                        val temp = mutable[index]
+                                        mutable[index] = mutable[index - 1]
+                                        mutable[index - 1] = temp
+                                        providerOrder = mutable
+                                        setAudioProviderOrder(context, mutable)
+                                    }) {
+                                        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Move up", tint = AppPalette)
+                                    }
+                                }
+                                if (index < providerOrder.size - 1) {
+                                    IconButton(onClick = {
+                                        val mutable = providerOrder.toMutableList()
+                                        val temp = mutable[index]
+                                        mutable[index] = mutable[index + 1]
+                                        mutable[index + 1] = temp
+                                        providerOrder = mutable
+                                        setAudioProviderOrder(context, mutable)
+                                    }) {
+                                        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Move down", tint = AppPalette)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showProviderOrderDialog = false }) {
+                        Text("Done", color = AppPalette)
                     }
                 },
                 containerColor = Color(0xFF141418),
