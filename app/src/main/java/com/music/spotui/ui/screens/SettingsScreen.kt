@@ -344,7 +344,7 @@ fun SettingsScreen(navController: NavController) {
             LaunchedEffect(Unit) {
                 providerStatuses = com.metrolist.spotify.SpotiFlac.getProviderStatuses()
                 val upCount = providerStatuses.count { it.isUp && !it.isCooldown }
-                losslessStatusSummary = "$upCount/5 online • Tap to inspect providers"
+                losslessStatusSummary = "$upCount/${providerStatuses.size} online • Tap to inspect providers"
             }
 
             Spacer(Modifier.height(6.dp))
@@ -356,6 +356,8 @@ fun SettingsScreen(navController: NavController) {
                         scope.launch {
                             isRefreshingStatuses = true
                             providerStatuses = com.metrolist.spotify.SpotiFlac.getProviderStatuses()
+                            val upCount = providerStatuses.count { it.isUp && !it.isCooldown }
+                            losslessStatusSummary = "$upCount/${providerStatuses.size} online • Tap to inspect providers"
                             isRefreshingStatuses = false
                             showProviderStatusDialog = true
                         }

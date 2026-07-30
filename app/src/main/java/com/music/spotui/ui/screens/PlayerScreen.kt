@@ -17,6 +17,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
@@ -953,28 +954,30 @@ fun PlayerInfo(
                     Spacer(Modifier.height(10.dp))
                     Text("Resolution Trace Log:", color = Color(0xFFB3B3B3), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(4.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 220.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFF0C0C10))
-                            .padding(10.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        Column {
-                            val logs = com.music.spotui.di.SongPlayer.resolutionLogs.toList()
-                            if (logs.isEmpty()) {
-                                Text("No live trace logs captured for current playback session.", color = Color.Gray, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
-                            } else {
-                                logs.forEach { line ->
-                                    val textColor = when {
-                                        line.contains("✓") -> Color(0xFF81C784)
-                                        line.contains("✗") -> Color(0xFFE57373)
-                                        line.contains("Fallback") || line.contains("Exhausted") -> Color(0xFFFFB74D)
-                                        else -> Color(0xFFD1D1D6)
+                    SelectionContainer {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 220.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF0C0C10))
+                                .padding(10.dp)
+                                .verticalScroll(rememberScrollState())
+                        ) {
+                            Column {
+                                val logs = com.music.spotui.di.SongPlayer.resolutionLogs.toList()
+                                if (logs.isEmpty()) {
+                                    Text("No live trace logs captured for current playback session.", color = Color.Gray, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                                } else {
+                                    logs.forEach { line ->
+                                        val textColor = when {
+                                            line.contains("✓") -> Color(0xFF81C784)
+                                            line.contains("✗") -> Color(0xFFE57373)
+                                            line.contains("Fallback") || line.contains("Exhausted") -> Color(0xFFFFB74D)
+                                            else -> Color(0xFFD1D1D6)
+                                        }
+                                        Text(line, color = textColor, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, lineHeight = 15.sp)
                                     }
-                                    Text(line, color = textColor, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, lineHeight = 15.sp)
                                 }
                             }
                         }
@@ -982,8 +985,19 @@ fun PlayerInfo(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showStreamDetailDialog = false }) {
-                    Text("Close", color = AppPalette)
+                Row {
+                    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+                    TextButton(onClick = {
+                        val logs = com.music.spotui.di.SongPlayer.resolutionLogs.toList()
+                        val text = logs.joinToString("\n").ifBlank { "No logs available" }
+                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(text))
+                        Toast.makeText(context, "Resolution logs copied to clipboard", Toast.LENGTH_SHORT).show()
+                    }) {
+                        Text("Copy Logs", color = AppPalette)
+                    }
+                    TextButton(onClick = { showStreamDetailDialog = false }) {
+                        Text("Close", color = AppPalette)
+                    }
                 }
             },
             containerColor = Color(0xFF141418),
