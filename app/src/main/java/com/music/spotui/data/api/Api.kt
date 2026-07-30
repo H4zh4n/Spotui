@@ -175,7 +175,13 @@ class Api @Inject constructor(
                     val items = section.items
                         .distinctBy { it.uri }
                         .mapNotNull { it.toHomeItem() }
-                        .distinctBy { it::class.simpleName + "|" + it.name.lowercase() }
+                        .distinctBy { item ->
+                            when (item) {
+                                is HomeItem.Playlist -> "playlist:" + (cleanId(item.id).ifBlank { item.name.trim().lowercase() })
+                                is HomeItem.Album -> "album:" + item.name.trim().lowercase() + "|" + item.artists.trim().lowercase()
+                                is HomeItem.Artist -> "artist:" + (cleanId(item.id).ifBlank { item.name.trim().lowercase() })
+                            }
+                        }
                     if (items.isEmpty()) null
                     else HomeSection(title = section.title ?: "", items = items)
                 }.distinctBy { it.title.lowercase().ifBlank { it.hashCode().toString() } }
@@ -388,7 +394,7 @@ class Api @Inject constructor(
         }
         Spotify.search(genre, types = listOf("playlist"), limit = 24).fold(
             onSuccess = { res ->
-                emit(Response.Success(res.playlists?.items.orEmpty().map { p ->
+                val mapped = res.playlists?.items.orEmpty().map { p ->
                     com.music.spotui.data.entity.LibraryEntry(
                         spotifyId = p.id,
                         name = p.name,
@@ -396,7 +402,8 @@ class Api @Inject constructor(
                         coverUri = p.images.firstOrNull()?.url ?: "",
                         isPlaylist = true,
                     )
-                }))
+                }.distinctBy { cleanId(it.spotifyId).ifBlank { it.name.trim().lowercase() } }
+                emit(Response.Success(mapped))
             },
             onFailure = { Log.e("Api", "getCategoryPlaylists failed", it); emit(Response.Error(it.message ?: "error")) },
         )
@@ -647,6 +654,27 @@ class Api @Inject constructor(
         return items
     }
 
+    private fun cleanId(id: String): String =
+        id.removePrefix("spotify:playlist:")
+          .removePrefix("spotify:album:")
+          .removePrefix("playlist:")
+          .removePrefix("album:")
+          .trim()
+
+    private fun deduplicateLibraryEntries(entries: List<com.music.spotui.data.entity.LibraryEntry>): List<com.music.spotui.data.entity.LibraryEntry> {
+        return entries.distinctBy { entry ->
+            val cid = cleanId(entry.spotifyId)
+            val typeKey = if (entry.isPlaylist) "playlist" else "album"
+            if (cid == LIKED_SONGS_ID || cid == DOWNLOADS_ID) {
+                cid
+            } else if (cid.isNotBlank()) {
+                "$typeKey:$cid"
+            } else {
+                "$typeKey:${entry.name.trim().lowercase()}"
+            }
+        }
+    }
+
     /**
      * "Your Library" — the user's actual saved Spotify albums plus their
      * playlists (followed + created), merged into one list. Uses the libraryV3
@@ -667,7 +695,7 @@ class Api @Inject constructor(
             val nonLocal = HomeCache.library!!.filterNot { it.isLocal }
             val likedAndDownloaded = nonLocal.filter { it.spotifyId == LIKED_SONGS_ID || it.spotifyId == DOWNLOADS_ID }
             val restNonLocal = nonLocal.filterNot { it.spotifyId == LIKED_SONGS_ID || it.spotifyId == DOWNLOADS_ID }
-            val updatedLibrary = likedAndDownloaded + localEntries + restNonLocal
+            val updatedLibrary = deduplicateLibraryEntries(likedAndDownloaded + localEntries + restNonLocal)
             HomeCache.library = updatedLibrary
             emit(Response.Success(updatedLibrary))
         } else {
@@ -699,7 +727,9 @@ class Api @Inject constructor(
                         artists = col.artists,
                     )
                 }
-                emit(Response.Success(listOf(liked, downloaded) + localEntries + offlineEntries))
+                val offlineLibrary = deduplicateLibraryEntries(listOf(liked, downloaded) + localEntries + offlineEntries)
+                HomeCache.library = offlineLibrary
+                emit(Response.Success(offlineLibrary))
             } else {
                 emit(Response.Success(HomeCache.library!!))
             }
@@ -743,7 +773,13 @@ class Api @Inject constructor(
         val merged = listOf(liked, downloaded) + localEntries + playlists + albums
         val offlineCollections = com.music.spotui.data.preferences.OfflineCollectionsPref.getOfflineCollections(context)
         val additional = offlineCollections.filter { col ->
-            merged.none { it.spotifyId == col.id || (col.id.startsWith("album:") && it.name.equals(col.name, ignoreCase = true) && it.artists.equals(col.artists, ignoreCase = true)) }
+            val cleanColId = cleanId(col.id)
+            merged.none { entry ->
+                val cleanEntryId = cleanId(entry.spotifyId)
+                (cleanEntryId.isNotBlank() && cleanEntryId == cleanColId) ||
+                (entry.isPlaylist == col.isPlaylist && entry.name.equals(col.name, ignoreCase = true) &&
+                    (entry.isPlaylist || entry.artists.equals(col.artists, ignoreCase = true)))
+            }
         }.map { col ->
             com.music.spotui.data.entity.LibraryEntry(
                 spotifyId = col.id,
@@ -754,7 +790,7 @@ class Api @Inject constructor(
                 artists = col.artists,
             )
         }
-        val finalLibrary = merged + additional
+        val finalLibrary = deduplicateLibraryEntries(merged + additional)
         HomeCache.library = finalLibrary
         emit(Response.Success(finalLibrary))
     }

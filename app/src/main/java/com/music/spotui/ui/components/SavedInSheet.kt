@@ -94,9 +94,25 @@ fun SavedInSheet(
     var isCreatingPlaylist by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        localPlaylists = LocalPlaylistPref.getLocalPlaylists(context)
+        fun cleanId(id: String): String =
+            id.removePrefix("spotify:playlist:")
+              .removePrefix("playlist:")
+              .trim()
+
+        val locals = LocalPlaylistPref.getLocalPlaylists(context)
+            .distinctBy { cleanId(it.id).ifBlank { it.name.trim().lowercase() } }
+        localPlaylists = locals
+
+        val localIds = locals.map { cleanId(it.id) }.filter { it.isNotBlank() }.toSet()
+        val localNames = locals.map { it.name.trim().lowercase() }.toSet()
+
         remotePlaylists = withContext(Dispatchers.IO) {
-            Spotify.myPlaylists().getOrNull()?.items?.filter { it.id.isNotBlank() } ?: emptyList()
+            val items = Spotify.myPlaylists().getOrNull()?.items?.filter { it.id.isNotBlank() } ?: emptyList()
+            items.distinctBy { cleanId(it.id).ifBlank { it.name.trim().lowercase() } }
+                .filterNot { item ->
+                    val cid = cleanId(item.id)
+                    (cid.isNotBlank() && localIds.contains(cid)) || localNames.contains(item.name.trim().lowercase())
+                }
         }
     }
 
