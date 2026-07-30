@@ -10,6 +10,7 @@ data class ProviderMatchOverride(
 ) {
     fun providerMediaId(): String =
         when (provider) {
+            AudioProviderOrderItem.AMAZON -> "amazon:track:$providerTrackId"
             AudioProviderOrderItem.SOUNDCLOUD -> providerTrackId
             AudioProviderOrderItem.TIDAL -> "tidal:track:$providerTrackId"
             AudioProviderOrderItem.DEEZER -> "deezer:track:$providerTrackId"

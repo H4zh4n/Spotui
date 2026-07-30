@@ -640,6 +640,25 @@ object SongPlayer {
 
                     for (item in providerOrder) {
                         when (item) {
+                            com.music.spotui.data.preferences.AudioProviderOrderItem.AMAZON -> {
+                                val res = runCatching {
+                                    com.music.spotui.providers.AmazonAudioProvider.resolve(
+                                        appContext,
+                                        com.music.spotui.providers.AmazonAudioProvider.Query(
+                                            mediaId = flacSpotifyId ?: song,
+                                            title = song,
+                                            artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
+                                            album = null,
+                                            durationMs = durationMs,
+                                            quality = if (losslessHiRes) "HI_RES" else "LOSSLESS",
+                                        )
+                                    )
+                                }.getOrNull()
+                                if (res != null) {
+                                    val q = if (losslessHiRes && (res.sampleRate ?: 0) > 44100) "24-bit Ultra HD" else "16-bit FLAC"
+                                    return@withTimeoutOrNull Triple(res.mediaUri, "Amazon Music", q)
+                                }
+                            }
                             com.music.spotui.data.preferences.AudioProviderOrderItem.QOBUZ -> {
                                 val res = runCatching {
                                     com.music.spotui.providers.QobuzAudioProvider.resolve(

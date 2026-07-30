@@ -166,6 +166,7 @@ fun currentLosslessTimeout(c: Context): LosslessTimeout {
 }
 
 enum class AudioProviderOrderItem(val id: String, val displayName: String) {
+    AMAZON("amazon", "Amazon Music"),
     QOBUZ("qobuz", "Qobuz"),
     TIDAL("tidal", "TIDAL"),
     DEEZER("deezer", "Deezer"),
@@ -180,6 +181,7 @@ fun getAudioProviderOrder(c: Context): List<AudioProviderOrderItem> {
     val raw = prefs(c).getString(KEY_AUDIO_PROVIDER_ORDER, null)
     if (raw.isNullOrBlank()) {
         return listOf(
+            AudioProviderOrderItem.AMAZON,
             AudioProviderOrderItem.QOBUZ,
             AudioProviderOrderItem.TIDAL,
             AudioProviderOrderItem.DEEZER,
@@ -194,6 +196,7 @@ fun getAudioProviderOrder(c: Context): List<AudioProviderOrderItem> {
         }
     }.getOrDefault(
         listOf(
+            AudioProviderOrderItem.AMAZON,
             AudioProviderOrderItem.QOBUZ,
             AudioProviderOrderItem.TIDAL,
             AudioProviderOrderItem.DEEZER,
