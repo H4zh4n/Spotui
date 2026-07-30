@@ -391,10 +391,8 @@ object SongPlayer {
         // No point resolving YouTube streams while Spotify web is the engine — it's
         // wasted network/CPU that competes with the streaming audio (caused stutter).
         if (webPlaybackActive()) return
-        // Lossless FLAC URLs from the backends are short-lived / single-use. Caching
-        // one now + preloading a partial intro makes playback stop after ~30s when the
-        // continuation hits a stale URL, so resolve those fresh at play time instead.
-        if (losslessStreaming && com.music.spotui.data.preferences.currentStreamingQuality(appContext).lossless) return
+        // Lossless FLAC pre-buffering now uses stable cache keys (LosslessCacheKeyFactory)
+        // and ResolvingDataSource to handle stream URLs without expiring mid-track.
         scope.launch {
             val url = runCatching { resolveStreamUrl(song, appContext) }.getOrNull()
             if (url != null) cacheIntro(url, appContext)
@@ -445,6 +443,46 @@ object SongPlayer {
             .setCache(mediaCache(context))
             .setUpstreamDataSourceFactory(upstream)
             .setFlags(androidx.media3.datasource.cache.CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+            .setCacheKeyFactory(com.music.spotui.audio.LosslessCacheKeyFactory)
+    }
+
+    private fun createResilientDataSourceFactory(context: Context): androidx.media3.datasource.DataSource.Factory {
+        val cacheFactory = cacheDataSourceFactory(context)
+
+        val resolvingFactory = androidx.media3.datasource.ResolvingDataSource.Factory(cacheFactory) { dataSpec ->
+            val uriStr = dataSpec.uri.toString()
+            val cleanId = trackIdRegistry.entries.firstOrNull { (_, spotifyId) ->
+                spotifyId.isNotBlank() && uriStr.contains(spotifyId)
+            }?.value ?: spotifyTrackIdForPlayback(currentRequest)
+
+            val stableKey = com.music.spotui.audio.LosslessCacheKeyFactory.buildCacheKey(cleanId, uriStr)
+            dataSpec.buildUpon()
+                .setKey(stableKey)
+                .build()
+        }
+
+        val resilientFactory = com.music.spotui.audio.ResilientPlaybackDataSourceFactory(resolvingFactory)
+
+        return com.music.spotui.audio.LiveFlacBitrateDataSourceFactory(
+            upstreamFactory = resilientFactory,
+            isEnabled = { currentSource.startsWith("Lossless") },
+            mediaIdResolver = { dataSpec ->
+                dataSpec.key ?: dataSpec.uri.toString()
+            },
+            isParserCandidate = { dataSpec, mediaId ->
+                dataSpec.uri.toString().contains(".flac", ignoreCase = true) ||
+                    currentSource.startsWith("Lossless")
+            },
+            sampleRateProvider = { null },
+            onBitrate = { mediaId, bitrate, _, _ ->
+                if (currentSource.startsWith("Lossless")) {
+                    val kbps = bitrate / 1000
+                    val baseQuality = currentQuality.substringBefore(" •")
+                    val newQuality = if (baseQuality.isNotBlank()) "$baseQuality • $kbps kbps" else "$kbps kbps"
+                    currentQuality = newQuality
+                }
+            }
+        )
     }
 
     /** Pre-cache the first [PRELOAD_BYTES] of [url] into the media cache (http(s) only). */
@@ -453,8 +491,11 @@ object SongPlayer {
         if (!com.music.spotui.data.preferences.isPreloadEnabled(appContext)) return
         runCatching {
             val ds = cacheDataSourceFactory(appContext).createDataSource()
+            val spotifyId = trackIdRegistry[url] ?: spotifyTrackIdForPlayback(url)
+            val stableKey = com.music.spotui.audio.LosslessCacheKeyFactory.buildCacheKey(spotifyId, url)
             val spec = androidx.media3.datasource.DataSpec.Builder()
                 .setUri(android.net.Uri.parse(url))
+                .setKey(stableKey)
                 .setLength(PRELOAD_BYTES)
                 .build()
             androidx.media3.datasource.cache.CacheWriter(ds, spec, null, null).cache()
@@ -1513,7 +1554,7 @@ object SongPlayer {
         }
         val p = ExoPlayer.Builder(context)
             .setMediaSourceFactory(
-                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cacheDataSourceFactory(context)),
+                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(createResilientDataSourceFactory(context)),
             )
             .setRenderersFactory(renderers)
             .setAudioAttributes(buildAudioAttributes(), handleAudioFocus)
