@@ -359,6 +359,12 @@ fun PlayerScreen(navController: NavController) {
     val songCoverUri by playerViewModel.currentSongCoverUri
     val songPlayingState by playerViewModel.currentSongPlayingState
     val songId by playerViewModel.currentSongId
+
+    // Reconcile play/pause state immediately when opening the full screen player, ensuring
+    // the play/pause button always accurately reflects whether audio is playing in SongPlayer.
+    LaunchedEffect(Unit) {
+        playerViewModel.syncWithPlayer()
+    }
     val context = LocalContext.current
     val isLiked = remember(songId) {
         mutableStateOf(isSongLiked(context, songId.toString()))
@@ -509,6 +515,9 @@ fun PlayerScreen(navController: NavController) {
 
     LaunchedEffect(songId, songPlayingState) {
         while (true) {
+            // Keep playing state continuously reconciled with physical audio engine state
+            playerViewModel.syncWithPlayer()
+
             val dur = SongPlayer.getDuration()
             songDurationText = if (dur < 0) "0:00" else playerViewModel.formatDuration(dur)
 

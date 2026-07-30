@@ -126,6 +126,11 @@ fun MiniPlayer(navController: NavHostController) {
         mutableStateOf(miniPlayerViewModel.queue.value.firstOrNull { it.id == songId }?.explicit == true)
     }
 
+    // Keep MiniPlayer playing state in sync with physical SongPlayer audio engine
+    LaunchedEffect(Unit) {
+        miniPlayerViewModel.syncWithPlayer()
+    }
+
     var swipeOffsetY by remember { mutableFloatStateOf(0f) }
     val coroutineScope = rememberCoroutineScope()
 

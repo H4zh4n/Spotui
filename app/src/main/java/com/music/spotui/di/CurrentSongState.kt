@@ -187,26 +187,46 @@ class CurrentSongState @Inject constructor() {
         _isBuffering.value = isBuffering
     }
 
+    /** Reconciles the in-app UI playingState directly with SongPlayer.isPlaying().
+     *  Call this on UI screen entry (e.g. PlayerScreen launch) or state checks to
+     *  guarantee that if audio is physically playing in the player engine, the UI
+     *  play/pause button immediately shows Pause (is playing = true) and never
+     *  gets stuck displaying Play (is playing = false). */
+    fun syncWithPlayer() {
+        val realIsPlaying = SongPlayer.isPlaying()
+        if (_playingState.value != realIsPlaying) {
+            _playGen++
+            if (realIsPlaying) _lastPlayGen = _playGen
+            _playingState.value = realIsPlaying
+        }
+    }
+
     /** Sync the play/pause state without touching the rest of the now-playing
-     *  metadata — used to reflect the web player's real state (e.g. after the
-     *  system notification's pause button) back into the in-app UI.
+     *  metadata — used to reflect the engine's real state (e.g. ExoPlayer or
+     *  web player callbacks, system notification actions, Bluetooth media keys).
      *
-     *  Guards against stale ExoPlayer callbacks: when ExoPlayer reports
-     *  "now playing" it only updates the state if no newer user toggle has
-     *  happened since the last play command (checked via _playGen vs
-     *  _lastPlayGen). */
+     *  CRITICAL FIX: If audio is actually playing in SongPlayer, or if playing is true,
+     *  we MUST update _playingState.value = true and align _lastPlayGen = _playGen.
+     *  Previously, dropping onIsPlayingChanged(true) when _playGen != _lastPlayGen left
+     *  _lastPlayGen un-updated, permanently locking out all future background play
+     *  events until a manual UI play tap. Syncing generation counters when audio plays
+     *  prevents UI desynchronization permanently. */
     fun updatePlayingState(playing: Boolean) {
-        // Drop stale onIsPlayingChanged(true) that fired after the user
-        // already tapped pause.
-        if (playing && _playGen != _lastPlayGen) return
-        _playingState.value = playing
+        val realIsPlaying = SongPlayer.isPlaying()
+        if (playing || realIsPlaying) {
+            _playGen++
+            _lastPlayGen = _playGen
+            _playingState.value = true
+        } else {
+            if (!realIsPlaying) {
+                _playingState.value = false
+            }
+        }
     }
 
     /** User-initiated play/pause toggle from album/liked/playlist screens.
-     *  Bumps the generation counter so stale ExoPlayer callbacks know to
-     *  back off. */
+     *  Bumps the generation counter and updates the UI playingState. */
     fun setPlaying(playing: Boolean) {
-        if (_playingState.value == playing) return
         _playGen++
         if (playing) _lastPlayGen = _playGen
         _playingState.value = playing

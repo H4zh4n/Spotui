@@ -339,6 +339,10 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
         currentSongState.setPlaying(playing)
     }
 
+    fun syncWithPlayer() {
+        currentSongState.syncWithPlayer()
+    }
+
     fun updateLikeState(likeState : Boolean){
         currentSongState.updateLikeState(likeState)
     }
