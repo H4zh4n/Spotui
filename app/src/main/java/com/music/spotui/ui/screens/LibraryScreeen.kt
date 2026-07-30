@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -16,39 +17,32 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
-import com.music.spotui.data.preferences.LocalPlaylistPref
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -59,29 +53,146 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
 import com.bumptech.glide.integration.compose.GlideImage
+import com.music.spotui.R
 import com.music.spotui.data.api.Api
 import com.music.spotui.data.api.Response
-import com.music.spotui.R
 import com.music.spotui.data.entity.LibraryEntry
+import com.music.spotui.data.preferences.LocalPlaylistPref
 import com.music.spotui.data.preferences.isLibraryGridView
 import com.music.spotui.data.preferences.setLibraryGridView
-import com.music.spotui.ui.components.Loader
 import com.music.spotui.ui.components.Snackbar
 import com.music.spotui.ui.navigation.Routes
 import com.music.spotui.ui.navigation.albumRoute
 import com.music.spotui.ui.navigation.artistRoute
 import com.music.spotui.ui.navigation.playlistRoute
 import com.music.spotui.ui.theme.AppBackground
+import com.music.spotui.ui.viewmodel.LibraryFilterType
 import com.music.spotui.ui.viewmodel.LibraryViewModel
+
+fun isLibraryEntryDownloaded(context: android.content.Context, entry: LibraryEntry): Boolean {
+    if (entry.isLocal || entry.spotifyId == Api.HomeCache.DOWNLOADS_ID) return true
+    if (entry.spotifyId == Api.HomeCache.LIKED_SONGS_ID) {
+        return com.music.spotui.data.preferences.getDownloadedSongs(context).isNotEmpty()
+    }
+    val offlineCollections = com.music.spotui.data.preferences.OfflineCollectionsPref.getOfflineCollections(context)
+    val cleanEntryId = Api.cleanId(entry.spotifyId)
+    return offlineCollections.any { col ->
+        val cleanColId = Api.cleanId(col.id)
+        (cleanColId.isNotBlank() && cleanColId == cleanEntryId) ||
+        (entry.isPlaylist == col.isPlaylist && entry.name.equals(col.name, ignoreCase = true))
+    }
+}
+
+@Composable
+fun LibraryFilterChips(
+    selectedFilter: LibraryFilterType,
+    isDownloadedOnly: Boolean,
+    onFilterSelected: (LibraryFilterType) -> Unit,
+    onToggleDownloaded: () -> Unit,
+    onClearFilters: () -> Unit
+) {
+    val isAnyFilterActive = selectedFilter != LibraryFilterType.ALL || isDownloadedOnly
+
+    LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (isAnyFilterActive) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF2A2A2A))
+                        .clickable { onClearFilters() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Clear filters",
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+
+        item {
+            LibraryChipItem(
+                label = "Playlists",
+                isSelected = selectedFilter == LibraryFilterType.PLAYLISTS,
+                onClick = { onFilterSelected(LibraryFilterType.PLAYLISTS) }
+            )
+        }
+
+        item {
+            LibraryChipItem(
+                label = "Albums",
+                isSelected = selectedFilter == LibraryFilterType.ALBUMS,
+                onClick = { onFilterSelected(LibraryFilterType.ALBUMS) }
+            )
+        }
+
+        item {
+            LibraryChipItem(
+                label = "Artists",
+                isSelected = selectedFilter == LibraryFilterType.ARTISTS,
+                onClick = { onFilterSelected(LibraryFilterType.ARTISTS) }
+            )
+        }
+
+        item {
+            LibraryChipItem(
+                label = "Downloaded",
+                isSelected = isDownloadedOnly,
+                onClick = { onToggleDownloaded() }
+            )
+        }
+    }
+}
+
+@Composable
+private fun LibraryChipItem(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val backgroundColor = if (isSelected) Color(0xFF1ED760) else Color(0xFF2A2A2A)
+    val textColor = if (isSelected) Color.Black else Color.White
+
+    Box(
+        modifier = Modifier
+            .height(32.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(backgroundColor)
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            color = textColor,
+            fontSize = 13.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+        )
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,6 +201,8 @@ fun LibraryScreen(navController: NavController) {
     val libraryViewModel: LibraryViewModel = hiltViewModel()
     val entries by libraryViewModel.entries.collectAsState()
     val account by libraryViewModel.account.collectAsState()
+    val selectedFilter by libraryViewModel.selectedFilter.collectAsState()
+    val isDownloadedOnly by libraryViewModel.isDownloadedOnly.collectAsState()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -105,7 +218,6 @@ fun LibraryScreen(navController: NavController) {
         }
     }
 
-    // Spotify-style layout toggle: rows or a 3-column grid, persisted across runs.
     var gridView by remember { mutableStateOf(isLibraryGridView(context)) }
     var showCreateDialog by remember { mutableStateOf(false) }
 
@@ -172,8 +284,7 @@ fun LibraryScreen(navController: NavController) {
             .background(Color(AppBackground.toArgb()))
             .statusBarsPadding()
     ) {
-        // Header: title + create playlist + account avatar. Built by hand (rather than a fixed-height
-        // TopAppBar) so the title isn't clipped under the status bar.
+        // Header: title + create playlist + account avatar.
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
@@ -215,12 +326,21 @@ fun LibraryScreen(navController: NavController) {
             }
         }
 
-        // Grid/list switch, like the icon at the top-right of Spotify's library.
+        // Library Filter Chips bar
+        LibraryFilterChips(
+            selectedFilter = selectedFilter,
+            isDownloadedOnly = isDownloadedOnly,
+            onFilterSelected = { libraryViewModel.setFilterType(it) },
+            onToggleDownloaded = { libraryViewModel.toggleDownloadedOnly() },
+            onClearFilters = { libraryViewModel.clearFilters() }
+        )
+
+        // Grid/list switch
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp, 0.dp, 16.dp, 8.dp)
+                .padding(16.dp, 4.dp, 16.dp, 8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
@@ -264,9 +384,49 @@ fun LibraryScreen(navController: NavController) {
         val followedArtists by libraryViewModel.followedArtists.collectAsState()
         when (entries) {
             is Response.Loading -> LibrarySkeleton(PaddingValues(0.dp))
-            is Response.Success ->
-                if (gridView) LibraryGridScreen(PaddingValues(0.dp), (entries as Response.Success).data, followedArtists, navController)
-                else SumUpLibraryScreen(PaddingValues(0.dp), (entries as Response.Success).data, followedArtists, navController)
+            is Response.Success -> {
+                val rawEntries = (entries as Response.Success).data
+                val filteredEntries = remember(rawEntries, selectedFilter, isDownloadedOnly, context) {
+                    rawEntries.filter { entry ->
+                        val matchesCategory = when (selectedFilter) {
+                            LibraryFilterType.ALL -> true
+                            LibraryFilterType.PLAYLISTS -> entry.isPlaylist
+                            LibraryFilterType.ALBUMS -> !entry.isPlaylist && entry.spotifyId != Api.HomeCache.LIKED_SONGS_ID && entry.spotifyId != Api.HomeCache.DOWNLOADS_ID
+                            LibraryFilterType.ARTISTS -> false
+                        }
+                        val matchesDownload = if (isDownloadedOnly) isLibraryEntryDownloaded(context, entry) else true
+                        matchesCategory && matchesDownload
+                    }
+                }
+                val filteredArtists = remember(followedArtists, selectedFilter, isDownloadedOnly) {
+                    if (selectedFilter == LibraryFilterType.PLAYLISTS || selectedFilter == LibraryFilterType.ALBUMS) {
+                        emptyList()
+                    } else {
+                        followedArtists
+                    }
+                }
+                val showHistoryTile = selectedFilter == LibraryFilterType.ALL && !isDownloadedOnly
+
+                if (gridView) {
+                    LibraryGridScreen(
+                        padding = PaddingValues(0.dp),
+                        entries = filteredEntries,
+                        followedArtists = filteredArtists,
+                        navController = navController,
+                        showHistoryTile = showHistoryTile,
+                        onClearFilters = { libraryViewModel.clearFilters() }
+                    )
+                } else {
+                    SumUpLibraryScreen(
+                        padding = PaddingValues(0.dp),
+                        entries = filteredEntries,
+                        followedArtists = filteredArtists,
+                        navController = navController,
+                        showHistoryTile = showHistoryTile,
+                        onClearFilters = { libraryViewModel.clearFilters() }
+                    )
+                }
+            }
             else -> Box(modifier = Modifier.padding(20.dp, 100.dp)) { Snackbar(showMessage = "Couldn't load your library") }
         }
     }
@@ -289,10 +449,48 @@ fun SumUpLibraryScreen(
     padding: PaddingValues,
     entries: List<LibraryEntry>,
     followedArtists: List<com.music.spotui.data.entity.ArtistsModel>,
-    navController: NavController
+    navController: NavController,
+    showHistoryTile: Boolean = true,
+    onClearFilters: () -> Unit = {}
 ) {
     if (entries.isEmpty() && followedArtists.isEmpty()) {
-        Box(modifier = Modifier.padding(20.dp, 40.dp)) { Snackbar(showMessage = "Library is Empty") }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 32.dp, vertical = 60.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "No items found",
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Try clearing your active filters or adding more items to your library.",
+                color = Color.Gray,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xFF1ED760))
+                    .clickable { onClearFilters() }
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = "Clear filters",
+                    color = Color.Black,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
         return
     }
     LazyColumn(
@@ -302,30 +500,32 @@ fun SumUpLibraryScreen(
             .background(Color(0xFF0E0E13))
     ) {
         item { Spacer(modifier = Modifier.height(10.dp)) }
-        // Listening history & stats entry.
-        item {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp, 6.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { navController.navigate(Routes.History.route) }
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
+        if (showHistoryTile) {
+            // Listening history & stats entry.
+            item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .size(55.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Color(0xFF27856A)),
+                        .fillMaxWidth()
+                        .padding(20.dp, 6.dp)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { navController.navigate(Routes.History.route) }
                 ) {
-                    Icon(Icons.Default.DateRange, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
-                }
-                Column(modifier = Modifier.padding(start = 12.dp)) {
-                    Text(text = "Listening history", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                    Text(text = "Your plays and stats", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(55.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(0xFF27856A)),
+                    ) {
+                        Icon(Icons.Default.DateRange, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                    }
+                    Column(modifier = Modifier.padding(start = 12.dp)) {
+                        Text(text = "Listening history", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text(text = "Your plays and stats", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    }
                 }
             }
         }
@@ -426,10 +626,48 @@ fun LibraryGridScreen(
     padding: PaddingValues,
     entries: List<LibraryEntry>,
     followedArtists: List<com.music.spotui.data.entity.ArtistsModel>,
-    navController: NavController
+    navController: NavController,
+    showHistoryTile: Boolean = true,
+    onClearFilters: () -> Unit = {}
 ) {
     if (entries.isEmpty() && followedArtists.isEmpty()) {
-        Box(modifier = Modifier.padding(20.dp, 40.dp)) { Snackbar(showMessage = "Library is Empty") }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 32.dp, vertical = 60.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "No items found",
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Try clearing your active filters or adding more items to your library.",
+                color = Color.Gray,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xFF1ED760))
+                    .clickable { onClearFilters() }
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = "Clear filters",
+                    color = Color.Black,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
         return
     }
     LazyVerticalGrid(
@@ -442,27 +680,29 @@ fun LibraryGridScreen(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-        // Listening history & stats entry, as a tile.
-        item {
-            Column(
-                modifier = Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { navController.navigate(Routes.History.route) }
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color(0xFF27856A)),
+        if (showHistoryTile) {
+            // Listening history & stats entry, as a tile.
+            item {
+                Column(
+                    modifier = Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { navController.navigate(Routes.History.route) }
                 ) {
-                    Icon(Icons.Default.DateRange, contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp))
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF27856A)),
+                    ) {
+                        Icon(Icons.Default.DateRange, contentDescription = null, tint = Color.White, modifier = Modifier.size(32.dp))
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(text = "Listening history", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(text = "Your plays and stats", color = Color.Gray, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(text = "Listening history", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(text = "Your plays and stats", color = Color.Gray, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         items(entries) { entry ->

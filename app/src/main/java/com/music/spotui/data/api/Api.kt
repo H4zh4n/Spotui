@@ -54,6 +54,13 @@ class Api @Inject constructor(
         @Volatile var home: HomeFeedModel? = null
         @Volatile var library: List<com.music.spotui.data.entity.LibraryEntry>? = null
 
+        fun cleanId(id: String): String =
+            id.removePrefix("spotify:playlist:")
+              .removePrefix("spotify:album:")
+              .removePrefix("playlist:")
+              .removePrefix("album:")
+              .trim()
+
         /** Drop all cached feeds (e.g. on logout / account switch). */
         fun clear() {
             albums = null; artists = null; home = null; library = null
@@ -654,12 +661,6 @@ class Api @Inject constructor(
         return items
     }
 
-    private fun cleanId(id: String): String =
-        id.removePrefix("spotify:playlist:")
-          .removePrefix("spotify:album:")
-          .removePrefix("playlist:")
-          .removePrefix("album:")
-          .trim()
 
     private fun deduplicateLibraryEntries(entries: List<com.music.spotui.data.entity.LibraryEntry>): List<com.music.spotui.data.entity.LibraryEntry> {
         return entries.distinctBy { entry ->
