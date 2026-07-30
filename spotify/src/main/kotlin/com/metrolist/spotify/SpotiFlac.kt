@@ -27,6 +27,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
 /**
  * Lossless (FLAC) resolver, ported from the open-source **SpotiFLAC** project.
@@ -35,23 +37,12 @@ import java.security.MessageDigest
  * recording on a lossless service (Tidal / Qobuz / Amazon Music) by id/ISRC, and
  * returns a directly streamable/downloadable FLAC URL from that service via the
  * project's free "community" proxy servers.
- *
- * Pipeline:
- *  1. Resolve the Spotify track to provider ids via Odesli (song.link) — gives
- *     Tidal + Amazon ids directly. Qobuz is resolved from the track's ISRC via
- *     Qobuz's signed public search API.
- *  2. Ask the community proxy (`/api/dl`) for a FLAC URL, trying providers in
- *     order and skipping any that are on a rotating cooldown (HTTP 503).
- *
- * The proxy base URLs + API key are the same ones SpotiFLAC ships (obfuscated in
- * its binary); they are free community servers and are frequently rate-limited,
- * hence the multi-provider fallback and explicit [Result.Cooldown] state.
  */
 object SpotiFlac {
 
     data class LosslessTrack(
         val url: String,
-        val provider: String,   // "tidal" | "qobuz" | "amazon"
+        val provider: String,   // "tidal" | "qobuz" | "amazon" | "deezer"
         val quality: String,    // "24" (hi-res) | "16" (CD)
         val container: String = "flac",
     )
@@ -74,15 +65,13 @@ object SpotiFlac {
     private const val DL_PATH = "/api/dl"
     private const val UA = "SpotiFLAC"
 
-    // ── Monochrome / squid.wtf TIDAL backends (public, no login required) ────
-    // These proxy TIDAL and return a lossless FLAC URL for a TIDAL track id —
-    // no user account or subscription needed. Instances are frequently up/down,
-    // so we fail over across the list. (github.com/monochrome-music/monochrome)
-    // Live JSON list of currently-up Hi-Fi API instances (fetched at runtime).
+    // Multi-tier caching durations
+    private const val TRACK_CACHE_MS = 60 * 60 * 1000L      // 60 min
+    private const val STREAM_CACHE_MS = 45 * 60 * 1000L     // 45 min
+    private const val FAILURE_CACHE_MS = 15 * 60 * 1000L    // 15 min
+
     private const val HIFI_UPTIME_URL = "https://tidal-uptime.geeked.wtf"
 
-    // Static fallback Hi-Fi API instances (from monochrome INSTANCES.md + community).
-    // The live uptime list is merged in front of this so the pool stays fresh/large.
     private val TIDAL_MONOCHROME_INSTANCES = listOf(
         "https://api.monochrome.tf",
         "https://monochrome-api.samidy.com",
@@ -99,15 +88,9 @@ object SpotiFlac {
         "https://triton.squid.wtf",
     )
 
-    // Cache the live instance list for a few minutes so we don't refetch per track.
     @Volatile private var cachedInstances: List<String>? = null
     @Volatile private var cachedInstancesAt: Long = 0L
 
-    /**
-     * Current Hi-Fi API instances: the live "up" list from the uptime tracker merged
-     * in front of the static fallback. Cached for 5 minutes. This is what lets the
-     * resolver reach as many working providers as possible without a rebuild.
-     */
     private suspend fun monochromeInstances(): List<String> {
         cachedInstances?.let {
             if (System.currentTimeMillis() - cachedInstancesAt < 5 * 60_000L) return it
@@ -135,7 +118,6 @@ object SpotiFlac {
         }
     }
 
-    // ── Qobuz public API (for ISRC -> qobuz track id) ────────────────────────
     private const val QOBUZ_APP_ID = "712109809"
     private const val QOBUZ_APP_SECRET = "589be88e4538daea11f509d29e4a23b1"
     private const val QOBUZ_API_BASE = "https://www.qobuz.com/api.json/0.2"
@@ -150,27 +132,39 @@ object SpotiFlac {
         HttpClient(OkHttp) {
             engine {
                 config {
-                    connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
-                    readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-                    writeTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                    connectTimeout(5, TimeUnit.SECONDS)
+                    readTimeout(10, TimeUnit.SECONDS)
+                    writeTimeout(5, TimeUnit.SECONDS)
                 }
             }
             expectSuccess = false
         }
     }
 
-    // ── Live server status (spotbye.qzz.io/api/status → "spotiflac" section) ──
     private const val STATUS_URL = "https://spotbye.qzz.io/api/status"
     private val allProviders = setOf("tidal", "qobuz", "amazon", "deezer")
-    private val providerCooldowns = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val providerCooldowns = ConcurrentHashMap<String, Long>()
     @Volatile private var upProvidersCache: Set<String>? = null
     @Volatile private var upProvidersAt = 0L
 
-    /**
-     * Which SpotiFLAC (not "next") providers are currently up, per the status API.
-     * Cached 60s. Fail-open: if the status endpoint itself is unreachable we return
-     * all providers so lossless still gets a chance rather than being wrongly blocked.
-     */
+    // Multi-tier caches
+    private data class CachedTrack(
+        val track: LosslessTrack,
+        val expiresAtMs: Long,
+    )
+    private data class CachedFailure(
+        val message: String,
+        val expiresAtMs: Long,
+    )
+    private data class CachedProviderIds(
+        val ids: ProviderIds,
+        val expiresAtMs: Long,
+    )
+
+    private val trackIdCache = ConcurrentHashMap<String, CachedProviderIds>()
+    private val streamCache = ConcurrentHashMap<String, CachedTrack>()
+    private val streamFailureCache = ConcurrentHashMap<String, CachedFailure>()
+
     suspend fun upLosslessProviders(): Set<String> {
         upProvidersCache?.let { if (System.currentTimeMillis() - upProvidersAt < 60_000L) return it }
         val up = runCatching {
@@ -192,7 +186,7 @@ object SpotiFlac {
             if (combined.isEmpty()) null else combined
         }.getOrNull()
 
-        val result = up ?: allProviders // unreachable or empty status API → fail open to allProviders
+        val result = up ?: allProviders
         upProvidersCache = result
         upProvidersAt = System.currentTimeMillis()
         return result
@@ -212,10 +206,6 @@ object SpotiFlac {
         upProvidersAt = 0L
     }
 
-    /**
-     * Live status of each individual provider (Tidal, Qobuz, Amazon, Deezer, Monochrome)
-     * including up/down status and active 503 cooldowns.
-     */
     suspend fun getProviderStatuses(): List<ProviderStatus> {
         val up = upLosslessProviders()
         val now = System.currentTimeMillis()
@@ -260,46 +250,70 @@ object SpotiFlac {
         return list
     }
 
-    /** True if any SpotiFLAC lossless server is up — gate lossless attempts on this. */
     suspend fun anyLosslessServerUp(): Boolean = upLosslessProviders().isNotEmpty()
 
     /**
      * Resolve a lossless FLAC URL for a Spotify track.
-     * @param isrc the track's ISRC (used for Qobuz matching); may be null.
-     * @param preferHiRes request 24-bit where available, else CD-quality 16-bit.
+     * Checks multi-tier streamCache, trackIdCache, and streamFailureCache.
      */
     suspend fun resolve(
         spotifyTrackId: String,
         isrc: String?,
         preferHiRes: Boolean = true,
     ): Result = coroutineScope {
+        val now = System.currentTimeMillis()
+        val quality = if (preferHiRes) "24" else "16"
+        val streamCacheKey = "$spotifyTrackId::$quality"
+
+        // 1. Check 45-min streamCache
+        streamCache[streamCacheKey]?.takeIf { it.expiresAtMs > now }?.let { cached ->
+            log("D", "streamCache hit for $spotifyTrackId ($quality)")
+            return@coroutineScope Result.Success(cached.track)
+        }
+
         val upProvidersDeferred = async { upLosslessProviders() }
-        val idsDeferred = async { runCatching { resolveProviderIds(spotifyTrackId, isrc) }.getOrDefault(ProviderIds()) }
+        val idsDeferred = async {
+            // 2. Check 60-min trackIdCache
+            val cachedIds = trackIdCache[spotifyTrackId]?.takeIf { it.expiresAtMs > now }?.ids
+            if (cachedIds != null) {
+                cachedIds
+            } else {
+                val resolved = runCatching { resolveProviderIds(spotifyTrackId, isrc) }.getOrDefault(ProviderIds())
+                trackIdCache[spotifyTrackId] = CachedProviderIds(resolved, now + TRACK_CACHE_MS)
+                resolved
+            }
+        }
 
         val upProviders = upProvidersDeferred.await()
-        // All lossless servers down → don't waste time; caller falls back to YouTube.
         if (upProviders.isEmpty()) {
             log("D", "all lossless servers down — skipping lossless")
             return@coroutineScope Result.NotFound
         }
-        val quality = if (preferHiRes) "24" else "16"
-        val ids = idsDeferred.await()
 
+        val ids = idsDeferred.await()
         val candidates = mutableListOf<suspend () -> Result>()
 
-        if ((providerCooldowns["tidal"] ?: 0L) <= System.currentTimeMillis() && !ids.tidalId.isNullOrBlank()) {
+        // 3. Skip candidates if streamFailureCache or providerCooldowns are active
+        val tidalFailKey = "tidal::${ids.tidalId}"
+        if ((providerCooldowns["tidal"] ?: 0L) <= now && (streamFailureCache[tidalFailKey]?.expiresAtMs ?: 0L) <= now && !ids.tidalId.isNullOrBlank()) {
             candidates.add { resolveTidalMonochrome(ids.tidalId, preferHiRes) }
             if ("tidal" in upProviders) {
                 candidates.add { communityDownload("tidal", TIDAL_BASE, ids.tidalId, quality) }
             }
         }
-        if ((providerCooldowns["qobuz"] ?: 0L) <= System.currentTimeMillis() && !ids.qobuzId.isNullOrBlank() && "qobuz" in upProviders) {
+
+        val qobuzFailKey = "qobuz::${ids.qobuzId}"
+        if ((providerCooldowns["qobuz"] ?: 0L) <= now && (streamFailureCache[qobuzFailKey]?.expiresAtMs ?: 0L) <= now && !ids.qobuzId.isNullOrBlank() && "qobuz" in upProviders) {
             candidates.add { communityDownload("qobuz", QOBUZ_BASE, ids.qobuzId, quality) }
         }
-        if ((providerCooldowns["amazon"] ?: 0L) <= System.currentTimeMillis() && !ids.amazonId.isNullOrBlank() && "amazon" in upProviders) {
+
+        val amazonFailKey = "amazon::${ids.amazonId}"
+        if ((providerCooldowns["amazon"] ?: 0L) <= now && (streamFailureCache[amazonFailKey]?.expiresAtMs ?: 0L) <= now && !ids.amazonId.isNullOrBlank() && "amazon" in upProviders) {
             candidates.add { communityDownload("amazon", AMAZON_BASE, ids.amazonId, quality) }
         }
-        if ((providerCooldowns["deezer"] ?: 0L) <= System.currentTimeMillis() && !ids.deezerId.isNullOrBlank() && "deezer" in upProviders) {
+
+        val deezerFailKey = "deezer::${ids.deezerId}"
+        if ((providerCooldowns["deezer"] ?: 0L) <= now && (streamFailureCache[deezerFailKey]?.expiresAtMs ?: 0L) <= now && !ids.deezerId.isNullOrBlank() && "deezer" in upProviders) {
             candidates.add { communityDownload("deezer", DEEZER_BASE, ids.deezerId, quality) }
         }
 
@@ -335,7 +349,18 @@ object SpotiFlac {
             if (receivedCount >= candidates.size) break
         }
 
-        winner ?: lastCooldown ?: Result.NotFound
+        val finalResult = winner ?: lastCooldown ?: Result.NotFound
+
+        if (finalResult is Result.Success) {
+            streamCache[streamCacheKey] = CachedTrack(finalResult.track, now + STREAM_CACHE_MS)
+        } else if (finalResult is Result.Error || finalResult is Result.Cooldown) {
+            streamFailureCache[streamCacheKey] = CachedFailure(
+                message = (finalResult as? Result.Error)?.message ?: "cooldown",
+                expiresAtMs = now + FAILURE_CACHE_MS,
+            )
+        }
+
+        finalResult
     }
 
     private data class ProviderIds(
@@ -406,7 +431,7 @@ object SpotiFlac {
         val params = sortedMapOf("query" to isrc.trim(), "limit" to "1")
         val ts = (System.currentTimeMillis() / 1000).toString()
         val sigPayload = buildString {
-            append("tracksearch") // normalized "track/search" with slashes removed
+            append("tracksearch")
             params.forEach { (k, v) -> append(k); append(v) }
             append(ts)
             append(QOBUZ_APP_SECRET)
@@ -423,7 +448,7 @@ object SpotiFlac {
             header("Accept", "application/json")
         }
         val items = json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            .get("tracks")?.jsonObject?.get("items")?.let { it as? kotlinx.serialization.json.JsonArray }
+            .get("tracks")?.jsonObject?.get("items")?.let { it as? JsonArray }
         items?.firstOrNull()?.jsonObject?.get("id")?.jsonPrimitive?.contentOrNull
     }.getOrElse { log("W", "qobuz isrc search failed: ${it.message}"); null }
 
@@ -433,9 +458,6 @@ object SpotiFlac {
         id: String,
         quality: String,
     ): Result {
-        // Retry transient errors (429/502/504) with a short backoff — the proxies
-        // are flaky-but-alive far more often than genuinely down. 503 is a real
-        // scheduled cooldown, so we surface it instead of hammering.
         var resp: HttpResponse? = null
         val maxAttempts = 3
         for (attempt in 1..maxAttempts) {
@@ -486,19 +508,9 @@ object SpotiFlac {
         return Result.Success(track)
     }
 
-    /**
-     * Resolve a TIDAL track id to a direct FLAC URL via the monochrome Hi-Fi API,
-     * failing over across instances. Two-step flow (matches monochrome's client):
-     *   1. GET /trackManifests/?id=&quality=LOSSLESS&adaptive=false&formats=FLAC
-     *      → JSON with `data.data.attributes.uri` = a signed manifest URL.
-     *   2. GET that uri → a BTS manifest (`{"urls":[...]}`) whose first url is a
-     *      single-file FLAC. (Hi-res returns a segmented DASH `<MPD>` we can't use
-     *      as one URL, so we request LOSSLESS for a directly-playable stream.)
-     */
     private suspend fun resolveTidalMonochrome(tidalId: String, @Suppress("UNUSED_PARAMETER") preferHiRes: Boolean): Result {
         var sawError = false
         for (base in monochromeInstances()) {
-            // Instances run one of two API versions, so try both endpoint styles.
             flacViaTrackManifests(base, tidalId)?.let {
                 log("D", "tidal FLAC via $base/trackManifests (${it.container})")
                 return Result.Success(it)
@@ -512,7 +524,6 @@ object SpotiFlac {
         return if (sawError) Result.Error("Tidal backends unavailable") else Result.NotFound
     }
 
-    /** New Hi-Fi API: /trackManifests → signed manifest uri → FLAC/DASH stream. */
     private suspend fun flacViaTrackManifests(base: String, tidalId: String): LosslessTrack? {
         val lookup = runCatching {
             client.get("$base/trackManifests/") {
@@ -531,7 +542,6 @@ object SpotiFlac {
         return trackFromManifest(runCatching { manifestResp.bodyAsText() }.getOrDefault(""), manifestUri)
     }
 
-    /** Older hifi-api: /track/?id=&quality=LOSSLESS → OriginalTrackUrl or inline manifest. */
     private suspend fun flacViaTrack(base: String, tidalId: String): LosslessTrack? {
         val resp = runCatching {
             client.get("$base/track/") {
@@ -558,16 +568,9 @@ object SpotiFlac {
         }
     }
 
-    /**
-     * Turn a fetched TIDAL manifest into a playable track. A `<MPD>` is a segmented
-     * DASH stream — we hand the manifest URL itself to ExoPlayer (container "dash").
-     * A BTS JSON manifest yields a single-file FLAC URL (container "flac").
-     */
     private fun trackFromManifest(manifestText: String, manifestUri: String): LosslessTrack? {
         if (manifestText.isBlank()) return null
         if (manifestText.contains("<MPD")) {
-            // Limited/no-subscription backends serve 30-second previews. Reject them
-            // so a full-access backend (or full-length YouTube) is used instead.
             val durSec = mpdDurationSeconds(manifestText)
             if (durSec != null && durSec < 45.0) {
                 log("W", "tidal manifest is a ${durSec.toInt()}s preview — skipping")
@@ -580,7 +583,6 @@ object SpotiFlac {
         }
     }
 
-    /** Parse a DASH `mediaPresentationDuration="PT#H#M#S"` into seconds. */
     private fun mpdDurationSeconds(mpd: String): Double? {
         val m = Regex("mediaPresentationDuration=\"PT(?:([0-9]+)H)?(?:([0-9]+)M)?([0-9.]+)S\"").find(mpd)
             ?: return null
@@ -590,7 +592,6 @@ object SpotiFlac {
         return h * 3600 + min * 60 + s
     }
 
-    /** Pull `attributes.uri` (the signed manifest URL) out of a /trackManifests response. */
     private fun extractManifestUri(body: String): String? {
         if (body.isBlank()) return null
         val root = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull() ?: return null
@@ -607,11 +608,6 @@ object SpotiFlac {
         return null
     }
 
-    /**
-     * Extract a single FLAC URL from a fetched TIDAL manifest. LOSSLESS uses a BTS
-     * JSON manifest `{"mimeType":"audio/flac","urls":[...]}`; segmented DASH (`<MPD>`)
-     * can't be a single URL so we skip it. Some instances base64-wrap the JSON.
-     */
     private fun flacUrlFromManifest(manifestText: String): String? {
         if (manifestText.isBlank() || manifestText.contains("<MPD")) return null
         fun urlsFrom(text: String): List<String> = runCatching {
@@ -629,7 +625,6 @@ object SpotiFlac {
         return Regex("https?://[^\"\\s]+").find(manifestText)?.value
     }
 
-    /** Prefer FLAC / lossless URLs when a manifest offers several. */
     private fun pickBestLosslessUrl(urls: List<String>): String {
         val keywords = listOf("flac", "lossless", "hi-res", "high")
         return urls.minByOrNull { url ->
@@ -638,14 +633,6 @@ object SpotiFlac {
         } ?: urls.first()
     }
 
-    /** Pull a streamable URL out of the varied community-response shapes. */
-    /**
-     * Turn a community `/api/dl` response into a playable track. The `url` field is
-     * either a direct http(s) FLAC URL, or `MANIFEST:<base64>` carrying a TIDAL
-     * manifest — a BTS JSON (single-file FLAC) or a DASH `<MPD>` (segmented). For
-     * DASH we hand ExoPlayer a `data:application/dash+xml` URI (its segment URLs are
-     * absolute CDN links), skipping <45s previews.
-     */
     private fun communityTrackFrom(body: String, provider: String, quality: String): LosslessTrack? {
         if (body.isBlank()) return null
         val obj = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull() ?: return null
@@ -680,15 +667,6 @@ object SpotiFlac {
         return null
     }
 
-    /**
-     * Download a TIDAL DASH-FLAC stream and remux it into a real single `.flac` file
-     * — no ffmpeg. The DASH segments are fragmented MP4 carrying raw FLAC frames, so:
-     *   1. take STREAMINFO from the init segment's `dfLa` box,
-     *   2. concatenate every media segment's `mdat` payload (the FLAC frames),
-     *   3. write `fLaC` + STREAMINFO metadata block + frames.
-     * [streamUrl] is the `data:application/dash+xml;base64,…` URI the resolver returns
-     * for TIDAL. Returns true on success.
-     */
     suspend fun downloadDashFlacToFile(streamUrl: String, outFile: java.io.File): Boolean = runCatching {
         val mpd = dashMpdFromUrl(streamUrl) ?: return false
         val initUrl = htmlUnescape(Regex("initialization=\"([^\"]+)\"").find(mpd)?.groupValues?.get(1) ?: return false)
@@ -701,8 +679,7 @@ object SpotiFlac {
         val streamInfo = flacStreamInfoFromInit(initBytes) ?: return false
 
         java.io.BufferedOutputStream(java.io.FileOutputStream(outFile)).use { out ->
-            out.write(byteArrayOf(0x66, 0x4c, 0x61, 0x43)) // "fLaC"
-            // metadata block header: last-block(0x80) | STREAMINFO(0) + 24-bit length
+            out.write(byteArrayOf(0x66, 0x4c, 0x61, 0x43))
             out.write(0x80)
             out.write((streamInfo.size ushr 16) and 0xFF)
             out.write((streamInfo.size ushr 8) and 0xFF)
@@ -724,7 +701,6 @@ object SpotiFlac {
         else -> null
     }
 
-    /** Segment count from a SegmentTimeline (`<S d= r=/>`; r is a repeat count). */
     private fun dashSegmentCount(mpd: String): Int {
         var total = 0
         for (m in Regex("<S\\b[^>]*/?>").findAll(mpd)) {
@@ -733,19 +709,16 @@ object SpotiFlac {
         return total
     }
 
-    /** Pull the 34-byte STREAMINFO out of an init segment's `dfLa` box. */
     private fun flacStreamInfoFromInit(init: ByteArray): ByteArray? {
-        val tag = byteArrayOf(0x64, 0x66, 0x4c, 0x61) // "dfLa"
+        val tag = byteArrayOf(0x64, 0x66, 0x4c, 0x61)
         val k = indexOf(init, tag)
         if (k < 0 || k + 12 > init.size) return null
-        // after dfLa(4) + FullBox(4): metadata block header(4) then STREAMINFO
         val len = ((init[k + 9].toInt() and 0xFF) shl 16) or
             ((init[k + 10].toInt() and 0xFF) shl 8) or (init[k + 11].toInt() and 0xFF)
         if (len <= 0 || k + 12 + len > init.size) return null
         return init.copyOfRange(k + 12, k + 12 + len)
     }
 
-    /** Append every `mdat` box payload (the FLAC frames) from an MP4 fragment. */
     private fun writeMdatPayloads(seg: ByteArray, out: java.io.OutputStream) {
         var i = 0
         while (i + 8 <= seg.size) {
@@ -761,7 +734,7 @@ object SpotiFlac {
             }
             if (size < hdr) break
             if (seg[i + 4] == 0x6D.toByte() && seg[i + 5] == 0x64.toByte() &&
-                seg[i + 6] == 0x61.toByte() && seg[i + 7] == 0x74.toByte() // "mdat"
+                seg[i + 6] == 0x61.toByte() && seg[i + 7] == 0x74.toByte()
             ) {
                 out.write(seg, i + hdr, (size - hdr).toInt())
             }

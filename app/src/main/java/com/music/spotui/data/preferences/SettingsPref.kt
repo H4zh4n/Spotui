@@ -164,3 +164,46 @@ fun currentLosslessTimeout(c: Context): LosslessTimeout {
     val cm = c.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     return if (cm.isActiveNetworkMetered) getCellularLosslessTimeout(c) else getWifiLosslessTimeout(c)
 }
+
+enum class AudioProviderOrderItem(val id: String, val displayName: String) {
+    QOBUZ("qobuz", "Qobuz"),
+    TIDAL("tidal", "TIDAL"),
+    DEEZER("deezer", "Deezer"),
+    SPOTIFLAC("spotiflac", "SpotiFLAC (Community)"),
+    SOUNDCLOUD("soundcloud", "SoundCloud"),
+    YOUTUBE_MUSIC("youtube", "YouTube Music"),
+}
+
+private const val KEY_AUDIO_PROVIDER_ORDER = "audio_provider_order"
+
+fun getAudioProviderOrder(c: Context): List<AudioProviderOrderItem> {
+    val raw = prefs(c).getString(KEY_AUDIO_PROVIDER_ORDER, null)
+    if (raw.isNullOrBlank()) {
+        return listOf(
+            AudioProviderOrderItem.QOBUZ,
+            AudioProviderOrderItem.TIDAL,
+            AudioProviderOrderItem.DEEZER,
+            AudioProviderOrderItem.SPOTIFLAC,
+            AudioProviderOrderItem.SOUNDCLOUD,
+            AudioProviderOrderItem.YOUTUBE_MUSIC,
+        )
+    }
+    return runCatching {
+        raw.split(",").mapNotNull { name ->
+            AudioProviderOrderItem.values().firstOrNull { it.id == name || it.name == name }
+        }
+    }.getOrDefault(
+        listOf(
+            AudioProviderOrderItem.QOBUZ,
+            AudioProviderOrderItem.TIDAL,
+            AudioProviderOrderItem.DEEZER,
+            AudioProviderOrderItem.SPOTIFLAC,
+            AudioProviderOrderItem.SOUNDCLOUD,
+            AudioProviderOrderItem.YOUTUBE_MUSIC,
+        )
+    )
+}
+
+fun setAudioProviderOrder(c: Context, order: List<AudioProviderOrderItem>) {
+    prefs(c).edit().putString(KEY_AUDIO_PROVIDER_ORDER, order.joinToString(",") { it.id }).apply()
+}
