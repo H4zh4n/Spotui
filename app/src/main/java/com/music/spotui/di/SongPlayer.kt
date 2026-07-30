@@ -65,6 +65,19 @@ object SongPlayer {
         while (resolutionLogs.size > 50) resolutionLogs.poll()
     }
 
+    private fun cleanTrackTitle(raw: String, artist: String): String {
+        var title = raw
+        if (title.contains("|")) {
+            title = title.substringAfter("|")
+        }
+        title = title.replace(Regex("^(spotify:track:[a-zA-Z0-9]+|yt:[a-zA-Z0-9_-]+)"), "").trim()
+        if (artist.isNotBlank()) {
+            val artistPattern = Regex("""\s*[-–—]?\s*${Regex.escape(artist)}\s*$""", RegexOption.IGNORE_CASE)
+            title = title.replace(artistPattern, "").trim()
+        }
+        return title.ifBlank { raw }
+    }
+
     // Source kill-switches. The Spotify web player is currently broken (off).
     // YouTube is the last-resort fallback, kept on so tracks SpotiFLAC misses or
     // can't serve during a proxy cooldown still play — with the wrong-song guards
@@ -621,7 +634,8 @@ object SongPlayer {
 
         if (forPlayback) {
             resolutionLogs.clear()
-            logResolution("Resolving stream for '$song' by '$metaArtist'")
+            val cleanTitle = cleanTrackTitle(song, metaArtist)
+            logResolution("Resolving stream for '$cleanTitle' by '$metaArtist'")
             if (shouldTryFlac) {
                 currentSource = "Lossless"
                 currentQuality = ""
@@ -649,6 +663,7 @@ object SongPlayer {
                     }.getOrNull()
                     val durationMs = durationRegistry[song]?.toLong()
                     val providerOrder = com.music.spotui.data.preferences.getAudioProviderOrder(appContext)
+                    val cleanTitle = cleanTrackTitle(song, metaArtist)
 
                     if (forPlayback) {
                         logResolution("Priority Order: ${providerOrder.joinToString(" → ") { it.displayName }}")
@@ -658,13 +673,13 @@ object SongPlayer {
                     for (item in providerOrder) {
                         when (item) {
                             com.music.spotui.data.preferences.AudioProviderOrderItem.AMAZON -> {
-                                if (forPlayback) logResolution("Attempting Amazon Music...")
+                                if (forPlayback) logResolution("Attempting Amazon Music for '$cleanTitle'...")
                                 val res = runCatching {
                                     com.music.spotui.providers.AmazonAudioProvider.resolve(
                                         appContext,
                                         com.music.spotui.providers.AmazonAudioProvider.Query(
                                             mediaId = flacSpotifyId ?: song,
-                                            title = song,
+                                            title = cleanTitle,
                                             artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
                                             album = null,
                                             durationMs = durationMs,
@@ -681,12 +696,12 @@ object SongPlayer {
                                 }
                             }
                             com.music.spotui.data.preferences.AudioProviderOrderItem.QOBUZ -> {
-                                if (forPlayback) logResolution("Attempting Qobuz...")
+                                if (forPlayback) logResolution("Attempting Qobuz for '$cleanTitle'...")
                                 val res = runCatching {
                                     com.music.spotui.providers.QobuzAudioProvider.resolve(
                                         com.music.spotui.providers.QobuzAudioProvider.Query(
                                             mediaId = flacSpotifyId ?: song,
-                                            title = song,
+                                            title = cleanTitle,
                                             artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
                                             album = null,
                                             isrc = isrc,
@@ -704,13 +719,13 @@ object SongPlayer {
                                 }
                             }
                             com.music.spotui.data.preferences.AudioProviderOrderItem.TIDAL -> {
-                                if (forPlayback) logResolution("Attempting TIDAL...")
+                                if (forPlayback) logResolution("Attempting TIDAL for '$cleanTitle'...")
                                 val res = runCatching {
                                     val tQuality = if (losslessHiRes) com.music.spotui.providers.TidalAudioQuality.HI_RES_LOSSLESS else com.music.spotui.providers.TidalAudioQuality.FLAC
                                     com.music.spotui.providers.TidalAudioProvider.resolve(
                                         com.music.spotui.providers.TidalAudioProvider.Query(
                                             mediaId = flacSpotifyId ?: song,
-                                            title = song,
+                                            title = cleanTitle,
                                             artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
                                             album = null,
                                             isrc = isrc,
@@ -728,12 +743,12 @@ object SongPlayer {
                                 }
                             }
                             com.music.spotui.data.preferences.AudioProviderOrderItem.DEEZER -> {
-                                if (forPlayback) logResolution("Attempting Deezer...")
+                                if (forPlayback) logResolution("Attempting Deezer for '$cleanTitle'...")
                                 val res = runCatching {
                                     com.music.spotui.providers.DeezerAudioProvider.resolve(
                                         com.music.spotui.providers.DeezerAudioProvider.Query(
                                             mediaId = flacSpotifyId ?: song,
-                                            title = song,
+                                            title = cleanTitle,
                                             artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
                                             album = null,
                                             isrc = isrc,
@@ -769,12 +784,12 @@ object SongPlayer {
                                 }
                             }
                             com.music.spotui.data.preferences.AudioProviderOrderItem.SOUNDCLOUD -> {
-                                if (forPlayback) logResolution("Attempting SoundCloud...")
+                                if (forPlayback) logResolution("Attempting SoundCloud for '$cleanTitle'...")
                                 val res = runCatching {
                                     com.music.spotui.providers.SoundCloudAudioProvider.resolve(
                                         com.music.spotui.providers.SoundCloudAudioProvider.Query(
                                             mediaId = flacSpotifyId ?: song,
-                                            title = song,
+                                            title = cleanTitle,
                                             artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
                                             album = null,
                                             isrc = isrc,
