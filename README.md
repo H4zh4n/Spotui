@@ -1,4 +1,4 @@
-# spotui
+# Spotui [![Downloads](https://img.shields.io/github/downloads/H4zh4n/Spotui/total?style=for-the-badge&labelColor=0d1117)](https://github.com/H4zh4n/Spotui/releases)
 
 A Spotify clone for Android, built with Jetpack Compose.
 
