@@ -222,7 +222,9 @@ object TidalAudioProvider {
 
     private fun downloadApiEndpoints(customResolverEndpoints: String?): List<TidalDownloadEndpoint> {
         var customIndex = 0
-        return resolverEndpointBases(customResolverEndpoints)
+        val bases = resolverEndpointBases(customResolverEndpoints)
+            .ifEmpty { listOf(DEFAULT_RESOLVER_BASE_URL) }
+        return bases
             .map { baseUrl ->
                 customIndex += 1
                 TidalDownloadEndpoint(

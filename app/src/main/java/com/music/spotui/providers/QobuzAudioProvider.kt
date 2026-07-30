@@ -154,7 +154,9 @@ object QobuzAudioProvider {
 
     private fun kennyEndpoints(customResolverEndpoints: String?): List<KennyEndpoint> {
         var customIndex = 0
-        return resolverEndpointBases(customResolverEndpoints)
+        val bases = resolverEndpointBases(customResolverEndpoints)
+            .ifEmpty { listOf(DEFAULT_KENNY_BASE_URL) }
+        return bases
             .map { baseUrl ->
                 customIndex += 1
                 KennyEndpoint(
