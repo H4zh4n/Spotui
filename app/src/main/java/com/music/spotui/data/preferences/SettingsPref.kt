@@ -178,33 +178,33 @@ enum class AudioProviderOrderItem(val id: String, val displayName: String) {
 private const val KEY_AUDIO_PROVIDER_ORDER = "audio_provider_order"
 
 fun getAudioProviderOrder(c: Context): List<AudioProviderOrderItem> {
+    val defaultList = listOf(
+        AudioProviderOrderItem.AMAZON,
+        AudioProviderOrderItem.QOBUZ,
+        AudioProviderOrderItem.TIDAL,
+        AudioProviderOrderItem.DEEZER,
+        AudioProviderOrderItem.SPOTIFLAC,
+        AudioProviderOrderItem.SOUNDCLOUD,
+        AudioProviderOrderItem.YOUTUBE_MUSIC,
+    )
     val raw = prefs(c).getString(KEY_AUDIO_PROVIDER_ORDER, null)
     if (raw.isNullOrBlank()) {
-        return listOf(
-            AudioProviderOrderItem.AMAZON,
-            AudioProviderOrderItem.QOBUZ,
-            AudioProviderOrderItem.TIDAL,
-            AudioProviderOrderItem.DEEZER,
-            AudioProviderOrderItem.SPOTIFLAC,
-            AudioProviderOrderItem.SOUNDCLOUD,
-            AudioProviderOrderItem.YOUTUBE_MUSIC,
-        )
+        return defaultList
     }
-    return runCatching {
+    val parsed = runCatching {
         raw.split(",").mapNotNull { name ->
             AudioProviderOrderItem.values().firstOrNull { it.id == name || it.name == name }
         }
-    }.getOrDefault(
-        listOf(
-            AudioProviderOrderItem.AMAZON,
-            AudioProviderOrderItem.QOBUZ,
-            AudioProviderOrderItem.TIDAL,
-            AudioProviderOrderItem.DEEZER,
-            AudioProviderOrderItem.SPOTIFLAC,
-            AudioProviderOrderItem.SOUNDCLOUD,
-            AudioProviderOrderItem.YOUTUBE_MUSIC,
-        )
-    )
+    }.getOrDefault(defaultList)
+
+    val missing = AudioProviderOrderItem.values().filter { it !in parsed }
+    return if (missing.isNotEmpty()) {
+        val complete = (missing + parsed).distinct()
+        setAudioProviderOrder(c, complete)
+        complete
+    } else {
+        parsed
+    }
 }
 
 fun setAudioProviderOrder(c: Context, order: List<AudioProviderOrderItem>) {

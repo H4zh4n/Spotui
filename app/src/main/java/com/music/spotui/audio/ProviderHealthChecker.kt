@@ -47,6 +47,13 @@ object ProviderHealthChecker {
     fun defaultTargets(): List<Target> {
         return listOf(
             Target(
+                id = "amazon_resolver",
+                group = "Amazon Music",
+                name = "Amazon Music Resolver",
+                endpoint = com.music.spotui.providers.AmazonAudioProvider.DEFAULT_RESOLVE_API_URL,
+                detail = "24-bit Ultra HD & 16-bit FLAC Stream Resolver",
+            ),
+            Target(
                 id = "qobuz_kenny",
                 group = "Qobuz",
                 name = "Kenny Mirror",

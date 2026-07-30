@@ -149,6 +149,33 @@ object AmazonAudioProvider {
         return null
     }
 
+    fun searchCandidates(context: Context, term: String, country: String = "US", limit: Int = 10): List<CandidateMetadata> {
+        val results = searchTracks(context, term, country) ?: return emptyList()
+        val candidates = mutableListOf<CandidateMetadata>()
+        for (i in 0 until min(results.length(), limit)) {
+            val obj = results.optJSONObject(i) ?: continue
+            val asin = obj.optString("asin").takeIf { it.isNotEmpty() } ?: continue
+            val title = obj.optString("title").takeIf { it.isNotEmpty() } ?: ""
+            val artistsArr = obj.optJSONArray("artists")
+            val artistName = artistsArr?.optJSONObject(0)?.optString("name")?.takeIf { it.isNotEmpty() }
+                ?: obj.optString("artist").takeIf { it.isNotEmpty() }
+                ?: ""
+            val albumTitle = obj.optJSONObject("album")?.optString("title")?.takeIf { it.isNotEmpty() }
+                ?: obj.optString("album").takeIf { it.isNotEmpty() }
+                ?: ""
+            val durationMs = if (obj.has("durationMs")) obj.optLong("durationMs") else 0L
+
+            candidates += CandidateMetadata(
+                trackId = asin,
+                title = title,
+                artist = artistName,
+                album = albumTitle,
+                durationMs = durationMs
+            )
+        }
+        return candidates
+    }
+
     private fun searchTracks(context: Context, term: String, country: String = "US"): JSONArray? {
         ensureSession()
 

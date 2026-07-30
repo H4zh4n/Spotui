@@ -16,6 +16,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -934,7 +936,7 @@ fun PlayerInfo(
                     }
                     if (!resolveDetailNote.isNullOrBlank()) {
                         Spacer(Modifier.height(8.dp))
-                        Text("Resolution Process:", color = Color(0xFFB3B3B3), fontSize = 12.sp)
+                        Text("Status Note:", color = Color(0xFFB3B3B3), fontSize = 12.sp)
                         Spacer(Modifier.height(4.dp))
                         Text(
                             resolveDetailNote,
@@ -947,6 +949,35 @@ fun PlayerInfo(
                                 .background(Color(0x22FFB74D))
                                 .padding(10.dp)
                         )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text("Resolution Trace Log:", color = Color(0xFFB3B3B3), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 220.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF0C0C10))
+                            .padding(10.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        Column {
+                            val logs = com.music.spotui.di.SongPlayer.resolutionLogs.toList()
+                            if (logs.isEmpty()) {
+                                Text("No live trace logs captured for current playback session.", color = Color.Gray, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                            } else {
+                                logs.forEach { line ->
+                                    val textColor = when {
+                                        line.contains("✓") -> Color(0xFF81C784)
+                                        line.contains("✗") -> Color(0xFFE57373)
+                                        line.contains("Fallback") || line.contains("Exhausted") -> Color(0xFFFFB74D)
+                                        else -> Color(0xFFD1D1D6)
+                                    }
+                                    Text(line, color = textColor, fontSize = 11.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, lineHeight = 15.sp)
+                                }
+                            }
+                        }
                     }
                 }
             },

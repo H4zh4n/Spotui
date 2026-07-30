@@ -210,14 +210,24 @@ object SpotiFlac {
         val up = upLosslessProviders()
         val now = System.currentTimeMillis()
 
+        val list = mutableListOf<ProviderStatus>()
+
+        list.add(
+            ProviderStatus(
+                id = "amazon_direct",
+                name = "Amazon Music (Direct)",
+                isUp = true,
+                isCooldown = false,
+                detail = "24-bit Ultra HD & 16-bit FLAC Stream Resolver",
+            )
+        )
+
         val providers = listOf(
             Triple("tidal", "Tidal (Community)", "High-res & CD quality FLAC"),
             Triple("qobuz", "Qobuz (Community)", "24-bit Hi-Res & CD quality FLAC via ISRC"),
             Triple("amazon", "Amazon Music (Community)", "24-bit Ultra HD FLAC"),
             Triple("deezer", "Deezer (Community)", "16-bit CD quality FLAC via ISRC"),
         )
-
-        val list = mutableListOf<ProviderStatus>()
 
         for ((id, name, desc) in providers) {
             val isUp = id in up
@@ -244,6 +254,16 @@ object SpotiFlac {
                 isUp = monoInstances.isNotEmpty(),
                 isCooldown = false,
                 detail = "${monoInstances.size} live public mirror instances",
+            )
+        )
+
+        list.add(
+            ProviderStatus(
+                id = "soundcloud_direct",
+                name = "SoundCloud (Direct)",
+                isUp = true,
+                isCooldown = false,
+                detail = "HQ Audio Stream Resolver",
             )
         )
 

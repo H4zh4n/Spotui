@@ -57,6 +57,14 @@ object SongPlayer {
     @Volatile var losslessStreaming = true
     @Volatile var losslessHiRes = true
 
+    val resolutionLogs = java.util.concurrent.ConcurrentLinkedQueue<String>()
+
+    fun logResolution(msg: String) {
+        val time = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+        resolutionLogs.add("[$time] $msg")
+        while (resolutionLogs.size > 50) resolutionLogs.poll()
+    }
+
     // Source kill-switches. The Spotify web player is currently broken (off).
     // YouTube is the last-resort fallback, kept on so tracks SpotiFLAC misses or
     // can't serve during a proxy cooldown still play — with the wrong-song guards
@@ -612,14 +620,18 @@ object SongPlayer {
         }
 
         if (forPlayback) {
+            resolutionLogs.clear()
+            logResolution("Resolving stream for '$song' by '$metaArtist'")
             if (shouldTryFlac) {
                 currentSource = "Lossless"
                 currentQuality = ""
                 updateResolveStatus(true, "Searching High-Res Lossless Audio Providers...")
+                logResolution("Target Quality: ${if (losslessHiRes) "24-bit Hi-Res / Ultra HD" else "16-bit FLAC"}")
             } else if (shouldTryYoutube) {
                 currentSource = "YouTube"
                 currentQuality = ""
                 updateResolveStatus(true, "Locating YouTube source...")
+                logResolution("High-res FLAC disabled or cellular quality cap in effect. Using YouTube Music.")
             }
         }
 
@@ -638,9 +650,15 @@ object SongPlayer {
                     val durationMs = durationRegistry[song]?.toLong()
                     val providerOrder = com.music.spotui.data.preferences.getAudioProviderOrder(appContext)
 
+                    if (forPlayback) {
+                        logResolution("Priority Order: ${providerOrder.joinToString(" → ") { it.displayName }}")
+                        if (isrc != null) logResolution("Spotify ISRC: $isrc")
+                    }
+
                     for (item in providerOrder) {
                         when (item) {
                             com.music.spotui.data.preferences.AudioProviderOrderItem.AMAZON -> {
+                                if (forPlayback) logResolution("Attempting Amazon Music...")
                                 val res = runCatching {
                                     com.music.spotui.providers.AmazonAudioProvider.resolve(
                                         appContext,
@@ -656,10 +674,14 @@ object SongPlayer {
                                 }.getOrNull()
                                 if (res != null) {
                                     val q = if (losslessHiRes && (res.sampleRate ?: 0) > 44100) "24-bit Ultra HD" else "16-bit FLAC"
+                                    if (forPlayback) logResolution("✓ Amazon Music SUCCESS ($q, ASIN: ${res.trackId})")
                                     return@withTimeoutOrNull Triple(res.mediaUri, "Amazon Music", q)
+                                } else {
+                                    if (forPlayback) logResolution("✗ Amazon Music: match not found or request failed")
                                 }
                             }
                             com.music.spotui.data.preferences.AudioProviderOrderItem.QOBUZ -> {
+                                if (forPlayback) logResolution("Attempting Qobuz...")
                                 val res = runCatching {
                                     com.music.spotui.providers.QobuzAudioProvider.resolve(
                                         com.music.spotui.providers.QobuzAudioProvider.Query(
@@ -675,10 +697,14 @@ object SongPlayer {
                                 }.getOrNull()
                                 if (res != null) {
                                     val q = if (losslessHiRes && (res.sampleRate ?: 0) > 44100) "24-bit Hi-Res" else "16-bit FLAC"
+                                    if (forPlayback) logResolution("✓ Qobuz SUCCESS ($q)")
                                     return@withTimeoutOrNull Triple(res.mediaUri, "Qobuz", q)
+                                } else {
+                                    if (forPlayback) logResolution("✗ Qobuz: match not found or request failed")
                                 }
                             }
                             com.music.spotui.data.preferences.AudioProviderOrderItem.TIDAL -> {
+                                if (forPlayback) logResolution("Attempting TIDAL...")
                                 val res = runCatching {
                                     val tQuality = if (losslessHiRes) com.music.spotui.providers.TidalAudioQuality.HI_RES_LOSSLESS else com.music.spotui.providers.TidalAudioQuality.FLAC
                                     com.music.spotui.providers.TidalAudioProvider.resolve(
@@ -695,10 +721,14 @@ object SongPlayer {
                                 }.getOrNull()
                                 if (res != null) {
                                     val q = if (losslessHiRes) "24-bit Hi-Res" else "16-bit FLAC"
+                                    if (forPlayback) logResolution("✓ TIDAL SUCCESS ($q)")
                                     return@withTimeoutOrNull Triple(res.mediaUri, "TIDAL", q)
+                                } else {
+                                    if (forPlayback) logResolution("✗ TIDAL: match not found or request failed")
                                 }
                             }
                             com.music.spotui.data.preferences.AudioProviderOrderItem.DEEZER -> {
+                                if (forPlayback) logResolution("Attempting Deezer...")
                                 val res = runCatching {
                                     com.music.spotui.providers.DeezerAudioProvider.resolve(
                                         com.music.spotui.providers.DeezerAudioProvider.Query(
@@ -712,11 +742,15 @@ object SongPlayer {
                                     )
                                 }.getOrNull()
                                 if (res != null) {
+                                    if (forPlayback) logResolution("✓ Deezer SUCCESS (16-bit FLAC)")
                                     return@withTimeoutOrNull Triple(res.mediaUri, "Deezer", "16-bit FLAC")
+                                } else {
+                                    if (forPlayback) logResolution("✗ Deezer: match not found or request failed")
                                 }
                             }
                             com.music.spotui.data.preferences.AudioProviderOrderItem.SPOTIFLAC -> {
                                 if (flacSpotifyId != null) {
+                                    if (forPlayback) logResolution("Attempting SpotiFLAC (Community)...")
                                     val res = runCatching {
                                         com.metrolist.spotify.SpotiFlac.resolve(
                                             flacSpotifyId,
@@ -727,11 +761,15 @@ object SongPlayer {
                                     if (res is com.metrolist.spotify.SpotiFlac.Result.Success) {
                                         val prov = res.track.provider.replaceFirstChar { it.uppercase() }
                                         val q = "FLAC ${res.track.quality}-bit"
+                                        if (forPlayback) logResolution("✓ SpotiFLAC SUCCESS ($prov, $q)")
                                         return@withTimeoutOrNull Triple(res.track.url, "SpotiFLAC ($prov)", q)
+                                    } else {
+                                        if (forPlayback) logResolution("✗ SpotiFLAC: no response or proxy cooldown")
                                     }
                                 }
                             }
                             com.music.spotui.data.preferences.AudioProviderOrderItem.SOUNDCLOUD -> {
+                                if (forPlayback) logResolution("Attempting SoundCloud...")
                                 val res = runCatching {
                                     com.music.spotui.providers.SoundCloudAudioProvider.resolve(
                                         com.music.spotui.providers.SoundCloudAudioProvider.Query(
@@ -745,12 +783,16 @@ object SongPlayer {
                                     )
                                 }.getOrNull()
                                 if (res != null) {
+                                    if (forPlayback) logResolution("✓ SoundCloud SUCCESS (HQ Audio)")
                                     return@withTimeoutOrNull Triple(res.mediaUri, "SoundCloud", "HQ Audio")
+                                } else {
+                                    if (forPlayback) logResolution("✗ SoundCloud: match not found or request failed")
                                 }
                             }
                             com.music.spotui.data.preferences.AudioProviderOrderItem.YOUTUBE_MUSIC -> Unit
                         }
                     }
+                    if (forPlayback) logResolution("All lossless providers exhausted. Proceeding to YouTube Music fallback.")
                     null
                 }
             }

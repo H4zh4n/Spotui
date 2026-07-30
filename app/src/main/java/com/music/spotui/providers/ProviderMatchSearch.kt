@@ -19,6 +19,7 @@ object ProviderMatchSearch {
     suspend fun searchAll(
         query: Query,
         providers: List<AudioProviderOrderItem> = listOf(
+            AudioProviderOrderItem.AMAZON,
             AudioProviderOrderItem.QOBUZ,
             AudioProviderOrderItem.TIDAL,
             AudioProviderOrderItem.DEEZER,
@@ -49,6 +50,22 @@ object ProviderMatchSearch {
 
         runCatching {
             when (provider) {
+                AudioProviderOrderItem.AMAZON -> {
+                    AmazonAudioProvider.searchCandidates(
+                        context = com.music.spotui.MyApplication.instance,
+                        term = "${query.title} ${query.artist}".trim(),
+                        limit = limit
+                    ).map {
+                        ProviderMatchCandidate(
+                            provider = provider,
+                            providerTrackId = it.trackId,
+                            title = it.title,
+                            artist = it.artist,
+                            album = it.album,
+                            durationMs = it.durationMs,
+                        )
+                    }
+                }
                 AudioProviderOrderItem.QOBUZ -> {
                     QobuzAudioProvider.searchCandidates(providerQuery, limit).map {
                         ProviderMatchCandidate(
