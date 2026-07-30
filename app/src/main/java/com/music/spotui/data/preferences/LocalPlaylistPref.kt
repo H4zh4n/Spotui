@@ -132,6 +132,13 @@ object LocalPlaylistPref {
         return playlist.songs.any { it.id == songId || (spotifyTrackId.isNotBlank() && it.spotifyTrackId == spotifyTrackId) }
     }
 
+    fun renamePlaylist(context: Context, playlistId: String, newName: String): Boolean {
+        val playlist = getLocalPlaylist(context, playlistId) ?: return false
+        val updatedPlaylist = playlist.copy(name = newName)
+        savePlaylist(context, updatedPlaylist)
+        return true
+    }
+
     fun deletePlaylist(context: Context, playlistId: String) {
         val prefs = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
         prefs.edit().remove(playlistId).apply()

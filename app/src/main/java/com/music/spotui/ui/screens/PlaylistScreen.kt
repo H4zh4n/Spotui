@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
@@ -197,6 +198,66 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
 
     var menuSong by remember { mutableStateOf<com.music.spotui.data.entity.SongsModel?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+
+    if (showRenameDialog) {
+        val currentName = playlist.name.ifBlank { playlistName }
+        var newPlaylistNameInput by remember(currentName) { mutableStateOf(currentName) }
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            containerColor = Color(0xFF282828),
+            title = { Text("Rename Playlist", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = {
+                TextField(
+                    value = newPlaylistNameInput,
+                    onValueChange = { newPlaylistNameInput = it },
+                    placeholder = { Text("Playlist name", color = Color.Gray) },
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color(0xFF383838),
+                        unfocusedContainerColor = Color(0xFF383838),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        cursorColor = Color(0xFF1ED760),
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                )
+            },
+            confirmButton = {
+                Text(
+                    "Save",
+                    color = Color(0xFF1ED760),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    modifier = Modifier
+                        .clickable {
+                            val name = newPlaylistNameInput.trim()
+                            if (name.isNotBlank()) {
+                                com.music.spotui.data.preferences.LocalPlaylistPref.renamePlaylist(context, playlistId, name)
+                                com.music.spotui.data.api.Api.HomeCache.library = null
+                                playlistViewModel.reloadPlaylist(playlistId)
+                            }
+                            showRenameDialog = false
+                        }
+                        .padding(8.dp)
+                )
+            },
+            dismissButton = {
+                Text(
+                    "Cancel",
+                    color = Color.Gray,
+                    fontSize = 15.sp,
+                    modifier = Modifier
+                        .clickable { showRenameDialog = false }
+                        .padding(8.dp)
+                )
+            }
+        )
+    }
 
     if (showDeleteDialog) {
         AlertDialog(
@@ -321,13 +382,36 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                             )
                         }
                         Spacer(modifier = Modifier.padding(5.dp))
-                        Text(
-                            modifier = Modifier.padding(20.dp, 5.dp, 0.dp, 0.dp),
-                            text = playlist.name.ifBlank { playlistName },
-                            color = Color.White,
-                            fontSize = 23.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        val isLocalPlaylist = playlistId.startsWith("local_pl_")
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .padding(20.dp, 5.dp, 20.dp, 0.dp)
+                                .then(
+                                    if (isLocalPlaylist) {
+                                        Modifier.clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) { showRenameDialog = true }
+                                    } else Modifier
+                                )
+                        ) {
+                            Text(
+                                text = playlist.name.ifBlank { playlistName },
+                                color = Color.White,
+                                fontSize = 23.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (isLocalPlaylist) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Edit Playlist Name",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                         if (playlist.time.isNotBlank()) {
                             Text(
                                 modifier = Modifier.padding(20.dp, 4.dp, 20.dp, 0.dp),
