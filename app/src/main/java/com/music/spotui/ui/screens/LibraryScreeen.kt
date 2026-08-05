@@ -26,18 +26,32 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.ui.text.TextStyle
+import com.music.spotui.data.preferences.LibrarySortOption
+import com.music.spotui.data.preferences.getLibrarySortOption
+import com.music.spotui.data.preferences.isLibrarySortDescending
+import com.music.spotui.data.preferences.setLibrarySortOption
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -335,35 +349,106 @@ fun LibraryScreen(navController: NavController) {
             onClearFilters = { libraryViewModel.clearFilters() }
         )
 
-        // Grid/list switch
+        var searchQuery by remember { mutableStateOf("") }
+        var currentSort by remember { mutableStateOf(getLibrarySortOption(context)) }
+        var isDescending by remember { mutableStateOf(isLibrarySortDescending(context)) }
+        var showSortSheet by remember { mutableStateOf(false) }
+
+        // Search bar & Sort/Grid bar
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp, 4.dp, 16.dp, 8.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "Maintained with ♥ by ",
-                    color = Color.Gray,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
+            // Search Input Field
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .height(38.dp)
+                    .background(Color(0xFF2A2A2A))
+                    .padding(horizontal = 10.dp)
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_search_big),
+                    tint = Color.Gray,
+                    contentDescription = "Search Library",
+                    modifier = Modifier.size(16.dp)
                 )
-                val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
-                Text(
-                    text = "Hazhan Salih",
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clickable {
-                        uriHandler.openUri("https://github.com/H4zh4n/Spotui/")
+                Spacer(modifier = Modifier.width(6.dp))
+                BasicTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.weight(1f),
+                    textStyle = TextStyle.Default.copy(
+                        fontSize = 13.sp,
+                        color = Color.White,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    singleLine = true,
+                    cursorBrush = SolidColor(Color(0xFF1ED760)),
+                    decorationBox = { innerTextField ->
+                        Box(contentAlignment = Alignment.CenterStart) {
+                            if (searchQuery.isEmpty()) {
+                                Text(
+                                    text = "Search in library",
+                                    color = Color.Gray,
+                                    fontSize = 13.sp
+                                )
+                            }
+                            innerTextField()
+                        }
                     }
                 )
+                if (searchQuery.isNotEmpty()) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Clear search",
+                        tint = Color.Gray,
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clickable { searchQuery = "" }
+                    )
+                }
             }
-            Spacer(modifier = Modifier.weight(1f))
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Sort Pill Button
             Box(
                 modifier = Modifier
-                    .size(36.dp)
+                    .height(38.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xFF2A2A2A))
+                    .clickable { showSortSheet = true }
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = currentSort.label,
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Sort Options",
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp).padding(start = 2.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Grid/List Toggle Button
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
                     .clip(CircleShape)
                     .background(Color(0xFF2A2A2A))
                     .clickable {
@@ -376,7 +461,7 @@ fun LibraryScreen(navController: NavController) {
                     painter = painterResource(if (gridView) R.drawable.ic_view_list else R.drawable.ic_view_grid),
                     contentDescription = if (gridView) "Show as list" else "Show as grid",
                     tint = Color.White,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
@@ -386,8 +471,8 @@ fun LibraryScreen(navController: NavController) {
             is Response.Loading -> LibrarySkeleton(PaddingValues(0.dp))
             is Response.Success -> {
                 val rawEntries = (entries as Response.Success).data
-                val filteredEntries = remember(rawEntries, selectedFilter, isDownloadedOnly, context) {
-                    rawEntries.filter { entry ->
+                val filteredEntries = remember(rawEntries, selectedFilter, isDownloadedOnly, searchQuery, currentSort, isDescending, context) {
+                    val filtered = rawEntries.filter { entry ->
                         val matchesCategory = when (selectedFilter) {
                             LibraryFilterType.ALL -> true
                             LibraryFilterType.PLAYLISTS -> entry.isPlaylist
@@ -395,17 +480,27 @@ fun LibraryScreen(navController: NavController) {
                             LibraryFilterType.ARTISTS -> false
                         }
                         val matchesDownload = if (isDownloadedOnly) isLibraryEntryDownloaded(context, entry) else true
-                        matchesCategory && matchesDownload
+                        val matchesSearch = if (searchQuery.isBlank()) true else (entry.name.contains(searchQuery, ignoreCase = true) || entry.artists.contains(searchQuery, ignoreCase = true) || entry.subtitle.contains(searchQuery, ignoreCase = true))
+                        matchesCategory && matchesDownload && matchesSearch
+                    }
+                    when (currentSort) {
+                        LibrarySortOption.RECENTS -> if (isDescending) filtered else filtered.reversed()
+                        LibrarySortOption.TITLE -> if (isDescending) filtered.sortedByDescending { it.name.lowercase() } else filtered.sortedBy { it.name.lowercase() }
+                        LibrarySortOption.CREATOR -> if (isDescending) filtered.sortedByDescending { it.artists.ifBlank { it.subtitle }.lowercase() } else filtered.sortedBy { it.artists.ifBlank { it.subtitle }.lowercase() }
                     }
                 }
-                val filteredArtists = remember(followedArtists, selectedFilter, isDownloadedOnly) {
+                val filteredArtists = remember(followedArtists, selectedFilter, isDownloadedOnly, searchQuery, currentSort, isDescending) {
                     if (selectedFilter == LibraryFilterType.PLAYLISTS || selectedFilter == LibraryFilterType.ALBUMS) {
                         emptyList()
                     } else {
-                        followedArtists
+                        val searchFiltered = if (searchQuery.isBlank()) followedArtists else followedArtists.filter { it.name.contains(searchQuery, ignoreCase = true) }
+                        when (currentSort) {
+                            LibrarySortOption.RECENTS -> if (isDescending) searchFiltered else searchFiltered.reversed()
+                            LibrarySortOption.TITLE, LibrarySortOption.CREATOR -> if (isDescending) searchFiltered.sortedByDescending { it.name.lowercase() } else searchFiltered.sortedBy { it.name.lowercase() }
+                        }
                     }
                 }
-                val showHistoryTile = selectedFilter == LibraryFilterType.ALL && !isDownloadedOnly
+                val showHistoryTile = selectedFilter == LibraryFilterType.ALL && !isDownloadedOnly && searchQuery.isBlank()
 
                 if (gridView) {
                     LibraryGridScreen(
@@ -428,6 +523,77 @@ fun LibraryScreen(navController: NavController) {
                 }
             }
             else -> Box(modifier = Modifier.padding(20.dp, 100.dp)) { Snackbar(showMessage = "Couldn't load your library") }
+        }
+
+        if (showSortSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showSortSheet = false },
+                containerColor = Color(0xFF1A1A1A)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                ) {
+                    Text(
+                        text = "Sort by",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(16.dp, 12.dp, 16.dp, 12.dp)
+                    )
+                    HorizontalDivider(color = Color(0xFF2A2A2A))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LibrarySortOption.entries.forEach { option ->
+                        val isSelected = option == currentSort
+                        val icon = when (option) {
+                            LibrarySortOption.RECENTS -> Icons.Default.DateRange
+                            LibrarySortOption.TITLE -> Icons.AutoMirrored.Filled.List
+                            LibrarySortOption.CREATOR -> Icons.Default.Person
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (currentSort == option) {
+                                        isDescending = !isDescending
+                                    } else {
+                                        currentSort = option
+                                        isDescending = (option == LibrarySortOption.RECENTS)
+                                    }
+                                    setLibrarySortOption(context, currentSort, isDescending)
+                                    showSortSheet = false
+                                }
+                                .padding(16.dp, 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = if (isSelected) Color(0xFF1ED760) else Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(18.dp))
+                            Text(
+                                text = if (isSelected) option.getDescriptiveLabel(isDescending) else option.getDescriptiveLabel(option == LibrarySortOption.RECENTS),
+                                color = if (isSelected) Color(0xFF1ED760) else Color.White,
+                                fontSize = 15.sp,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = if (isDescending) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                                    contentDescription = null,
+                                    tint = Color(0xFF1ED760),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
         }
     }
 }
@@ -541,14 +707,56 @@ fun SumUpLibraryScreen(
                         indication = null
                     ) { openLibraryEntry(entry, navController) }
             ) {
-                GlideImage(
-                    modifier = Modifier
-                        .size(55.dp)
-                        .clip(RoundedCornerShape(if (entry.isPlaylist) 6.dp else 4.dp)),
-                    model = entry.coverUri,
-                    contentScale = ContentScale.Crop,
-                    contentDescription = ""
-                )
+                if (entry.spotifyId == Api.HomeCache.DOWNLOADS_ID) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(55.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(Color(0xFF006450), Color(0xFF00382B))
+                                )
+                            ),
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_download),
+                            contentDescription = "Downloaded",
+                            tint = Color(0xFF1ED760),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                } else if (entry.spotifyId == Api.HomeCache.LIKED_SONGS_ID && entry.coverUri.isBlank()) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(55.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(Color(0xFF450AF5), Color(0xFF8E8E93))
+                                )
+                            ),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Favorite,
+                            contentDescription = "Liked Songs",
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                } else {
+                    GlideImage(
+                        modifier = Modifier
+                            .size(55.dp)
+                            .clip(RoundedCornerShape(if (entry.isPlaylist) 6.dp else 4.dp)),
+                        model = entry.coverUri,
+                        contentScale = ContentScale.Crop,
+                        failure = placeholder(R.drawable.placeholder),
+                        loading = placeholder(R.drawable.placeholder),
+                        contentDescription = ""
+                    )
+                }
                 Column(modifier = Modifier.padding(start = 12.dp)) {
                     Text(text = entry.name, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Row(verticalAlignment = Alignment.CenterVertically) {

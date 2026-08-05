@@ -19,19 +19,29 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,6 +52,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
+import com.music.spotui.data.preferences.AlbumSortOption
+import com.music.spotui.data.preferences.getAlbumSortOption
+import com.music.spotui.data.preferences.isAlbumSortDescending
+import com.music.spotui.data.preferences.setAlbumSortOption
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.draw.clip
@@ -198,6 +213,29 @@ fun SumUpAlbumScreen(
     var snackbarVisible by remember {
         mutableStateOf(false)
     }
+
+    var searchQuery by remember(albumName) { mutableStateOf("") }
+    var currentSort by remember(albumName) { mutableStateOf(getAlbumSortOption(context, albumName)) }
+    var isDescending by remember(albumName) { mutableStateOf(isAlbumSortDescending(context, albumName)) }
+    var showSortSheet by remember { mutableStateOf(false) }
+
+    val filteredSongs = remember(albumSongs, searchQuery, currentSort, isDescending) {
+        val filtered = if (searchQuery.isBlank()) {
+            albumSongs
+        } else {
+            albumSongs.filter {
+                it.title.contains(searchQuery, ignoreCase = true) ||
+                        it.singer.contains(searchQuery, ignoreCase = true)
+            }
+        }
+        when (currentSort) {
+            AlbumSortOption.DEFAULT -> if (isDescending) filtered.reversed() else filtered
+            AlbumSortOption.TITLE -> if (isDescending) filtered.sortedByDescending { it.title.lowercase() } else filtered.sortedBy { it.title.lowercase() }
+            AlbumSortOption.ARTIST -> if (isDescending) filtered.sortedByDescending { it.singer.lowercase() } else filtered.sortedBy { it.singer.lowercase() }
+            AlbumSortOption.DURATION -> if (isDescending) filtered.sortedByDescending { it.durationMs } else filtered.sortedBy { it.durationMs }
+        }
+    }
+
     var menuSong by remember { mutableStateOf<SongsModel?>(null) }
     menuSong?.let { sel ->
         com.music.spotui.ui.components.SongOptionsSheet(
@@ -506,135 +544,235 @@ fun SumUpAlbumScreen(
 
 //            Spacer(modifier = Modifier.padding(25.dp))
 
-            if(albumSongs.isNotEmpty()){
-                repeat(albumSongs.size) {song ->
+            if (albumSongs.isNotEmpty()) {
+                // Search Bar
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp, 8.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .height(55.dp)
+                        .background(Color.White)
+                        .padding(10.dp, 0.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_search_big),
+                        tint = Color.Black,
+                        contentDescription = "Search",
+                        modifier = Modifier.size(24.dp)
+                    )
 
+                    TextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.weight(1f),
+                        textStyle = TextStyle.Default.copy(
+                            fontSize = 16.sp,
+                            color = Color.Black,
+                            fontWeight = FontWeight(500)
+                        ),
+                        colors = TextFieldDefaults.colors(
+                            unfocusedContainerColor = Color.Transparent,
+                            disabledContainerColor = Color.Transparent,
+                            focusedContainerColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            cursorColor = Color.Black
+                        ),
+                        singleLine = true,
+                        placeholder = {
+                            Text(
+                                text = "Search in album",
+                                color = Color.Gray,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    )
 
-                    var isLiked by remember {
-                        mutableStateOf(isSongLiked(context, albumSongs[song].id.toString()))
-                    }
-                    var showSavedIn by remember { mutableStateOf(false) }
-                    if (showSavedIn) {
-                        SavedInSheet(
-                            song = albumSongs[song],
-                            context = context,
-                            onDismiss = { showSavedIn = false },
-                            onLikedChanged = { isLiked = it },
+                    if (searchQuery.isNotEmpty()) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Clear",
+                            tint = Color.Black,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { searchQuery = "" }
                         )
                     }
-                    val likeState = albumViewModel.likeState.value
-                    LaunchedEffect(likeState){
-                        isLiked = isSongLiked(context, albumSongs[song].id.toString())
-                    }
-                    val songId = albumSongs[song].id
+                }
 
-                    val currentPlayingIndicatorColor = if(songId == albumViewModel.currentSongId.value) Color(AppPalette.toArgb()) else Color.White
-
-                    SwipeToPlayNextWrapper(
-                        onPlayNext = {
-                            playerViewModel.playNext(albumSongs[song])
-                            android.widget.Toast.makeText(
-                                context,
-                                "${albumSongs[song].title} will play next",
-                                android.widget.Toast.LENGTH_SHORT
-                            ).show()
-                        }
+                // Sort action button
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp, 0.dp, 20.dp, 8.dp),
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(Color(0xFF2A2A30))
+                            .clickable { showSortSheet = true }
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
                     ) {
-                        Row(
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
+                        Text(
+                            text = currentSort.getDescriptiveLabel(isDescending),
+                            color = Color.White,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Sort Options",
+                            tint = Color.White,
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .background(AppBackground)
-                                .combinedClickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onLongClick = { menuSong = albumSongs[song] },
-                                    onClick = {
-                                        albumViewModel.updateQueue(albumSongs)
-                                        SongPlayer.playSong(albumSongs[song].url, context)
-                                        albumViewModel.updateSongState(
-                                            albumSongs[song].coverUri,
-                                            albumSongs[song].title,
-                                            albumSongs[song].singer,
-                                            true,
-                                            albumSongs[song].id,
-                                            song,
-                                            albumName
-                                        )
-                                    },
-                                )
-                                .padding(20.dp, 8.dp)
-                        ) {
+                                .size(16.dp)
+                                .padding(start = 4.dp)
+                        )
+                    }
+                }
 
+                if (filteredSongs.isEmpty() && searchQuery.isNotBlank()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 40.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "No matches found for \"$searchQuery\"",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                } else {
+                    repeat(filteredSongs.size) { songIdx ->
+                        val targetSong = filteredSongs[songIdx]
+
+                        var isLiked by remember(targetSong.id) {
+                            mutableStateOf(isSongLiked(context, targetSong.id.toString()))
+                        }
+                        var showSavedIn by remember { mutableStateOf(false) }
+                        if (showSavedIn) {
+                            SavedInSheet(
+                                song = targetSong,
+                                context = context,
+                                onDismiss = { showSavedIn = false },
+                                onLikedChanged = { isLiked = it },
+                            )
+                        }
+                        val likeState = albumViewModel.likeState.value
+                        LaunchedEffect(likeState) {
+                            isLiked = isSongLiked(context, targetSong.id.toString())
+                        }
+                        val songId = targetSong.id
+
+                        val currentPlayingIndicatorColor = if (songId == albumViewModel.currentSongId.value) Color(AppPalette.toArgb()) else Color.White
+
+                        SwipeToPlayNextWrapper(
+                            onPlayNext = {
+                                playerViewModel.playNext(targetSong)
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "${targetSong.title} will play next",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        ) {
                             Row(
-                                horizontalArrangement = Arrangement.Start,
+                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.width(200.dp)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(AppBackground)
+                                    .combinedClickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onLongClick = { menuSong = targetSong },
+                                        onClick = {
+                                            albumViewModel.updateQueue(filteredSongs)
+                                            SongPlayer.playSong(targetSong.url, context)
+                                            albumViewModel.updateSongState(
+                                                targetSong.coverUri,
+                                                targetSong.title,
+                                                targetSong.singer,
+                                                true,
+                                                targetSong.id,
+                                                songIdx,
+                                                albumName
+                                            )
+                                        },
+                                    )
+                                    .padding(20.dp, 8.dp)
                             ) {
-        //                        GlideImage(
-        //                            modifier = Modifier.size(60.dp),
-        //                            model = albumSongs[song].coverUri,
-        //                            contentScale = ContentScale.Crop,
-        //                            contentDescription = ""
-        //                        )
-                                Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        if (albumSongs[song].explicit) {
-                                            com.music.spotui.ui.components.ExplicitBadge()
-                                            Spacer(Modifier.width(4.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.Start,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.width(200.dp)
+                                ) {
+                                    Column {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (targetSong.explicit) {
+                                                com.music.spotui.ui.components.ExplicitBadge()
+                                                Spacer(Modifier.width(4.dp))
+                                            }
+                                            Text(
+                                                text = targetSong.title,
+                                                color = currentPlayingIndicatorColor,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Medium,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                            )
                                         }
                                         Text(
-                                            text = albumSongs[song].title,
-                                            color = currentPlayingIndicatorColor,
-                                            fontSize = 14.sp,
+                                            text = targetSong.singer,
+                                            color = Color.Gray,
+                                            fontSize = 12.sp,
                                             fontWeight = FontWeight.Medium,
                                             maxLines = 1,
                                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                         )
                                     }
-                                    Text(
-                                        text = albumSongs[song].singer,
-                                        color = Color.Gray,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                    )
                                 }
-                            }
 
-                            Icon(
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .combinedClickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null,
-                                        onClick = {
-                                            if (isLiked) {
-                                                removeLikedSongId(context, songId.toString())
-                                            } else {
-                                                addLikedSongId(context, songId.toString())
-                                            }
-                                            isLiked = isSongLiked(context, songId.toString())
-                                            albumViewModel.updateLikeState(!albumViewModel.likeState.value)
-                                        },
-                                        onLongClick = { showSavedIn = true },
-                                    ),
-                                painter = if (isLiked){
-                                    painterResource(id = R.drawable.added)
-                                }
-                                else{
-                                    painterResource(id = R.drawable.ic_add)
-                                }
-                                ,
-                                tint = if (isLiked){
-                                    Color.White
-                                }else{
-                                    Color.Gray
-                                },
-                                contentDescription = ""
-                            )
+                                Icon(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .combinedClickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                            onClick = {
+                                                if (isLiked) {
+                                                    removeLikedSongId(context, songId.toString())
+                                                } else {
+                                                    addLikedSongId(context, songId.toString())
+                                                }
+                                                isLiked = isSongLiked(context, songId.toString())
+                                                albumViewModel.updateLikeState(!albumViewModel.likeState.value)
+                                            },
+                                            onLongClick = { showSavedIn = true },
+                                        ),
+                                    painter = if (isLiked) {
+                                        painterResource(id = R.drawable.added)
+                                    } else {
+                                        painterResource(id = R.drawable.ic_add)
+                                    },
+                                    tint = if (isLiked) {
+                                        Color.White
+                                    } else {
+                                        Color.Gray
+                                    },
+                                    contentDescription = ""
+                                )
+                            }
                         }
                     }
                 }
@@ -643,5 +781,76 @@ fun SumUpAlbumScreen(
             Spacer(modifier = Modifier.height(160.dp))
         }
 
+        if (showSortSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showSortSheet = false },
+                containerColor = Color(0xFF1A1A1A)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                ) {
+                    Text(
+                        text = "Sort by",
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(16.dp, 12.dp, 16.dp, 12.dp)
+                    )
+                    androidx.compose.material3.HorizontalDivider(color = Color(0xFF2A2A2A))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    AlbumSortOption.entries.forEach { option ->
+                        val isSelected = option == currentSort
+                        val icon = when (option) {
+                            AlbumSortOption.DEFAULT -> Icons.Default.DateRange
+                            AlbumSortOption.TITLE -> Icons.AutoMirrored.Filled.List
+                            AlbumSortOption.ARTIST -> Icons.Default.Person
+                            AlbumSortOption.DURATION -> Icons.Default.Menu
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (currentSort == option) {
+                                        isDescending = !isDescending
+                                    } else {
+                                        currentSort = option
+                                        isDescending = (option != AlbumSortOption.DEFAULT)
+                                    }
+                                    setAlbumSortOption(context, albumName, currentSort, isDescending)
+                                    showSortSheet = false
+                                }
+                                .padding(16.dp, 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = if (isSelected) Color(AppPalette.toArgb()) else Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(18.dp))
+                            Text(
+                                text = if (isSelected) option.getDescriptiveLabel(isDescending) else option.getDescriptiveLabel(option != AlbumSortOption.DEFAULT),
+                                color = if (isSelected) Color(AppPalette.toArgb()) else Color.White,
+                                fontSize = 15.sp,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = if (isDescending) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                                    contentDescription = null,
+                                    tint = Color(AppPalette.toArgb()),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+            }
+        }
     }
 }
