@@ -1,5 +1,10 @@
 package com.music.spotui.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -62,10 +67,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import com.bumptech.glide.integration.compose.placeholder
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -298,20 +306,46 @@ fun LibraryScreen(navController: NavController) {
             .background(Color(AppBackground.toArgb()))
             .statusBarsPadding()
     ) {
-        // Header: title + create playlist + account avatar.
+        var searchQuery by remember { mutableStateOf("") }
+        var isSearchVisible by remember { mutableStateOf(false) }
+        var currentSort by remember { mutableStateOf(getLibrarySortOption(context)) }
+        var isDescending by remember { mutableStateOf(isLibrarySortDescending(context)) }
+        var showSortSheet by remember { mutableStateOf(false) }
+
+        // Header: title + create playlist + search toggle + grid toggle + account avatar.
         Row(
-            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp, 12.dp, 16.dp, 8.dp)
+                .padding(16.dp, 12.dp, 16.dp, 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Your Library",
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                fontSize = 22.sp,
-                modifier = Modifier.weight(1f),
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Your Library",
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    fontSize = 22.sp,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Maintained with ♥ by ",
+                        color = Color.Gray,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    val uriHandler = LocalUriHandler.current
+                    Text(
+                        text = "Hazhan Salih",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clickable {
+                            uriHandler.openUri("https://github.com/H4zh4n/Spotui/")
+                        }
+                    )
+                }
+            }
+            // Add Playlist Button
             Box(
                 modifier = Modifier
                     .size(34.dp)
@@ -320,9 +354,50 @@ fun LibraryScreen(navController: NavController) {
                     .clickable { showCreateDialog = true },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Create Playlist", tint = Color.White, modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.Add, contentDescription = "Create Playlist", tint = Color.White, modifier = Modifier.size(18.dp))
             }
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Search & Filter Toggle Button
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(if (isSearchVisible || searchQuery.isNotEmpty()) Color(0xFF1ED760) else Color(0xFF2A2A2A))
+                    .clickable { isSearchVisible = !isSearchVisible },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_search_big),
+                    contentDescription = "Search & Filter",
+                    tint = if (isSearchVisible || searchQuery.isNotEmpty()) Color.Black else Color.White,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Grid/List View Toggle Button
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF2A2A2A))
+                    .clickable {
+                        gridView = !gridView
+                        setLibraryGridView(context, gridView)
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(if (gridView) R.drawable.ic_view_list else R.drawable.ic_view_grid),
+                    contentDescription = if (gridView) "Show as list" else "Show as grid",
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Profile / Settings Button
             Box(
                 modifier = Modifier
                     .size(34.dp)
@@ -335,7 +410,7 @@ fun LibraryScreen(navController: NavController) {
                 if (avatar.isNotBlank()) {
                     AccountAvatar(avatar, 34.dp)
                 } else {
-                    Icon(Icons.Default.Person, contentDescription = "Account", tint = Color.White, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.Person, contentDescription = "Account", tint = Color.White, modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -349,120 +424,99 @@ fun LibraryScreen(navController: NavController) {
             onClearFilters = { libraryViewModel.clearFilters() }
         )
 
-        var searchQuery by remember { mutableStateOf("") }
-        var currentSort by remember { mutableStateOf(getLibrarySortOption(context)) }
-        var isDescending by remember { mutableStateOf(isLibrarySortDescending(context)) }
-        var showSortSheet by remember { mutableStateOf(false) }
-
-        // Search bar & Sort/Grid bar
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp, 4.dp, 16.dp, 8.dp)
+        // Expandable Search & Sort Controls Bar
+        AnimatedVisibility(
+            visible = isSearchVisible || searchQuery.isNotEmpty(),
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
         ) {
-            // Search Input Field
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(8.dp))
-                    .height(38.dp)
-                    .background(Color(0xFF2A2A2A))
-                    .padding(horizontal = 10.dp)
+                    .fillMaxWidth()
+                    .padding(16.dp, 4.dp, 16.dp, 8.dp)
             ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_search_big),
-                    tint = Color.Gray,
-                    contentDescription = "Search Library",
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                BasicTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    modifier = Modifier.weight(1f),
-                    textStyle = TextStyle.Default.copy(
-                        fontSize = 13.sp,
-                        color = Color.White,
-                        fontWeight = FontWeight.Medium
-                    ),
-                    singleLine = true,
-                    cursorBrush = SolidColor(Color(0xFF1ED760)),
-                    decorationBox = { innerTextField ->
-                        Box(contentAlignment = Alignment.CenterStart) {
-                            if (searchQuery.isEmpty()) {
-                                Text(
-                                    text = "Search in library",
-                                    color = Color.Gray,
-                                    fontSize = 13.sp
-                                )
-                            }
-                            innerTextField()
-                        }
-                    }
-                )
-                if (searchQuery.isNotEmpty()) {
-                    Spacer(modifier = Modifier.width(6.dp))
+                // Search Input Field
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(8.dp))
+                        .height(36.dp)
+                        .background(Color(0xFF2A2A2A))
+                        .padding(horizontal = 10.dp)
+                ) {
                     Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Clear search",
+                        painter = painterResource(id = R.drawable.ic_search_big),
                         tint = Color.Gray,
-                        modifier = Modifier
-                            .size(16.dp)
-                            .clickable { searchQuery = "" }
+                        contentDescription = "Search Library",
+                        modifier = Modifier.size(16.dp)
                     )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.weight(1f),
+                        textStyle = TextStyle.Default.copy(
+                            fontSize = 13.sp,
+                            color = Color.White,
+                            fontWeight = FontWeight.Medium
+                        ),
+                        singleLine = true,
+                        cursorBrush = SolidColor(Color(0xFF1ED760)),
+                        decorationBox = { innerTextField ->
+                            Box(contentAlignment = Alignment.CenterStart) {
+                                if (searchQuery.isEmpty()) {
+                                    Text(
+                                        text = "Search in library",
+                                        color = Color.Gray,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
+                    )
+                    if (searchQuery.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Clear search",
+                            tint = Color.Gray,
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clickable { searchQuery = "" }
+                        )
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-            // Sort Pill Button
-            Box(
-                modifier = Modifier
-                    .height(38.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFF2A2A2A))
-                    .clickable { showSortSheet = true }
-                    .padding(horizontal = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = currentSort.label,
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Sort Options",
-                        tint = Color.White,
-                        modifier = Modifier.size(14.dp).padding(start = 2.dp)
-                    )
+                // Sort Pill Button
+                Box(
+                    modifier = Modifier
+                        .height(36.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(Color(0xFF2A2A2A))
+                        .clickable { showSortSheet = true }
+                        .padding(horizontal = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = currentSort.label,
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Sort Options",
+                            tint = Color.White,
+                            modifier = Modifier.size(14.dp).padding(start = 2.dp)
+                        )
+                    }
                 }
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Grid/List Toggle Button
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .background(Color(0xFF2A2A2A))
-                    .clickable {
-                        gridView = !gridView
-                        setLibraryGridView(context, gridView)
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    painter = painterResource(if (gridView) R.drawable.ic_view_list else R.drawable.ic_view_grid),
-                    contentDescription = if (gridView) "Show as list" else "Show as grid",
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp)
-                )
             }
         }
 
@@ -920,15 +974,59 @@ fun LibraryGridScreen(
                     indication = null
                 ) { openLibraryEntry(entry, navController) }
             ) {
-                GlideImage(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .clip(RoundedCornerShape(if (entry.isPlaylist) 6.dp else 4.dp)),
-                    model = entry.coverUri,
-                    contentScale = ContentScale.Crop,
-                    contentDescription = ""
-                )
+                if (entry.spotifyId == Api.HomeCache.DOWNLOADS_ID) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(Color(0xFF006450), Color(0xFF00382B))
+                                )
+                            ),
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_download),
+                            contentDescription = "Downloaded",
+                            tint = Color(0xFF1ED760),
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                } else if (entry.spotifyId == Api.HomeCache.LIKED_SONGS_ID && entry.coverUri.isBlank()) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    colors = listOf(Color(0xFF450AF5), Color(0xFF8E8E93))
+                                )
+                            ),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Favorite,
+                            contentDescription = "Liked Songs",
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                } else {
+                    GlideImage(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                            .clip(RoundedCornerShape(if (entry.isPlaylist) 6.dp else 4.dp)),
+                        model = entry.coverUri,
+                        contentScale = ContentScale.Crop,
+                        failure = placeholder(R.drawable.placeholder),
+                        loading = placeholder(R.drawable.placeholder),
+                        contentDescription = ""
+                    )
+                }
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(text = entry.name, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Row(verticalAlignment = Alignment.CenterVertically) {
