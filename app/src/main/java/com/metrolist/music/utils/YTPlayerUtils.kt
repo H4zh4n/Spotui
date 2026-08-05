@@ -5,6 +5,7 @@
 
 package com.metrolist.music.utils
 
+import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Uri
 import android.util.Log
@@ -33,6 +34,10 @@ import com.metrolist.music.utils.YTPlayerUtils.validateStatus
 import com.metrolist.music.utils.potoken.PoTokenGenerator
 import com.metrolist.music.utils.potoken.PoTokenResult
 import com.metrolist.music.utils.sabr.EjsNTransformSolver
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import timber.log.Timber
 import java.util.concurrent.TimeUnit
@@ -154,12 +159,13 @@ object YTPlayerUtils {
             Timber.tag(TAG).w("PoToken unavailable — skipping MAIN_CLIENT and using fallback chain directly")
         }
 
-        // Try WEB_REMIX with signature timestamp and poToken (same as before)
-        Timber.tag(logTag).d("Attempting to get player response using MAIN_CLIENT: ${MAIN_CLIENT.clientName}")
-        var mainPlayerResponse = YouTube.player(videoId, playlistId, MAIN_CLIENT, signatureTimestamp.timestamp, poToken?.playerRequestPoToken).getOrThrow()
+        var mainPlayerResponse: PlayerResponse? = if (skipMainClient) null else {
+            Timber.tag(logTag).d("Attempting to get player response using MAIN_CLIENT: ${MAIN_CLIENT.clientName}")
+            YouTube.player(videoId, playlistId, MAIN_CLIENT, signatureTimestamp.timestamp, poToken?.playerRequestPoToken).getOrNull()
+        }
 
         // Debug uploaded track response
-        if (isUploadedTrack || playlistId?.contains("MLPT") == true) {
+        if (mainPlayerResponse != null && (isUploadedTrack || playlistId?.contains("MLPT") == true)) {
             println("[PLAYBACK_DEBUG] Main player response status: ${mainPlayerResponse.playabilityStatus.status}")
             println("[PLAYBACK_DEBUG] Playability reason: ${mainPlayerResponse.playabilityStatus.reason}")
             println("[PLAYBACK_DEBUG] Video details: title=${mainPlayerResponse.videoDetails?.title}, videoId=${mainPlayerResponse.videoDetails?.videoId}")
@@ -170,9 +176,28 @@ object YTPlayerUtils {
         var usedAgeRestrictedClient: YouTubeClient? = null
         val wasOriginallyAgeRestricted: Boolean
 
-        // Check if WEB_REMIX response indicates age-restricted
-        val mainStatus = mainPlayerResponse.playabilityStatus.status
-        val isAgeRestrictedFromResponse = mainStatus in listOf("AGE_CHECK_REQUIRED", "AGE_VERIFICATION_REQUIRED", "LOGIN_REQUIRED", "CONTENT_CHECK_REQUIRED")
+        val mainStatus = mainPlayerResponse?.playabilityStatus?.status
+        val mainReason = mainPlayerResponse?.playabilityStatus?.reason.orEmpty()
+
+        val isBotDetection = mainReason.contains("bot", ignoreCase = true) ||
+                mainReason.contains("confirm you", ignoreCase = true) ||
+                mainReason.contains("Sign in to confirm", ignoreCase = true) ||
+                mainReason.contains("Log in to confirm", ignoreCase = true)
+
+        if (isBotDetection) {
+            Timber.tag(TAG).w("Bot detection triggered on MAIN_CLIENT (reason: $mainReason). Falling back to non-PoToken client chain.")
+            // Asynchronously refresh visitorData so future sessions obtain a clean session token
+            @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { YouTube.visitorData = YouTube.visitorData().getOrNull() ?: YouTube.visitorData }
+            }
+        }
+
+        // Only classify as age-restricted if it is NOT bot detection and has age check status / reason
+        val isAgeRestrictedFromResponse = !isBotDetection && (
+            mainStatus in listOf("AGE_CHECK_REQUIRED", "AGE_VERIFICATION_REQUIRED", "CONTENT_CHECK_REQUIRED") ||
+            (mainStatus == "LOGIN_REQUIRED" && (mainReason.contains("age", ignoreCase = true) || mainReason.contains("verify", ignoreCase = true)))
+        )
         wasOriginallyAgeRestricted = isAgeRestrictedFromResponse
 
         if (isAgeRestrictedFromResponse && isLoggedIn) {
@@ -187,11 +212,6 @@ object YTPlayerUtils {
             }
         }
 
-        // If we still don't have a valid response, throw
-
-        val audioConfig = mainPlayerResponse.playerConfig?.audioConfig
-        val videoDetails = mainPlayerResponse.videoDetails
-        val playbackTracking = mainPlayerResponse.playbackTracking
         var format: PlayerResponse.StreamingData.Format? = null
         var streamUrl: String? = null
         var streamExpiresInSeconds: Int? = null
@@ -199,17 +219,15 @@ object YTPlayerUtils {
         val retryMainPlayerResponse: PlayerResponse? = if (usedAgeRestrictedClient != null) mainPlayerResponse else null
 
         // Check current status
-        val currentStatus = mainPlayerResponse.playabilityStatus.status
-        val isAgeRestricted = currentStatus in listOf("AGE_CHECK_REQUIRED", "AGE_VERIFICATION_REQUIRED", "LOGIN_REQUIRED", "CONTENT_CHECK_REQUIRED")
+        val isAgeRestricted = isAgeRestrictedFromResponse
 
         if (isAgeRestricted) {
-            Timber.tag(logTag).d("Content is still age-restricted (status: $currentStatus), will try fallback clients")
-            Timber.tag(TAG)
-                .i("Age-restricted content detected: videoId=$videoId, status=$currentStatus")
+            Timber.tag(logTag).d("Content is age-restricted (status: $mainStatus), will try fallback clients")
+            Timber.tag(TAG).i("Age-restricted content detected: videoId=$videoId, status=$mainStatus")
         }
 
         // Check if this is a privately owned track (uploaded song)
-        val isPrivateTrack = mainPlayerResponse.videoDetails?.musicVideoType == "MUSIC_VIDEO_TYPE_PRIVATELY_OWNED_TRACK"
+        val isPrivateTrack = mainPlayerResponse?.videoDetails?.musicVideoType == "MUSIC_VIDEO_TYPE_PRIVATELY_OWNED_TRACK"
 
         // For private tracks: use TVHTML5 (index 1) with PoToken + n-transform
         // For age-restricted: skip main client, start with fallbacks
@@ -218,6 +236,7 @@ object YTPlayerUtils {
             isPrivateTrack -> 1  // TVHTML5
             isAgeRestricted -> 0
             skipMainClient -> 0  // MAIN_CLIENT streams unplayable without PoToken
+            mainPlayerResponse == null || mainPlayerResponse.playabilityStatus.status != "OK" -> 0
             else -> -1
         }
 
@@ -446,9 +465,9 @@ object YTPlayerUtils {
             println("[PLAYBACK_DEBUG] SUCCESS: Got playback data for uploaded track - format=${format.mimeType}, streamUrl=${streamUrl.take(100)}...")
         }
         PlaybackData(
-            audioConfig,
-            videoDetails,
-            playbackTracking,
+            streamPlayerResponse?.playerConfig?.audioConfig ?: mainPlayerResponse?.playerConfig?.audioConfig,
+            streamPlayerResponse?.videoDetails ?: mainPlayerResponse?.videoDetails,
+            streamPlayerResponse?.playbackTracking ?: mainPlayerResponse?.playbackTracking,
             format,
             streamUrl,
             streamExpiresInSeconds,
@@ -632,5 +651,15 @@ object YTPlayerUtils {
 
     fun forceRefreshForVideo(videoId: String) {
         Timber.tag(logTag).d("Force refreshing for videoId: $videoId")
+    }
+
+    fun resetSession(context: Context) {
+        poTokenGenerator.reset()
+        com.music.spotui.data.preferences.clearAllCachedStreams(context)
+        com.music.spotui.data.preferences.clearAllResolvedVideos(context)
+        @OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { YouTube.visitorData = YouTube.visitorData().getOrNull() }
+        }
     }
 }

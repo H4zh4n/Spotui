@@ -27,3 +27,10 @@ fun clearCachedVideoId(context: Context, songQuery: String) {
         .remove("$songQuery|FILTER_VIDEO")
         .apply()
 }
+
+fun clearAllResolvedVideos(context: Context) {
+    context.getSharedPreferences(PREF_RESOLVED_VIDEOS, Context.MODE_PRIVATE)
+        .edit()
+        .clear()
+        .apply()
+}

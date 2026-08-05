@@ -631,6 +631,44 @@ fun SettingsScreen(navController: NavController) {
             }
 
             Spacer(Modifier.height(12.dp))
+            SectionTitle("Troubleshooting")
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable {
+                        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            com.music.spotui.di.SongPlayer.clearCaches(context)
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "YouTube session & stream caches reset",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    }
+                    .background(Color(0xFF1A1A20))
+                    .padding(horizontal = 12.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Reset YouTube & Bot Session", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Clears session tokens, visitor ID, PoToken generator, and resolved stream caches",
+                        color = Color(0xFFB3B3B3),
+                        fontSize = 12.sp,
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = "Reset Session",
+                    tint = AppPalette,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
             SectionTitle("Account")
             Text(
                 text = "Log out",

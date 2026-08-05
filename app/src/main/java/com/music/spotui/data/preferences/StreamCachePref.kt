@@ -70,3 +70,11 @@ fun clearCachedStream(context: Context, query: String) {
         .remove(query + SUFFIX_EXPIRES)
         .apply()
 }
+
+/** Clear all cached streams completely. */
+fun clearAllCachedStreams(context: Context) {
+    context.getSharedPreferences(PREF_STREAM_CACHE, Context.MODE_PRIVATE)
+        .edit()
+        .clear()
+        .apply()
+}

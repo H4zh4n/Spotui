@@ -49,6 +49,14 @@ object SongPlayer {
     // Cache of resolved YouTube video candidates keyed by the play query
     private val videoCandidatesCache = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
 
+    fun clearCaches(context: Context) {
+        streamCache.clear()
+        sourceCache.clear()
+        qualityCache.clear()
+        videoCandidatesCache.clear()
+        com.metrolist.music.utils.YTPlayerUtils.resetSession(context)
+    }
+
     // ── Lossless (SpotiFLAC) ──
     // When enabled, playback first tries to resolve a lossless FLAC stream (Tidal/
     // Amazon via SpotiFLAC's free community proxies) for the current track and only
@@ -331,13 +339,16 @@ object SongPlayer {
             try {
                 val streamUrl = resolveStreamUrl(song, appContext, forPlayback = true) ?: run {
                     // Tell the user instead of silently leaving the request on.
-                    if (currentRequest == song) withContext(Dispatchers.Main) {
-                        android.widget.Toast.makeText(
-                            appContext, "No stream found",
-                            android.widget.Toast.LENGTH_SHORT,
-                        ).show()
+                    val existingError = boundState?.resolveError?.value
+                    if (currentRequest == song && existingError.isNullOrBlank()) {
+                        withContext(Dispatchers.Main) {
+                            android.widget.Toast.makeText(
+                                appContext, "No stream found",
+                                android.widget.Toast.LENGTH_SHORT,
+                            ).show()
+                        }
                     }
-                    if (boundState?.resolveError?.value == null) {
+                    if (existingError == null) {
                         boundState?.updateResolveError("No stream found")
                     }
                     updateResolveStatus(false)
