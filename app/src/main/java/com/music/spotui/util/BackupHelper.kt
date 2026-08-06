@@ -9,32 +9,25 @@ import com.music.spotui.data.entity.SongsModel
 import com.music.spotui.data.preferences.BackupPref
 import com.music.spotui.data.preferences.LocalPlaylist
 import com.music.spotui.data.preferences.LocalPlaylistPref
-import com.music.spotui.data.preferences.LosslessTimeout
 import com.music.spotui.data.preferences.StreamQuality
 import com.music.spotui.data.preferences.addLikedSongId
-import com.music.spotui.data.preferences.getCellularLosslessTimeout
 import com.music.spotui.data.preferences.getCellularQuality
 import com.music.spotui.data.preferences.getCrossfadeMs
-import com.music.spotui.data.preferences.getDownloadLosslessTimeout
 import com.music.spotui.data.preferences.getDownloadQuality
 import com.music.spotui.data.preferences.getLikedSongIds
 import com.music.spotui.data.preferences.getUpdateRepoUrl
-import com.music.spotui.data.preferences.getWifiLosslessTimeout
 import com.music.spotui.data.preferences.getWifiQuality
 import com.music.spotui.data.preferences.isAutoPlayEnabled
 import com.music.spotui.data.preferences.isCrossfadeDjMode
 import com.music.spotui.data.preferences.isLibraryGridView
 import com.music.spotui.data.preferences.isVideoFallbackEnabled
 import com.music.spotui.data.preferences.setAutoPlayEnabled
-import com.music.spotui.data.preferences.setCellularLosslessTimeout
 import com.music.spotui.data.preferences.setCellularQuality
 import com.music.spotui.data.preferences.setCrossfadeDjMode
 import com.music.spotui.data.preferences.setCrossfadeMs
-import com.music.spotui.data.preferences.setDownloadLosslessTimeout
 import com.music.spotui.data.preferences.setDownloadQuality
 import com.music.spotui.data.preferences.setLibraryGridView
 import com.music.spotui.data.preferences.setUpdateRepoUrl
-import com.music.spotui.data.preferences.setWifiLosslessTimeout
 import com.music.spotui.data.preferences.setVideoFallbackEnabled
 import com.music.spotui.data.preferences.setWifiQuality
 import kotlinx.coroutines.Dispatchers
@@ -96,9 +89,6 @@ object BackupHelper {
                     put("wifiQuality", getWifiQuality(context).name)
                     put("cellularQuality", getCellularQuality(context).name)
                     put("downloadQuality", getDownloadQuality(context).name)
-                    put("wifiLosslessTimeout", getWifiLosslessTimeout(context).name)
-                    put("cellularLosslessTimeout", getCellularLosslessTimeout(context).name)
-                    put("downloadLosslessTimeout", getDownloadLosslessTimeout(context).name)
                     put("crossfadeMs", getCrossfadeMs(context))
                     put("crossfadeDjMode", isCrossfadeDjMode(context))
                     put("videoFallback", isVideoFallbackEnabled(context))
@@ -257,9 +247,6 @@ object BackupHelper {
                 if (s.has("wifiQuality")) runCatching { setWifiQuality(context, StreamQuality.valueOf(s.getString("wifiQuality"))) }
                 if (s.has("cellularQuality")) runCatching { setCellularQuality(context, StreamQuality.valueOf(s.getString("cellularQuality"))) }
                 if (s.has("downloadQuality")) runCatching { setDownloadQuality(context, StreamQuality.valueOf(s.getString("downloadQuality"))) }
-                if (s.has("wifiLosslessTimeout")) runCatching { setWifiLosslessTimeout(context, LosslessTimeout.valueOf(s.getString("wifiLosslessTimeout"))) }
-                if (s.has("cellularLosslessTimeout")) runCatching { setCellularLosslessTimeout(context, LosslessTimeout.valueOf(s.getString("cellularLosslessTimeout"))) }
-                if (s.has("downloadLosslessTimeout")) runCatching { setDownloadLosslessTimeout(context, LosslessTimeout.valueOf(s.getString("downloadLosslessTimeout"))) }
                 if (s.has("crossfadeMs")) setCrossfadeMs(context, s.getInt("crossfadeMs"))
                 if (s.has("crossfadeDjMode")) setCrossfadeDjMode(context, s.getBoolean("crossfadeDjMode"))
                 if (s.has("videoFallback")) setVideoFallbackEnabled(context, s.getBoolean("videoFallback"))

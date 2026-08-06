@@ -29,13 +29,6 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import com.music.spotui.data.preferences.BackupPref
-import com.music.spotui.data.preferences.LosslessTimeout
-import com.music.spotui.data.preferences.getCellularLosslessTimeout
-import com.music.spotui.data.preferences.getDownloadLosslessTimeout
-import com.music.spotui.data.preferences.getWifiLosslessTimeout
-import com.music.spotui.data.preferences.setCellularLosslessTimeout
-import com.music.spotui.data.preferences.setDownloadLosslessTimeout
-import com.music.spotui.data.preferences.setWifiLosslessTimeout
 import com.music.spotui.util.BackupHelper
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -77,6 +70,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.navigation.NavController
 import com.music.spotui.data.BatteryOptimizationHelper
 import com.music.spotui.data.preferences.CROSSFADE_MAX_MS
@@ -117,9 +111,6 @@ fun SettingsScreen(navController: NavController) {
     var wifiQ by remember { mutableStateOf(getWifiQuality(context)) }
     var cellQ by remember { mutableStateOf(getCellularQuality(context)) }
     var dlQ by remember { mutableStateOf(getDownloadQuality(context)) }
-    var wifiLosslessTimeout by remember { mutableStateOf(getWifiLosslessTimeout(context)) }
-    var cellLosslessTimeout by remember { mutableStateOf(getCellularLosslessTimeout(context)) }
-    var dlLosslessTimeout by remember { mutableStateOf(getDownloadLosslessTimeout(context)) }
     var crossfadeMs by remember { mutableStateOf(getCrossfadeMs(context).toFloat()) }
     var videoFallback by remember { mutableStateOf(isVideoFallbackEnabled(context)) }
     var autoPlay by remember { mutableStateOf(isAutoPlayEnabled(context)) }
@@ -353,23 +344,17 @@ fun SettingsScreen(navController: NavController) {
                 title = "Streaming over Wi-Fi",
                 selected = wifiQ,
                 showFlacWarning = wifiQ == StreamQuality.LOSSLESS,
-                losslessTimeout = wifiLosslessTimeout,
-                onSelectTimeout = { wifiLosslessTimeout = it; setWifiLosslessTimeout(context, it) },
             ) { wifiQ = it; setWifiQuality(context, it) }
 
             QualityPicker(
                 title = "Streaming over cellular",
                 selected = cellQ,
                 showFlacWarning = cellQ == StreamQuality.LOSSLESS,
-                losslessTimeout = cellLosslessTimeout,
-                onSelectTimeout = { cellLosslessTimeout = it; setCellularLosslessTimeout(context, it) },
             ) { cellQ = it; setCellularQuality(context, it) }
 
             QualityPicker(
                 title = "Download quality",
                 selected = dlQ,
-                losslessTimeout = dlLosslessTimeout,
-                onSelectTimeout = { dlLosslessTimeout = it; setDownloadLosslessTimeout(context, it) },
             ) { dlQ = it; setDownloadQuality(context, it) }
 
             Spacer(Modifier.height(6.dp))
@@ -456,6 +441,84 @@ fun SettingsScreen(navController: NavController) {
                     modifier = Modifier.size(18.dp)
                 )
             }
+
+            Spacer(Modifier.height(12.dp))
+            SectionTitle("Deezer (preferred source)")
+            var deezerEnabled by remember { mutableStateOf(com.music.spotui.data.preferences.isDeezerEnabled(context)) }
+            val deezerConnected = com.music.spotui.data.preferences.getDeezerArl(context) != null
+            val deezerTier = com.music.spotui.data.preferences.getDeezerTier(context)
+
+            SettingsSwitchRow(
+                title = "Use Deezer",
+                subtitle = "Stream from Deezer first, fall back to YouTube",
+                checked = deezerEnabled,
+            ) {
+                deezerEnabled = it
+                com.music.spotui.data.preferences.setDeezerEnabled(context, it)
+                com.music.spotui.di.SongPlayer.deezerEnabled = it
+            }
+            Text(
+                text = if (deezerConnected) {
+                    "Connected" + if (deezerTier.isNotBlank()) " — $deezerTier" else ""
+                } else "Not connected",
+                color = Color(0xFFB3B3B3),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(start = 4.dp, top = 2.dp),
+            )
+            Text(
+                text = if (deezerConnected) "Reconnect / switch account" else "Log in to Deezer",
+                color = AppPalette,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable {
+                        navController.navigate(com.music.spotui.ui.navigation.Routes.DeezerLogin.route)
+                    }
+                    .padding(vertical = 14.dp),
+            )
+            if (deezerConnected) {
+                Text(
+                    text = "Disconnect Deezer",
+                    color = Color(0xFFE57373),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable {
+                            com.music.spotui.data.preferences.clearDeezer(context)
+                            navController.navigate(com.music.spotui.ui.navigation.Routes.Settings.route) {
+                                popUpTo(com.music.spotui.ui.navigation.Routes.Settings.route) { inclusive = true }
+                            }
+                        }
+                        .padding(vertical = 12.dp),
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+            SectionTitle("SpotiFLAC (experimental)")
+            val sfConnected = com.music.spotui.data.preferences.hasSpotiflacSession(context)
+            Text(
+                text = if (sfConnected) "Verified — signed session active" else "Not verified — tap below to solve Turnstile check",
+                color = Color(0xFFB3B3B3),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(start = 4.dp, top = 2.dp),
+            )
+            Text(
+                text = if (sfConnected) "Re-verify SpotiFLAC" else "Verify SpotiFLAC",
+                color = Color(0xFF00C7B7),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable {
+                        navController.navigate(com.music.spotui.ui.navigation.Routes.SpotiflacVerify.route)
+                    }
+                    .padding(vertical = 14.dp),
+            )
 
             Spacer(Modifier.height(12.dp))
             SectionTitle("Matching")
@@ -744,6 +807,31 @@ fun SettingsScreen(navController: NavController) {
                     }
                     .padding(vertical = 14.dp)
             )
+            Spacer(Modifier.height(24.dp))
+            val uriHandler = LocalUriHandler.current
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Maintained with ♥ by ",
+                    color = Color.Gray,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = "Hazhan Salih",
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable {
+                        uriHandler.openUri("https://github.com/H4zh4n/Spotui/")
+                    }
+                )
+            }
             Spacer(Modifier.height(40.dp))
         }
 
@@ -949,8 +1037,6 @@ private fun QualityPicker(
     title: String,
     selected: StreamQuality,
     showFlacWarning: Boolean = false,
-    losslessTimeout: LosslessTimeout? = null,
-    onSelectTimeout: ((LosslessTimeout) -> Unit)? = null,
     onSelect: (StreamQuality) -> Unit
 ) {
     Column(modifier = Modifier.padding(vertical = 8.dp)) {
@@ -995,34 +1081,6 @@ private fun QualityPicker(
                                 .background(Color(0x33FFB74D))
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                         )
-                    }
-                    if (losslessTimeout != null && onSelectTimeout != null) {
-                        Spacer(Modifier.height(8.dp))
-                        Text("Lossless resolution wait time", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                        Spacer(Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            LosslessTimeout.values().forEach { t ->
-                                val selectedT = t == losslessTimeout
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { onSelectTimeout(t) }
-                                        .background(if (selectedT) AppPalette.copy(alpha = 0.2f) else Color(0xFF1E1E24))
-                                        .border(1.dp, if (selectedT) AppPalette else Color.Transparent, RoundedCornerShape(8.dp))
-                                        .padding(vertical = 8.dp, horizontal = 10.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(t.label, color = if (selectedT) Color.White else Color(0xFFB3B3B3), fontSize = 13.sp, fontWeight = if (selectedT) FontWeight.Bold else FontWeight.Normal)
-                                        Text(t.detail, color = Color(0xFF999999), fontSize = 11.sp)
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }

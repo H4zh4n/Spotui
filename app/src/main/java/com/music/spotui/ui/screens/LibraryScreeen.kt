@@ -73,7 +73,6 @@ import com.bumptech.glide.integration.compose.placeholder
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -319,32 +318,13 @@ fun LibraryScreen(navController: NavController) {
                 .padding(16.dp, 12.dp, 16.dp, 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "Your Library",
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    fontSize = 22.sp,
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Maintained with ♥ by ",
-                        color = Color.Gray,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
-                    val uriHandler = LocalUriHandler.current
-                    Text(
-                        text = "Hazhan Salih",
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable {
-                            uriHandler.openUri("https://github.com/H4zh4n/Spotui/")
-                        }
-                    )
-                }
-            }
+            Text(
+                text = "Your Library",
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                fontSize = 22.sp,
+                modifier = Modifier.weight(1f)
+            )
             // Add Playlist Button
             Box(
                 modifier = Modifier
@@ -749,6 +729,38 @@ fun SumUpLibraryScreen(
                         Text(text = "Listening history", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                         Text(text = "Your plays and stats", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                     }
+                }
+            }
+        }
+        // Local files (imported device audio) entry.
+        item {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp, 6.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { navController.navigate(Routes.LocalFiles.route) }
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(55.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFF3B5BA5)),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_library_big),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(26.dp),
+                    )
+                }
+                Column(modifier = Modifier.padding(start = 12.dp)) {
+                    Text(text = "Local files", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "Music imported from this device", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                 }
             }
         }

@@ -124,6 +124,7 @@ object SongPlayer {
     // (videoId match check + artist/title scoring + candidate fallback).
     @Volatile var webPlayerEnabled = false
     @Volatile var youtubeEnabled = true
+    @Volatile var deezerEnabled = true
 
     // Which engine is feeding the CURRENT track, for the on-screen source badge.
     // "Lossless" (SpotiFLAC: Tidal/Qobuz/Amazon) is NOT Spotify — surfaced so the
@@ -450,6 +451,9 @@ object SongPlayer {
     private fun streamMimeType(streamUrl: String): String? {
         val bare = streamUrl.substringBefore('?').lowercase()
         return when {
+            streamUrl.startsWith("deezer://") ->
+                if (streamUrl.contains("fmt=flac")) androidx.media3.common.MimeTypes.AUDIO_FLAC
+                else androidx.media3.common.MimeTypes.AUDIO_MPEG
             streamUrl.startsWith("data:application/dash+xml") ||
                 bare.endsWith(".mpd") || streamUrl.contains("manifest.tidal.com") || streamUrl.contains("/manifests/") ->
                 androidx.media3.common.MimeTypes.APPLICATION_MPD
@@ -466,6 +470,7 @@ object SongPlayer {
         // No point resolving YouTube streams while Spotify web is the engine — it's
         // wasted network/CPU that competes with the streaming audio (caused stutter).
         if (webPlaybackActive()) return
+        if (deezerEnabled && com.music.spotui.data.preferences.isDeezerEnabled(appContext)) return
         // Lossless FLAC pre-buffering now uses stable cache keys (LosslessCacheKeyFactory)
         // and ResolvingDataSource to handle stream URLs without expiring mid-track.
         scope.launch {
@@ -581,6 +586,15 @@ object SongPlayer {
     // prefetch resolving the NEXT track via YouTube was flipping the badge to
     // "YouTube" while the current track streamed from Spotify).
     internal suspend fun resolveStreamUrl(song: String, appContext: Context, forPlayback: Boolean = false): String? {
+        if (song.startsWith("content://") || song.startsWith("file://")) {
+            if (forPlayback) {
+                currentSource = "Local file"
+                currentQuality = song.substringBefore('?').substringAfterLast('.', "")
+                    .uppercase().takeIf { it.length in 2..5 }.orEmpty()
+            }
+            return song
+        }
+
         val quality = com.music.spotui.data.preferences.currentStreamingQuality(appContext)
         val expectedTier = quality.name
 
@@ -827,23 +841,39 @@ object SongPlayer {
                         }
                         com.music.spotui.data.preferences.AudioProviderOrderItem.DEEZER -> {
                             if (forPlayback) logResolution("Attempting Deezer...")
-                            val attempt = runCatching {
-                                com.music.spotui.providers.DeezerAudioProvider.resolve(
-                                    com.music.spotui.providers.DeezerAudioProvider.Query(
-                                        mediaId = flacSpotifyId ?: song,
-                                        title = cleanTitle,
-                                        artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
-                                        album = null,
+                            if (deezerEnabled && com.music.spotui.data.preferences.isDeezerEnabled(appContext)) {
+                                val dzRes = runCatching {
+                                    com.music.spotui.deezer.DeezerSource.resolve(
+                                        appContext,
+                                        spotifyId = flacSpotifyId,
                                         isrc = isrc,
-                                        durationMs = durationMs,
+                                        searchQuery = "$cleanTitle $metaArtist",
                                     )
-                                )
+                                }.getOrNull()
+                                if (dzRes is com.music.spotui.deezer.DeezerSource.Result.Success) {
+                                    if (forPlayback) logResolution("✓ Deezer Direct SUCCESS (${dzRes.qualityLabel})")
+                                    result = Triple(dzRes.uri, "Deezer", dzRes.qualityLabel)
+                                }
                             }
-                            attempt.onSuccess { res ->
-                                if (forPlayback) logResolution("✓ Deezer SUCCESS (16-bit FLAC)")
-                                result = Triple(res.mediaUri, "Deezer", "16-bit FLAC")
-                            }.onFailure { err ->
-                                if (forPlayback) logResolution("✗ Deezer: ${err.javaClass.simpleName}: ${err.message?.take(200)}")
+                            if (result == null) {
+                                val attempt = runCatching {
+                                    com.music.spotui.providers.DeezerAudioProvider.resolve(
+                                        com.music.spotui.providers.DeezerAudioProvider.Query(
+                                            mediaId = flacSpotifyId ?: song,
+                                            title = cleanTitle,
+                                            artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
+                                            album = null,
+                                            isrc = isrc,
+                                            durationMs = durationMs,
+                                        )
+                                    )
+                                }
+                                attempt.onSuccess { res ->
+                                    if (forPlayback) logResolution("✓ Deezer Mirror SUCCESS (16-bit FLAC)")
+                                    result = Triple(res.mediaUri, "Deezer", "16-bit FLAC")
+                                }.onFailure { err ->
+                                    if (forPlayback) logResolution("✗ Deezer: ${err.javaClass.simpleName}: ${err.message?.take(200)}")
+                                }
                             }
                         }
                         com.music.spotui.data.preferences.AudioProviderOrderItem.SPOTIFLAC -> {
@@ -922,13 +952,10 @@ object SongPlayer {
         } else null
 
         var flacFailReason: String? = null
-        val losslessTimeoutMs = com.music.spotui.data.preferences.currentLosslessTimeout(appContext).timeoutMs
 
-        // Check FLAC first
+        // Check FLAC first — try all providers in priority order
         if (flacDeferred != null) {
-            val flacResult = withTimeoutOrNull(losslessTimeoutMs) {
-                flacDeferred.await()
-            }
+            val flacResult = flacDeferred.await()
             if (flacResult != null) {
                 val (url, providerName, flacQuality) = flacResult
                 Log.d(TAG, "Lossless resolved via $providerName ($flacQuality) for: $song")
@@ -950,8 +977,8 @@ object SongPlayer {
                 ytDeferred?.cancelAndJoin()
                 return url
             } else {
-                flacFailReason = "Lossless providers timed out or unavailable"
-                Log.w(TAG, "Lossless resolution failed/timed out (${losslessTimeoutMs}ms limit), using YouTube for: $song")
+                flacFailReason = "All lossless providers failed"
+                Log.w(TAG, "All lossless providers failed, using YouTube fallback for: $song")
             }
         }
 
@@ -1284,12 +1311,11 @@ object SongPlayer {
         val isrc = runCatching {
             com.metrolist.spotify.Spotify.track(song.spotifyTrackId).getOrNull()?.isrc
         }.getOrNull()
-        val dlTimeoutMs = com.music.spotui.data.preferences.getDownloadLosslessTimeout(appContext).timeoutMs
-        val flacResult = kotlinx.coroutines.withTimeoutOrNull(dlTimeoutMs) {
+        val flacResult = runCatching {
             com.metrolist.spotify.SpotiFlac.resolve(
                 song.spotifyTrackId, isrc, preferHiRes = losslessHiRes,
             )
-        }
+        }.getOrNull()
         val flac = when (flacResult) {
             is com.metrolist.spotify.SpotiFlac.Result.Success -> flacResult.track
             is com.metrolist.spotify.SpotiFlac.Result.Cooldown -> {
@@ -1812,7 +1838,9 @@ object SongPlayer {
         }
         val p = ExoPlayer.Builder(context)
             .setMediaSourceFactory(
-                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(createResilientDataSourceFactory(context)),
+                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
+                    com.music.spotui.deezer.DeezerAwareDataSourceFactory(createResilientDataSourceFactory(context))
+                ),
             )
             .setRenderersFactory(renderers)
             .setAudioAttributes(buildAudioAttributes(), handleAudioFocus)

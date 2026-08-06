@@ -20,22 +20,10 @@ enum class StreamQuality(
     LOSSLESS("Lossless", "FLAC when available, else High", AudioQuality.HIGH, true),
 }
 
-enum class LosslessTimeout(
-    val label: String,
-    val detail: String,
-    val timeoutMs: Long,
-) {
-    SHORT("Short wait", "Fast (4s) cutoff", 4_000L),
-    LONG("Long wait", "Patient (8s) cutoff", 8_000L),
-}
-
 private const val PREF = "settings_prefs"
 private const val KEY_WIFI_Q = "stream_quality_wifi"
 private const val KEY_CELL_Q = "stream_quality_cellular"
 private const val KEY_DL_Q = "download_quality"
-private const val KEY_WIFI_LOSSLESS_TIMEOUT = "lossless_timeout_wifi"
-private const val KEY_CELL_LOSSLESS_TIMEOUT = "lossless_timeout_cellular"
-private const val KEY_DL_LOSSLESS_TIMEOUT = "lossless_timeout_download"
 private const val KEY_PRELOAD = "preload_enabled"
 private const val KEY_CROSSFADE_MS = "crossfade_duration_ms"
 private const val KEY_CROSSFADE_DJ = "crossfade_dj_mode"
@@ -78,34 +66,6 @@ fun setDownloadQuality(c: Context, q: StreamQuality) {
     com.music.spotui.di.SongPlayer.onQualitySettingChanged(c)
 }
 
-fun getWifiLosslessTimeout(c: Context): LosslessTimeout =
-    runCatching { LosslessTimeout.valueOf(prefs(c).getString(KEY_WIFI_LOSSLESS_TIMEOUT, LosslessTimeout.SHORT.name)!!) }
-        .getOrDefault(LosslessTimeout.SHORT)
-
-fun setWifiLosslessTimeout(c: Context, timeout: LosslessTimeout) {
-    prefs(c).edit().putString(KEY_WIFI_LOSSLESS_TIMEOUT, timeout.name).apply()
-    com.music.spotui.di.SongPlayer.onQualitySettingChanged(c)
-}
-
-fun getCellularLosslessTimeout(c: Context): LosslessTimeout =
-    runCatching { LosslessTimeout.valueOf(prefs(c).getString(KEY_CELL_LOSSLESS_TIMEOUT, LosslessTimeout.SHORT.name)!!) }
-        .getOrDefault(LosslessTimeout.SHORT)
-
-fun setCellularLosslessTimeout(c: Context, timeout: LosslessTimeout) {
-    prefs(c).edit().putString(KEY_CELL_LOSSLESS_TIMEOUT, timeout.name).apply()
-    com.music.spotui.di.SongPlayer.onQualitySettingChanged(c)
-}
-
-fun getDownloadLosslessTimeout(c: Context): LosslessTimeout =
-    runCatching { LosslessTimeout.valueOf(prefs(c).getString(KEY_DL_LOSSLESS_TIMEOUT, LosslessTimeout.LONG.name)!!) }
-        .getOrDefault(LosslessTimeout.LONG)
-
-fun setDownloadLosslessTimeout(c: Context, timeout: LosslessTimeout) {
-    prefs(c).edit().putString(KEY_DL_LOSSLESS_TIMEOUT, timeout.name).apply()
-    com.music.spotui.di.SongPlayer.onQualitySettingChanged(c)
-}
-
-fun getLosslessTimeout(c: Context): LosslessTimeout = currentLosslessTimeout(c)
 
 /** Library layout: false = rows (default), true = Spotify-style 3-column grid. */
 fun isLibraryGridView(c: Context): Boolean = prefs(c).getBoolean(KEY_LIBRARY_GRID, false)
@@ -175,10 +135,6 @@ fun currentStreamingQuality(c: Context): StreamQuality {
     return if (cm.isActiveNetworkMetered) getCellularQuality(c) else getWifiQuality(c)
 }
 
-fun currentLosslessTimeout(c: Context): LosslessTimeout {
-    val cm = c.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    return if (cm.isActiveNetworkMetered) getCellularLosslessTimeout(c) else getWifiLosslessTimeout(c)
-}
 
 enum class AudioProviderOrderItem(val id: String, val displayName: String) {
     AMAZON("amazon", "Amazon Music"),
@@ -194,10 +150,10 @@ private const val KEY_AUDIO_PROVIDER_ORDER = "audio_provider_order"
 
 fun getAudioProviderOrder(c: Context): List<AudioProviderOrderItem> {
     val defaultList = listOf(
+        AudioProviderOrderItem.DEEZER,
         AudioProviderOrderItem.AMAZON,
         AudioProviderOrderItem.QOBUZ,
         AudioProviderOrderItem.TIDAL,
-        AudioProviderOrderItem.DEEZER,
         AudioProviderOrderItem.SPOTIFLAC,
         AudioProviderOrderItem.SOUNDCLOUD,
         AudioProviderOrderItem.YOUTUBE_MUSIC,

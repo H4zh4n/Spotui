@@ -141,6 +141,9 @@ dependencies {
     // media session + system media notification (lock screen / notification center)
     implementation(libs.androidx.media3.session)
 
+    // Storage Access Framework folder enumeration (local music import)
+    implementation("androidx.documentfile:documentfile:1.0.1")
+
     //okhttp + timber (used by the ported YouTube streaming flow)
     implementation(libs.okhttp)
     implementation(libs.timber)
