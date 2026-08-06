@@ -1,0 +1,45 @@
+name: Feature Request
+description: Suggest an idea for this project
+title: "[FEATURE] "
+labels: ["enhancement"]
+body:
+  - type: checkboxes
+    id: search-check
+    attributes:
+      label: Duplicate Check
+      description: Please verify that this feature hasn't been requested before.
+      options:
+        - label: I have searched the existing issues and confirm this has not been requested.
+          required: true
+
+  - type: textarea
+    id: overview
+    attributes:
+      label: 📝 Overview
+      description: Please provide a clear, detailed, and concise description of what new feature you are requesting. Is your feature request related to a specific problem you are facing?
+    validations:
+      required: true
+
+  - type: textarea
+    id: desired-solution
+    attributes:
+      label: 🎯 Desired Solution (Expected Behavior)
+      description: What is the desired outcome and how should the new feature work? Describe the ideal solution you'd like to see implemented.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 🔄 Alternatives Considered
+      description: A clear and concise description of any alternative solutions or workarounds you've considered or are currently using.
+    validations:
+      required: false
+
+  - type: textarea
+    id: mockups
+    attributes:
+      label: 📸 Mockups or Visuals
+      description: If applicable, please drag and drop sketches, mockups, or references here to demonstrate the desired feature.
+    validations:
+      required: false
