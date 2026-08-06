@@ -1,7 +1,6 @@
 package com.music.spotui.ui.screens
 
 import android.os.Build
-import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -42,9 +41,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
@@ -69,24 +68,22 @@ import com.music.spotui.data.preferences.addLikedSongId
 import com.music.spotui.data.preferences.isSongLiked
 import com.music.spotui.data.preferences.removeLikedSongId
 import com.music.spotui.di.SongPlayer
-import com.music.spotui.ui.components.Loader
 import com.music.spotui.ui.components.SavedInSheet
-import com.music.spotui.ui.navigation.Routes
+import com.music.spotui.ui.components.SwipeToPlayNextWrapper
 import com.music.spotui.ui.navigation.albumRoute
 import com.music.spotui.ui.navigation.artistRoute
 import com.music.spotui.ui.navigation.categoryRoute
 import com.music.spotui.ui.navigation.showRoute
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
-import com.music.spotui.ui.viewmodel.SearchViewModel
 import com.music.spotui.ui.viewmodel.PlayerViewModel
-import com.music.spotui.ui.components.SwipeToPlayNextWrapper
+import com.music.spotui.ui.viewmodel.SearchViewModel
 
 
 @RequiresApi(Build.VERSION_CODES.S)
 @Composable
 fun SearchScreen(navController: NavController, searchFocusTrigger: Int = 0) {
-    val searchViewModel : SearchViewModel = hiltViewModel()
+    val searchViewModel: SearchViewModel = hiltViewModel()
     val results by searchViewModel.results.collectAsState()
 
     // Results are live search hits (or empty); never gate the search UI on them.
@@ -97,7 +94,12 @@ fun SearchScreen(navController: NavController, searchFocusTrigger: Int = 0) {
             .fillMaxSize()
             .background(Color(AppBackground.toArgb()))
     ) {
-        SumUpSearchScreen(navController = navController, searchResults, searchViewModel, searchFocusTrigger = searchFocusTrigger)
+        SumUpSearchScreen(
+            navController = navController,
+            searchResults,
+            searchViewModel,
+            searchFocusTrigger = searchFocusTrigger
+        )
     }
 }
 
@@ -165,8 +167,8 @@ fun SumUpSearchScreen(
             .background(Color(AppBackground.toArgb()))
             .statusBarsPadding()
 
-    ){
-        item{
+    ) {
+        item {
             SearchTopBar()
         }
         stickyHeader {
@@ -221,13 +223,21 @@ fun SumUpSearchScreen(
                             when (item.type) {
                                 "song" -> {
                                     val songUrl = item.songUrl.ifBlank {
-                                        SongPlayer.buildSpotifyPlayQuery(item.spotifyTrackId, item.name, item.singer)
+                                        SongPlayer.buildSpotifyPlayQuery(
+                                            item.spotifyTrackId,
+                                            item.name,
+                                            item.singer
+                                        )
                                     }.let { savedUrl ->
                                         if (
                                             item.spotifyTrackId.isNotBlank() &&
                                             !savedUrl.startsWith("spotify:track:")
                                         ) {
-                                            SongPlayer.buildSpotifyPlayQuery(item.spotifyTrackId, item.name, item.singer)
+                                            SongPlayer.buildSpotifyPlayQuery(
+                                                item.spotifyTrackId,
+                                                item.name,
+                                                item.singer
+                                            )
                                         } else {
                                             savedUrl
                                         }
@@ -241,10 +251,30 @@ fun SumUpSearchScreen(
                                     searchViewModel.startRadioFromSong(song)
                                     SongPlayer.playSong(song.url, context)
                                     searchViewModel.updateSongState(
-                                        song.coverUri, song.title, song.singer, true, song.id, 0, song.album)
+                                        song.coverUri,
+                                        song.title,
+                                        song.singer,
+                                        true,
+                                        song.id,
+                                        0,
+                                        song.album
+                                    )
                                 }
-                                "artist" -> navController.navigate(artistRoute(item.name, item.key.takeIf { it != item.name }.orEmpty()))
-                                "album" -> navController.navigate(albumRoute(item.name, item.singer))
+
+                                "artist" -> navController.navigate(
+                                    artistRoute(
+                                        item.name,
+                                        item.key.takeIf { it != item.name }.orEmpty()
+                                    )
+                                )
+
+                                "album" -> navController.navigate(
+                                    albumRoute(
+                                        item.name,
+                                        item.singer
+                                    )
+                                )
+
                                 "show" -> navController.navigate(showRoute(item.key, item.name))
                             }
                         },
@@ -267,26 +297,36 @@ fun SumUpSearchScreen(
         } else {
             items(mixed.size) { i ->
                 when (val row = mixed[i]) {
-                    is SearchRow.Song -> SearchSongRow(row.song, searchedList, searchViewModel, onPlayed = {
-                        recordRecent(row.song.toRecentItem())
-                    })
+                    is SearchRow.Song -> SearchSongRow(
+                        row.song,
+                        searchedList,
+                        searchViewModel,
+                        onPlayed = {
+                            recordRecent(row.song.toRecentItem())
+                        })
+
                     is SearchRow.Artist -> SearchArtistRow(row.artist) {
-                        recordRecent(com.music.spotui.data.preferences.RecentItem(
-                            type = "artist",
-                            key = row.artist.id.ifBlank { row.artist.name },
-                            name = row.artist.name,
-                            image = row.artist.coverUri,
-                        ))
+                        recordRecent(
+                            com.music.spotui.data.preferences.RecentItem(
+                                type = "artist",
+                                key = row.artist.id.ifBlank { row.artist.name },
+                                name = row.artist.name,
+                                image = row.artist.coverUri,
+                            )
+                        )
                         navController.navigate(artistRoute(row.artist.name, row.artist.id))
                     }
+
                     is SearchRow.Album -> SearchAlbumRow(row.album) {
-                        recordRecent(com.music.spotui.data.preferences.RecentItem(
-                            type = "album",
-                            key = row.album.name,
-                            name = row.album.name,
-                            singer = row.album.artists,
-                            image = row.album.coverUri,
-                        ))
+                        recordRecent(
+                            com.music.spotui.data.preferences.RecentItem(
+                                type = "album",
+                                key = row.album.name,
+                                name = row.album.name,
+                                singer = row.album.artists,
+                                image = row.album.coverUri,
+                            )
+                        )
                         navController.navigate(albumRoute(row.album.name, row.album.artists))
                     }
                 }
@@ -297,13 +337,15 @@ fun SumUpSearchScreen(
                 items(results.shows.size) { i ->
                     val show = results.shows[i]
                     SearchShowRow(show) {
-                        recordRecent(com.music.spotui.data.preferences.RecentItem(
-                            type = "show",
-                            key = show.id,
-                            name = show.name,
-                            singer = show.publisher,
-                            image = show.coverUri,
-                        ))
+                        recordRecent(
+                            com.music.spotui.data.preferences.RecentItem(
+                                type = "show",
+                                key = show.id,
+                                name = show.name,
+                                singer = show.publisher,
+                                image = show.coverUri,
+                            )
+                        )
                         navController.navigate(showRoute(show.id, show.name))
                     }
                 }
@@ -319,7 +361,7 @@ fun SumUpSearchScreen(
             }
         }
 
-        item{
+        item {
             Spacer(modifier = Modifier.height(160.dp))
         }
 
@@ -399,7 +441,13 @@ fun RecentItemRow(
                 .weight(1f)
                 .padding(start = 10.dp, end = 8.dp),
         ) {
-            Text(text = item.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(
+                text = item.name,
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1
+            )
             val subtitle = when (item.type) {
                 "song" -> "Song • ${item.singer}"
                 "artist" -> "Artist"
@@ -407,7 +455,13 @@ fun RecentItemRow(
                 "show" -> "Podcast" + (if (item.singer.isNotBlank()) " • ${item.singer}" else "")
                 else -> ""
             }
-            Text(text = subtitle, color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(
+                text = subtitle,
+                color = Color.Gray,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1
+            )
         }
         Icon(
             imageVector = Icons.Default.Close,
@@ -508,9 +562,21 @@ fun SearchSongRow(
                             com.music.spotui.ui.components.ExplicitBadge()
                             Spacer(Modifier.width(4.dp))
                         }
-                        Text(text = song.title, color = currentPlayingIndicatorColor, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                        Text(
+                            text = song.title,
+                            color = currentPlayingIndicatorColor,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1
+                        )
                     }
-                    Text(text = "Song • ${song.singer}", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                    Text(
+                        text = "Song • ${song.singer}",
+                        color = Color.Gray,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1
+                    )
                 }
             }
 
@@ -528,7 +594,9 @@ fun SearchSongRow(
                         },
                         onLongClick = { showSavedIn = true },
                     ),
-                painter = if (isLiked) painterResource(id = R.drawable.added) else painterResource(id = R.drawable.ic_add),
+                painter = if (isLiked) painterResource(id = R.drawable.added) else painterResource(
+                    id = R.drawable.ic_add
+                ),
                 tint = if (isLiked) Color.White else Color.Gray,
                 contentDescription = "",
             )
@@ -572,7 +640,13 @@ fun SearchShowRow(show: com.music.spotui.data.entity.PodcastModel, onClick: () -
             contentDescription = "",
         )
         Column {
-            Text(text = show.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(
+                text = show.name,
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1
+            )
             Text(
                 text = "Podcast" + (if (show.publisher.isNotBlank()) " • ${show.publisher}" else ""),
                 color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1,
@@ -606,8 +680,18 @@ fun SearchArtistRow(artist: com.music.spotui.data.entity.ArtistsModel, onClick: 
             contentDescription = "",
         )
         Column {
-            Text(text = artist.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            Text(text = "Artist", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+            Text(
+                text = artist.name,
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "Artist",
+                color = Color.Gray,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
         }
     }
 }
@@ -637,8 +721,19 @@ fun SearchAlbumRow(album: com.music.spotui.data.entity.AlbumsModel, onClick: () 
             contentDescription = "",
         )
         Column {
-            Text(text = album.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-            Text(text = "Album • ${album.artists}", color = Color.Gray, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+            Text(
+                text = album.name,
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "Album • ${album.artists}",
+                color = Color.Gray,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1
+            )
         }
     }
 }
@@ -683,7 +778,12 @@ fun BrowseAllSection(onCategoryClick: (genre: String, title: String) -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 rowItems.forEach { (name, color, query) ->
-                    BrowseCategoryTile(name, color, query, Modifier.weight(1f)) { onCategoryClick(query, name) }
+                    BrowseCategoryTile(name, color, query, Modifier.weight(1f)) {
+                        onCategoryClick(
+                            query,
+                            name
+                        )
+                    }
                 }
                 // Keep a half-width spacer if the last row has a single tile.
                 if (rowItems.size == 1) Spacer(Modifier.weight(1f))
@@ -743,7 +843,8 @@ private fun BrowseCategoryTile(
 
 @Composable
 fun SearchTopBar() {
-    Row(horizontalArrangement = Arrangement.Start,
+    Row(
+        horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
@@ -778,7 +879,8 @@ fun SearchStickyBar(
         }
     }
 
-    Row(verticalAlignment = Alignment.CenterVertically,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .padding(10.dp)
@@ -786,7 +888,7 @@ fun SearchStickyBar(
             .height(55.dp)
             .background(Color.White)
             .padding(10.dp, 0.dp)
-    ){
+    ) {
         Icon(
             painterResource(id = R.drawable.ic_search_big),
             tint = Color.Black,
@@ -800,7 +902,11 @@ fun SearchStickyBar(
                 .onFocusChanged { onFocusChange(it.isFocused) }
                 .focusRequester(focusRequester),
             value = text,
-            textStyle = TextStyle.Default.copy(fontSize = 16.sp, color = Color.Black, fontWeight = FontWeight(500)),
+            textStyle = TextStyle.Default.copy(
+                fontSize = 16.sp,
+                color = Color.Black,
+                fontWeight = FontWeight(500)
+            ),
             colors = TextFieldDefaults.colors(
                 unfocusedContainerColor = Color.Transparent,
                 disabledContainerColor = Color.Transparent,
@@ -815,7 +921,7 @@ fun SearchStickyBar(
             onValueChange = onTextChange,
             placeholder = {
                 Text(
-                     textAlign = TextAlign.Center,
+                    textAlign = TextAlign.Center,
                     fontWeight = FontWeight.Bold,
                     text = "What do you want to listen to?"
 

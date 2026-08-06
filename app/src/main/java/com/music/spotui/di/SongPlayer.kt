@@ -49,6 +49,14 @@ object SongPlayer {
     // Cache of resolved YouTube video candidates keyed by the play query
     private val videoCandidatesCache = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
 
+    fun clearCaches(context: Context) {
+        streamCache.clear()
+        sourceCache.clear()
+        qualityCache.clear()
+        videoCandidatesCache.clear()
+        com.metrolist.music.utils.YTPlayerUtils.resetSession(context)
+    }
+
     // ── Lossless (SpotiFLAC) ──
     // When enabled, playback first tries to resolve a lossless FLAC stream (Tidal/
     // Amazon via SpotiFLAC's free community proxies) for the current track and only
@@ -56,6 +64,31 @@ object SongPlayer {
     // Trades a little first-tap latency for true lossless audio.
     @Volatile var losslessStreaming = true
     @Volatile var losslessHiRes = true
+
+    val resolutionLogs = java.util.concurrent.ConcurrentLinkedQueue<String>()
+
+    fun logResolution(msg: String) {
+        val time = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+        resolutionLogs.add("[$time] $msg")
+        while (resolutionLogs.size > 50) resolutionLogs.poll()
+    }
+
+    private fun cleanTrackTitle(raw: String, artist: String): String {
+        var title = raw
+        if (title.contains("|")) {
+            title = title.substringAfter("|")
+        }
+        title = title.replace(Regex("^(spotify:track:[a-zA-Z0-9]+|yt:[a-zA-Z0-9_-]+)"), "").trim()
+        if (artist.isNotBlank()) {
+            val artistPattern = Regex("""\s*[-–—]?\s*${Regex.escape(artist)}\s*$""", RegexOption.IGNORE_CASE)
+            title = title.replace(artistPattern, "").trim()
+            artist.split(',', '&', '/', ';').map { it.trim() }.filter { it.isNotBlank() }.forEach { a ->
+                val individualPattern = Regex("""\s*[-–—]?\s*${Regex.escape(a)}\s*$""", RegexOption.IGNORE_CASE)
+                title = title.replace(individualPattern, "").trim()
+            }
+        }
+        return title.ifBlank { raw }
+    }
 
     // Source kill-switches. The Spotify web player is currently broken (off).
     // YouTube is the last-resort fallback, kept on so tracks SpotiFLAC misses or
@@ -306,13 +339,16 @@ object SongPlayer {
             try {
                 val streamUrl = resolveStreamUrl(song, appContext, forPlayback = true) ?: run {
                     // Tell the user instead of silently leaving the request on.
-                    if (currentRequest == song) withContext(Dispatchers.Main) {
-                        android.widget.Toast.makeText(
-                            appContext, "No stream found",
-                            android.widget.Toast.LENGTH_SHORT,
-                        ).show()
+                    val existingError = boundState?.resolveError?.value
+                    if (currentRequest == song && existingError.isNullOrBlank()) {
+                        withContext(Dispatchers.Main) {
+                            android.widget.Toast.makeText(
+                                appContext, "No stream found",
+                                android.widget.Toast.LENGTH_SHORT,
+                            ).show()
+                        }
                     }
-                    if (boundState?.resolveError?.value == null) {
+                    if (existingError == null) {
                         boundState?.updateResolveError("No stream found")
                     }
                     updateResolveStatus(false)
@@ -391,10 +427,8 @@ object SongPlayer {
         // No point resolving YouTube streams while Spotify web is the engine — it's
         // wasted network/CPU that competes with the streaming audio (caused stutter).
         if (webPlaybackActive()) return
-        // Lossless FLAC URLs from the backends are short-lived / single-use. Caching
-        // one now + preloading a partial intro makes playback stop after ~30s when the
-        // continuation hits a stale URL, so resolve those fresh at play time instead.
-        if (losslessStreaming && com.music.spotui.data.preferences.currentStreamingQuality(appContext).lossless) return
+        // Lossless FLAC pre-buffering now uses stable cache keys (LosslessCacheKeyFactory)
+        // and ResolvingDataSource to handle stream URLs without expiring mid-track.
         scope.launch {
             val url = runCatching { resolveStreamUrl(song, appContext) }.getOrNull()
             if (url != null) cacheIntro(url, appContext)
@@ -445,6 +479,46 @@ object SongPlayer {
             .setCache(mediaCache(context))
             .setUpstreamDataSourceFactory(upstream)
             .setFlags(androidx.media3.datasource.cache.CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+            .setCacheKeyFactory(com.music.spotui.audio.LosslessCacheKeyFactory)
+    }
+
+    private fun createResilientDataSourceFactory(context: Context): androidx.media3.datasource.DataSource.Factory {
+        val cacheFactory = cacheDataSourceFactory(context)
+
+        val resolvingFactory = androidx.media3.datasource.ResolvingDataSource.Factory(cacheFactory) { dataSpec ->
+            val uriStr = dataSpec.uri.toString()
+            val cleanId = trackIdRegistry.entries.firstOrNull { (_, spotifyId) ->
+                spotifyId.isNotBlank() && uriStr.contains(spotifyId)
+            }?.value ?: spotifyTrackIdForPlayback(currentRequest)
+
+            val stableKey = com.music.spotui.audio.LosslessCacheKeyFactory.buildCacheKey(cleanId, uriStr)
+            dataSpec.buildUpon()
+                .setKey(stableKey)
+                .build()
+        }
+
+        val resilientFactory = com.music.spotui.audio.ResilientPlaybackDataSourceFactory(resolvingFactory)
+
+        return com.music.spotui.audio.LiveFlacBitrateDataSourceFactory(
+            upstreamFactory = resilientFactory,
+            isEnabled = { currentSource.startsWith("Lossless") },
+            mediaIdResolver = { dataSpec ->
+                dataSpec.key ?: dataSpec.uri.toString()
+            },
+            isParserCandidate = { dataSpec, mediaId ->
+                dataSpec.uri.toString().contains(".flac", ignoreCase = true) ||
+                    currentSource.startsWith("Lossless")
+            },
+            sampleRateProvider = { null },
+            onBitrate = { mediaId, bitrate, _, _ ->
+                if (currentSource.startsWith("Lossless")) {
+                    val kbps = bitrate / 1000
+                    val baseQuality = currentQuality.substringBefore(" •")
+                    val newQuality = if (baseQuality.isNotBlank()) "$baseQuality • $kbps kbps" else "$kbps kbps"
+                    currentQuality = newQuality
+                }
+            }
+        )
     }
 
     /** Pre-cache the first [PRELOAD_BYTES] of [url] into the media cache (http(s) only). */
@@ -453,8 +527,11 @@ object SongPlayer {
         if (!com.music.spotui.data.preferences.isPreloadEnabled(appContext)) return
         runCatching {
             val ds = cacheDataSourceFactory(appContext).createDataSource()
+            val spotifyId = trackIdRegistry[url] ?: spotifyTrackIdForPlayback(url)
+            val stableKey = com.music.spotui.audio.LosslessCacheKeyFactory.buildCacheKey(spotifyId, url)
             val spec = androidx.media3.datasource.DataSpec.Builder()
                 .setUri(android.net.Uri.parse(url))
+                .setKey(stableKey)
                 .setLength(PRELOAD_BYTES)
                 .build()
             androidx.media3.datasource.cache.CacheWriter(ds, spec, null, null).cache()
@@ -561,8 +638,7 @@ object SongPlayer {
         //
         // The candidates/search step of resolveYtPlayback also runs in this scope;
         // if FLAC succeeds, that search result is just discarded.
-        val shouldTryFlac = losslessStreaming && quality.lossless &&
-            com.metrolist.spotify.SpotiFlac.anyLosslessServerUp()
+        val shouldTryFlac = losslessStreaming && quality.lossless
         val shouldTryYoutube = youtubeEnabled
 
         if (!shouldTryFlac && !shouldTryYoutube) {
@@ -572,43 +648,209 @@ object SongPlayer {
         }
 
         if (forPlayback) {
+            resolutionLogs.clear()
+            val cleanTitle = cleanTrackTitle(song, metaArtist)
+            logResolution("Resolving stream for '$cleanTitle' by '$metaArtist'")
             if (shouldTryFlac) {
                 currentSource = "Lossless"
                 currentQuality = ""
-                updateResolveStatus(true, "Searching Lossless (Tidal, Qobuz, Deezer, Amazon)...")
+                updateResolveStatus(true, "Searching High-Res Lossless Audio Providers...")
+                logResolution("Target Quality: ${if (losslessHiRes) "24-bit Hi-Res / Ultra HD" else "16-bit FLAC"}")
             } else if (shouldTryYoutube) {
                 currentSource = "YouTube"
                 currentQuality = ""
                 updateResolveStatus(true, "Locating YouTube source...")
+                logResolution("High-res FLAC disabled or cellular quality cap in effect. Using YouTube Music.")
             }
         }
 
         val flacDeferred = if (shouldTryFlac) {
             scope.async {
-                val timeoutMs = com.music.spotui.data.preferences.currentLosslessTimeout(appContext).timeoutMs
-                kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
-                    val flacSpotifyId = trackIdRegistry[song] ?: spotifyTrackIdForPlayback(song)
-                    if (flacSpotifyId == null) {
-                        return@withTimeoutOrNull null
-                    }
-                    val isrc = isrcRegistry[flacSpotifyId] ?: runCatching {
-                        com.metrolist.spotify.Spotify.track(flacSpotifyId).getOrNull()?.isrc?.also {
-                            isrcRegistry[flacSpotifyId] = it
+                // Resolve ISRC and metadata *before* the provider loop so these
+                // network calls don't eat into the provider time budget.
+                val flacSpotifyId = trackIdRegistry[song] ?: spotifyTrackIdForPlayback(song)
+                val isrc = (flacSpotifyId?.let { isrcRegistry[it] }) ?: runCatching {
+                    flacSpotifyId?.let { id ->
+                        com.metrolist.spotify.Spotify.track(id).getOrNull()?.isrc?.also { code ->
+                            isrcRegistry[id] = code
                         }
-                    }.getOrNull()
-                    com.metrolist.spotify.SpotiFlac.resolve(
-                        flacSpotifyId,
-                        isrc = isrc,
-                        preferHiRes = losslessHiRes,
-                    )
+                    }
+                }.getOrNull()
+                val durationMs = durationRegistry[song]?.toLong()
+                val providerOrder = com.music.spotui.data.preferences.getAudioProviderOrder(appContext)
+                val cleanTitle = cleanTrackTitle(song, metaArtist)
+
+                if (forPlayback) {
+                    logResolution("Priority Order: ${providerOrder.joinToString(" → ") { it.displayName }}")
+                    if (isrc != null) logResolution("Spotify ISRC: $isrc")
                 }
+
+                // No outer timeout — each provider manages its own network
+                // timeouts internally. The previous withTimeoutOrNull(4-8s)
+                // was starving providers since ISRC resolution alone took ~3s.
+                if (forPlayback) {
+                    logResolution("Query: mediaId=${flacSpotifyId ?: "(none)"}, title='$cleanTitle', artist='$metaArtist', isrc=${isrc ?: "(none)"}, duration=${durationMs ?: "(none)"}ms")
+                }
+                var result: Triple<String, String, String>? = null
+                for (item in providerOrder) {
+                    if (result != null) break
+                    when (item) {
+                        com.music.spotui.data.preferences.AudioProviderOrderItem.AMAZON -> {
+                            if (forPlayback) logResolution("Attempting Amazon Music...")
+                            val attempt = runCatching {
+                                com.music.spotui.providers.AmazonAudioProvider.resolve(
+                                    appContext,
+                                    com.music.spotui.providers.AmazonAudioProvider.Query(
+                                        mediaId = flacSpotifyId ?: song,
+                                        title = cleanTitle,
+                                        artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
+                                        album = null,
+                                        durationMs = durationMs,
+                                        quality = if (losslessHiRes) "HI_RES" else "LOSSLESS",
+                                    )
+                                )
+                            }
+                            attempt.onSuccess { res ->
+                                val q = if (losslessHiRes && (res.sampleRate ?: 0) > 44100) "24-bit Ultra HD" else "16-bit FLAC"
+                                if (forPlayback) logResolution("✓ Amazon Music SUCCESS ($q, ASIN: ${res.trackId})")
+                                result = Triple(res.mediaUri, "Amazon Music", q)
+                            }.onFailure { err ->
+                                if (forPlayback) logResolution("✗ Amazon Music: ${err.javaClass.simpleName}: ${err.message?.take(200)}")
+                            }
+                        }
+                        com.music.spotui.data.preferences.AudioProviderOrderItem.QOBUZ -> {
+                            if (forPlayback) logResolution("Attempting Qobuz...")
+                            val attempt = runCatching {
+                                com.music.spotui.providers.QobuzAudioProvider.resolve(
+                                    com.music.spotui.providers.QobuzAudioProvider.Query(
+                                        mediaId = flacSpotifyId ?: song,
+                                        title = cleanTitle,
+                                        artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
+                                        album = null,
+                                        isrc = isrc,
+                                        durationMs = durationMs,
+                                    ),
+                                    preferHiRes = losslessHiRes,
+                                )
+                            }
+                            attempt.onSuccess { res ->
+                                val q = if (losslessHiRes && (res.sampleRate ?: 0) > 44100) "24-bit Hi-Res" else "16-bit FLAC"
+                                if (forPlayback) logResolution("✓ Qobuz SUCCESS ($q)")
+                                result = Triple(res.mediaUri, "Qobuz", q)
+                            }.onFailure { err ->
+                                if (forPlayback) logResolution("✗ Qobuz: ${err.javaClass.simpleName}: ${err.message?.take(200)}")
+                            }
+                        }
+                        com.music.spotui.data.preferences.AudioProviderOrderItem.TIDAL -> {
+                            if (forPlayback) logResolution("Attempting TIDAL...")
+                            val attempt = runCatching {
+                                val tQuality = if (losslessHiRes) com.music.spotui.providers.TidalAudioQuality.HI_RES_LOSSLESS else com.music.spotui.providers.TidalAudioQuality.FLAC
+                                com.music.spotui.providers.TidalAudioProvider.resolve(
+                                    com.music.spotui.providers.TidalAudioProvider.Query(
+                                        mediaId = flacSpotifyId ?: song,
+                                        title = cleanTitle,
+                                        artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
+                                        album = null,
+                                        isrc = isrc,
+                                        durationMs = durationMs,
+                                    ),
+                                    audioQuality = tQuality,
+                                )
+                            }
+                            attempt.onSuccess { res ->
+                                val q = if (losslessHiRes) "24-bit Hi-Res" else "16-bit FLAC"
+                                if (forPlayback) logResolution("✓ TIDAL SUCCESS ($q)")
+                                result = Triple(res.mediaUri, "TIDAL", q)
+                            }.onFailure { err ->
+                                if (forPlayback) logResolution("✗ TIDAL: ${err.javaClass.simpleName}: ${err.message?.take(200)}")
+                            }
+                        }
+                        com.music.spotui.data.preferences.AudioProviderOrderItem.DEEZER -> {
+                            if (forPlayback) logResolution("Attempting Deezer...")
+                            val attempt = runCatching {
+                                com.music.spotui.providers.DeezerAudioProvider.resolve(
+                                    com.music.spotui.providers.DeezerAudioProvider.Query(
+                                        mediaId = flacSpotifyId ?: song,
+                                        title = cleanTitle,
+                                        artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
+                                        album = null,
+                                        isrc = isrc,
+                                        durationMs = durationMs,
+                                    )
+                                )
+                            }
+                            attempt.onSuccess { res ->
+                                if (forPlayback) logResolution("✓ Deezer SUCCESS (16-bit FLAC)")
+                                result = Triple(res.mediaUri, "Deezer", "16-bit FLAC")
+                            }.onFailure { err ->
+                                if (forPlayback) logResolution("✗ Deezer: ${err.javaClass.simpleName}: ${err.message?.take(200)}")
+                            }
+                        }
+                        com.music.spotui.data.preferences.AudioProviderOrderItem.SPOTIFLAC -> {
+                            if (flacSpotifyId != null) {
+                                if (forPlayback) logResolution("Attempting SpotiFLAC (Community) [trackId=$flacSpotifyId, isrc=${isrc ?: "(none)"}]...")
+                                val attempt = runCatching {
+                                    com.metrolist.spotify.SpotiFlac.resolve(
+                                        flacSpotifyId,
+                                        isrc = isrc,
+                                        preferHiRes = losslessHiRes,
+                                    )
+                                }
+                                attempt.onSuccess { res ->
+                                    when (res) {
+                                        is com.metrolist.spotify.SpotiFlac.Result.Success -> {
+                                            val prov = res.track.provider.replaceFirstChar { it.uppercase() }
+                                            val q = "FLAC ${res.track.quality}-bit"
+                                            if (forPlayback) logResolution("✓ SpotiFLAC SUCCESS ($prov, $q)")
+                                            result = Triple(res.track.url, "SpotiFLAC ($prov)", q)
+                                        }
+                                        is com.metrolist.spotify.SpotiFlac.Result.Cooldown ->
+                                            if (forPlayback) logResolution("✗ SpotiFLAC: cooldown — ${res.message}")
+                                        is com.metrolist.spotify.SpotiFlac.Result.NotFound ->
+                                            if (forPlayback) logResolution("✗ SpotiFLAC: no lossless match on any provider")
+                                        is com.metrolist.spotify.SpotiFlac.Result.Error ->
+                                            if (forPlayback) logResolution("✗ SpotiFLAC: error — ${res.message}")
+                                    }
+                                }.onFailure { err ->
+                                    if (forPlayback) logResolution("✗ SpotiFLAC: ${err.javaClass.simpleName}: ${err.message?.take(200)}")
+                                }
+                            } else {
+                                if (forPlayback) logResolution("⊘ SpotiFLAC: skipped (no Spotify track ID)")
+                            }
+                        }
+                        com.music.spotui.data.preferences.AudioProviderOrderItem.SOUNDCLOUD -> {
+                            if (forPlayback) logResolution("Attempting SoundCloud...")
+                            val attempt = runCatching {
+                                com.music.spotui.providers.SoundCloudAudioProvider.resolve(
+                                    com.music.spotui.providers.SoundCloudAudioProvider.Query(
+                                        mediaId = flacSpotifyId ?: song,
+                                        title = cleanTitle,
+                                        artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
+                                        album = null,
+                                        isrc = isrc,
+                                        durationMs = durationMs,
+                                    )
+                                )
+                            }
+                            attempt.onSuccess { res ->
+                                if (forPlayback) logResolution("✓ SoundCloud SUCCESS (HQ Audio)")
+                                result = Triple(res.mediaUri, "SoundCloud", "HQ Audio")
+                            }.onFailure { err ->
+                                if (forPlayback) logResolution("✗ SoundCloud: ${err.javaClass.simpleName}: ${err.message?.take(200)}")
+                            }
+                        }
+                        com.music.spotui.data.preferences.AudioProviderOrderItem.YOUTUBE_MUSIC -> Unit
+                    }
+                }
+                if (result == null && forPlayback) {
+                    logResolution("All lossless providers exhausted. Proceeding to YouTube Music fallback.")
+                }
+                result
             }
         } else null
 
         val ytDeferred = if (shouldTryYoutube) {
             scope.async {
-                // If checking FLAC in parallel, run YouTube resolution silently in the background
-                // without updating UI state or status message until fallback is needed.
                 val runForPlayback = forPlayback && !shouldTryFlac
                 if (runForPlayback) {
                     currentSource = "YouTube"
@@ -624,36 +866,24 @@ object SongPlayer {
         // Check FLAC first
         if (flacDeferred != null) {
             val flacResult = flacDeferred.await()
-            when (flacResult) {
-                is com.metrolist.spotify.SpotiFlac.Result.Success -> {
-                    Log.d(TAG, "lossless ${flacResult.track.provider} ${flacResult.track.quality}-bit for: $song")
-                    val providerName = flacResult.track.provider.replaceFirstChar { it.uppercase() }
-                    val flacQuality = "FLAC ${flacResult.track.quality}-bit"
-                    if (forPlayback) {
-                        currentSource = "Lossless • $providerName"
-                        currentQuality = flacQuality
-                        val note = "Source: $providerName • Format: $flacQuality • Container: ${flacResult.track.container.uppercase()}"
-                        boundState?.updateResolveDetailNote(note)
-                        updateResolveStatus(false)
-                    }
-                    streamCache[song] = flacResult.track.url
-                    sourceCache[song] = "Lossless • $providerName"
-                    qualityCache[song] = flacQuality
-                    ytDeferred?.cancelAndJoin()
-                    return flacResult.track.url
+            if (flacResult != null) {
+                val (url, providerName, flacQuality) = flacResult
+                Log.d(TAG, "Lossless resolved via $providerName ($flacQuality) for: $song")
+                if (forPlayback) {
+                    currentSource = "Lossless • $providerName"
+                    currentQuality = flacQuality
+                    val note = "Source: $providerName • Format: $flacQuality"
+                    boundState?.updateResolveDetailNote(note)
+                    updateResolveStatus(false)
                 }
-                is com.metrolist.spotify.SpotiFlac.Result.Cooldown -> {
-                    flacFailReason = "Provider cooldown (${flacResult.message})"
-                    Log.d(TAG, "lossless provider on cooldown (${flacResult.message}), using YouTube for: $song")
-                }
-                null -> {
-                    flacFailReason = "Lossless timeout"
-                    Log.w(TAG, "lossless timed out, using YouTube for: $song")
-                }
-                else -> {
-                    flacFailReason = "Track unavailable on FLAC mirrors"
-                    Log.w(TAG, "lossless miss ($flacResult), using YouTube for: $song")
-                }
+                streamCache[song] = url
+                sourceCache[song] = "Lossless • $providerName"
+                qualityCache[song] = flacQuality
+                ytDeferred?.cancelAndJoin()
+                return url
+            } else {
+                flacFailReason = "Lossless providers timed out or unavailable"
+                Log.w(TAG, "Lossless resolution failed/timed out, using YouTube for: $song")
             }
         }
 
@@ -1513,7 +1743,7 @@ object SongPlayer {
         }
         val p = ExoPlayer.Builder(context)
             .setMediaSourceFactory(
-                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cacheDataSourceFactory(context)),
+                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(createResilientDataSourceFactory(context)),
             )
             .setRenderersFactory(renderers)
             .setAudioAttributes(buildAudioAttributes(), handleAudioFocus)

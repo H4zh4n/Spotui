@@ -44,6 +44,7 @@ class PoTokenGenerator {
             }
         } catch (e: Exception) {
             Timber.tag(TAG).e(e, "poToken generation exception: ${e.javaClass.simpleName}: ${e.message}")
+            invalidateGenerator()
             when (e) {
                 is BadWebViewException -> {
                     Timber.tag(TAG).e(e, "Could not obtain poToken because WebView is broken")
@@ -54,9 +55,31 @@ class PoTokenGenerator {
                     Timber.tag(TAG).w("PoToken generation timed out for videoId=$videoId")
                     null
                 }
-                else -> throw e // includes PoTokenException
+                else -> null
             }
         }
+    }
+
+    fun reset() {
+        runCatching {
+            webPoTokenSessionId = null
+            webPoTokenStreamingPot = null
+            val gen = webPoTokenGenerator
+            webPoTokenGenerator = null
+            if (gen != null) {
+                if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+                    runCatching { gen.close() }
+                } else {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        runCatching { gen.close() }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun invalidateGenerator() {
+        reset()
     }
 
     /**

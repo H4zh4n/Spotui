@@ -132,7 +132,12 @@ fun MiniPlayer(navController: NavHostController) {
     }
 
     var swipeOffsetY by remember { mutableFloatStateOf(0f) }
+    var swipeOffsetX by remember { mutableFloatStateOf(0f) }
     val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(songId) {
+        swipeOffsetX = 0f
+    }
 
     var songProgress by remember { mutableFloatStateOf(0f) }
 
@@ -219,62 +224,133 @@ fun MiniPlayer(navController: NavHostController) {
                 .pointerInput(Unit) {
                     var navigated = false
                     var lastEventTimeMs = 0L
-                    val distThreshold = 20.dp.toPx()
-                    val velThreshold = 1500f // px/s upward
+                    val distThresholdY = 20.dp.toPx()
+                    val velThresholdY = 1500f // px/s upward
+                    val distThresholdX = 40.dp.toPx()
+                    val velThresholdX = 1000f // px/s horizontal
+                    val touchSlop = viewConfiguration.touchSlop
+
+                    var totalDx = 0f
+                    var totalDy = 0f
+                    var currentDirection = 0 // 0: Undetermined, 1: Horizontal, 2: Vertical
+                    var lastVelocityX = 0f
+
                     detectDragGestures(
                         onDragStart = {
                             navigated = false
                             lastEventTimeMs = 0L
+                            totalDx = 0f
+                            totalDy = 0f
+                            currentDirection = 0
+                            lastVelocityX = 0f
                         },
                         onDragEnd = {
-                            if (!navigated) {
-                                // Snap back with spring animation
-                                coroutineScope.launch {
-                                    val anim = Animatable(swipeOffsetY)
-                                    anim.animateTo(
-                                        targetValue = 0f,
-                                        animationSpec = spring(
-                                            dampingRatio = 0.7f,
-                                            stiffness = 400f
-                                        )
-                                    ) { swipeOffsetY = value }
+                            if (currentDirection == 2) {
+                                if (!navigated) {
+                                    // Snap back with spring animation
+                                    coroutineScope.launch {
+                                        val anim = Animatable(swipeOffsetY)
+                                        anim.animateTo(
+                                            targetValue = 0f,
+                                            animationSpec = spring(
+                                                dampingRatio = 0.7f,
+                                                stiffness = 400f
+                                            )
+                                        ) { swipeOffsetY = value }
+                                    }
+                                } else {
+                                    // Continue upward + fade out while full player slides in
+                                    coroutineScope.launch {
+                                        val anim = Animatable(swipeOffsetY)
+                                        anim.animateTo(
+                                            targetValue = -300f,
+                                            animationSpec = tween(280)
+                                        ) { swipeOffsetY = value }
+                                        swipeOffsetY = 0f
+                                    }
                                 }
-                            } else {
-                            // Continue upward + fade out while full player slides in
-                            coroutineScope.launch {
-                                val anim = Animatable(swipeOffsetY)
-                                anim.animateTo(
-                                    targetValue = -300f,
-                                    animationSpec = tween(280)
-                                ) { swipeOffsetY = value }
-                                swipeOffsetY = 0f
+                            } else if (currentDirection == 1) {
+                                val queue = miniPlayerViewModel.queue.value
+                                if (swipeOffsetX > distThresholdX || lastVelocityX > velThresholdX) {
+                                    // Swiped right (dragged from left to right): Previous track
+                                    coroutineScope.launch {
+                                        val anim = Animatable(swipeOffsetX)
+                                        anim.animateTo(
+                                            targetValue = 300f,
+                                            animationSpec = tween(150)
+                                        )
+                                        miniPlayerViewModel.playPreviousSong(queue, context)
+                                        swipeOffsetX = 0f
+                                    }
+                                } else if (swipeOffsetX < -distThresholdX || lastVelocityX < -velThresholdX) {
+                                    // Swiped left (dragged from right to left): Next track
+                                    coroutineScope.launch {
+                                        val anim = Animatable(swipeOffsetX)
+                                        anim.animateTo(
+                                            targetValue = -300f,
+                                            animationSpec = tween(150)
+                                        )
+                                        miniPlayerViewModel.playNextSongs(queue, context)
+                                        swipeOffsetX = 0f
+                                    }
+                                } else {
+                                    // Snap back with spring animation
+                                    coroutineScope.launch {
+                                        val anim = Animatable(swipeOffsetX)
+                                        anim.animateTo(
+                                            targetValue = 0f,
+                                            animationSpec = spring(
+                                                dampingRatio = 0.7f,
+                                                stiffness = 400f
+                                            )
+                                        ) { swipeOffsetX = value }
+                                    }
+                                }
                             }
-                        }
+                            currentDirection = 0
                         },
                         onDragCancel = {
                             coroutineScope.launch {
-                                val anim = Animatable(swipeOffsetY)
-                                anim.animateTo(
-                                    targetValue = 0f,
-                                    animationSpec = spring(
-                                        dampingRatio = 0.7f,
-                                        stiffness = 400f
-                                    )
-                                ) { swipeOffsetY = value }
+                                val animY = Animatable(swipeOffsetY)
+                                animY.animateTo(0f, spring(0.7f, 400f)) { swipeOffsetY = value }
                             }
+                            coroutineScope.launch {
+                                val animX = Animatable(swipeOffsetX)
+                                animX.animateTo(0f, spring(0.7f, 400f)) { swipeOffsetX = value }
+                            }
+                            currentDirection = 0
                         },
                     ) { change, dragAmount ->
                         change.consume()
-                        swipeOffsetY = (swipeOffsetY + dragAmount.y).coerceAtMost(0f)
-                        if (!navigated) {
-                            // Velocity detection for quick flicks
-                            val now = change.uptimeMillis
-                            val dtMs = if (lastEventTimeMs > 0L) now - lastEventTimeMs else 0L
-                            lastEventTimeMs = now
-                            val velocityPxPerSec = if (dtMs > 5) dragAmount.y / dtMs * 1000f else 0f
-                            if (swipeOffsetY < -distThreshold || velocityPxPerSec < -velThreshold) {
-                                navigated = true
-                                navController.navigate(Routes.Player.route)
+                        val now = change.uptimeMillis
+                        val dtMs = if (lastEventTimeMs > 0L) now - lastEventTimeMs else 0L
+                        lastEventTimeMs = now
+
+                        if (currentDirection == 0) {
+                            totalDx += dragAmount.x
+                            totalDy += dragAmount.y
+                            if (kotlin.math.abs(totalDx) > touchSlop || kotlin.math.abs(totalDy) > touchSlop) {
+                                if (kotlin.math.abs(totalDx) > kotlin.math.abs(totalDy)) {
+                                    currentDirection = 1 // HORIZONTAL
+                                } else {
+                                    currentDirection = 2 // VERTICAL
+                                }
+                            }
+                        }
+
+                        if (currentDirection == 2) {
+                            swipeOffsetY = (swipeOffsetY + dragAmount.y).coerceAtMost(0f)
+                            if (!navigated) {
+                                val velocityPxPerSec = if (dtMs > 5) dragAmount.y / dtMs * 1000f else 0f
+                                if (swipeOffsetY < -distThresholdY || velocityPxPerSec < -velThresholdY) {
+                                    navigated = true
+                                    navController.navigate(Routes.Player.route)
+                                }
+                            }
+                        } else if (currentDirection == 1) {
+                            swipeOffsetX += dragAmount.x
+                            if (dtMs > 5) {
+                                lastVelocityX = dragAmount.x / dtMs * 1000f
                             }
                         }
                     }
@@ -286,6 +362,9 @@ fun MiniPlayer(navController: NavHostController) {
                 modifier = Modifier
                     .width(260.dp)
                     .clipToBounds()
+                    .graphicsLayer {
+                        translationX = swipeOffsetX
+                    }
             ) {
                 GlideImage(
                     modifier = Modifier
