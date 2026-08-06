@@ -340,6 +340,31 @@ fun SettingsScreen(navController: NavController) {
                 onSelectTimeout = { dlLosslessTimeout = it; setDownloadLosslessTimeout(context, it) },
             ) { dlQ = it; setDownloadQuality(context, it) }
 
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable {
+                        com.music.spotui.di.SongPlayer.clearCaches(context)
+                        android.widget.Toast.makeText(context, "Stream cache cleared", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                    .background(Color(0xFF1E1E24))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Clear Audio Stream Cache", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Unlocks all cached streams and forces re-resolution", color = Color.Gray, fontSize = 11.sp)
+                }
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = "Clear cache",
+                    tint = Color.Gray,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
             var losslessStatusSummary by remember { mutableStateOf("Checking lossless mirrors…") }
             LaunchedEffect(Unit) {
                 providerStatuses = com.metrolist.spotify.SpotiFlac.getProviderStatuses()

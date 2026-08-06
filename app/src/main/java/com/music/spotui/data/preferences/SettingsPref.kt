@@ -61,34 +61,49 @@ private fun writeQ(c: Context, key: String, q: StreamQuality) =
     prefs(c).edit().putString(key, q.name).apply()
 
 fun getWifiQuality(c: Context): StreamQuality = readQ(c, KEY_WIFI_Q, StreamQuality.HIGH)
-fun setWifiQuality(c: Context, q: StreamQuality) = writeQ(c, KEY_WIFI_Q, q)
+fun setWifiQuality(c: Context, q: StreamQuality) {
+    writeQ(c, KEY_WIFI_Q, q)
+    com.music.spotui.di.SongPlayer.onQualitySettingChanged(c)
+}
 
 fun getCellularQuality(c: Context): StreamQuality = readQ(c, KEY_CELL_Q, StreamQuality.NORMAL)
-fun setCellularQuality(c: Context, q: StreamQuality) = writeQ(c, KEY_CELL_Q, q)
+fun setCellularQuality(c: Context, q: StreamQuality) {
+    writeQ(c, KEY_CELL_Q, q)
+    com.music.spotui.di.SongPlayer.onQualitySettingChanged(c)
+}
 
 fun getDownloadQuality(c: Context): StreamQuality = readQ(c, KEY_DL_Q, StreamQuality.LOSSLESS)
-fun setDownloadQuality(c: Context, q: StreamQuality) = writeQ(c, KEY_DL_Q, q)
+fun setDownloadQuality(c: Context, q: StreamQuality) {
+    writeQ(c, KEY_DL_Q, q)
+    com.music.spotui.di.SongPlayer.onQualitySettingChanged(c)
+}
 
 fun getWifiLosslessTimeout(c: Context): LosslessTimeout =
     runCatching { LosslessTimeout.valueOf(prefs(c).getString(KEY_WIFI_LOSSLESS_TIMEOUT, LosslessTimeout.SHORT.name)!!) }
         .getOrDefault(LosslessTimeout.SHORT)
 
-fun setWifiLosslessTimeout(c: Context, timeout: LosslessTimeout) =
+fun setWifiLosslessTimeout(c: Context, timeout: LosslessTimeout) {
     prefs(c).edit().putString(KEY_WIFI_LOSSLESS_TIMEOUT, timeout.name).apply()
+    com.music.spotui.di.SongPlayer.onQualitySettingChanged(c)
+}
 
 fun getCellularLosslessTimeout(c: Context): LosslessTimeout =
     runCatching { LosslessTimeout.valueOf(prefs(c).getString(KEY_CELL_LOSSLESS_TIMEOUT, LosslessTimeout.SHORT.name)!!) }
         .getOrDefault(LosslessTimeout.SHORT)
 
-fun setCellularLosslessTimeout(c: Context, timeout: LosslessTimeout) =
+fun setCellularLosslessTimeout(c: Context, timeout: LosslessTimeout) {
     prefs(c).edit().putString(KEY_CELL_LOSSLESS_TIMEOUT, timeout.name).apply()
+    com.music.spotui.di.SongPlayer.onQualitySettingChanged(c)
+}
 
 fun getDownloadLosslessTimeout(c: Context): LosslessTimeout =
     runCatching { LosslessTimeout.valueOf(prefs(c).getString(KEY_DL_LOSSLESS_TIMEOUT, LosslessTimeout.LONG.name)!!) }
         .getOrDefault(LosslessTimeout.LONG)
 
-fun setDownloadLosslessTimeout(c: Context, timeout: LosslessTimeout) =
+fun setDownloadLosslessTimeout(c: Context, timeout: LosslessTimeout) {
     prefs(c).edit().putString(KEY_DL_LOSSLESS_TIMEOUT, timeout.name).apply()
+    com.music.spotui.di.SongPlayer.onQualitySettingChanged(c)
+}
 
 fun getLosslessTimeout(c: Context): LosslessTimeout = currentLosslessTimeout(c)
 
@@ -209,4 +224,6 @@ fun getAudioProviderOrder(c: Context): List<AudioProviderOrderItem> {
 
 fun setAudioProviderOrder(c: Context, order: List<AudioProviderOrderItem>) {
     prefs(c).edit().putString(KEY_AUDIO_PROVIDER_ORDER, order.joinToString(",") { it.id }).apply()
+    com.music.spotui.di.SongPlayer.onQualitySettingChanged(c)
 }
+
