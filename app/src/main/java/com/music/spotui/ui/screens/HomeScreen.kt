@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -25,8 +26,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -48,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
@@ -60,15 +66,19 @@ import com.music.spotui.data.entity.ArtistsModel
 import com.music.spotui.data.entity.HomeFeedModel
 import com.music.spotui.data.entity.HomeItem
 import com.music.spotui.data.entity.HomeSection
+import com.music.spotui.data.entity.SongsModel
+import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.components.Loader
 import com.music.spotui.ui.navigation.Routes
 import com.music.spotui.ui.navigation.albumRoute
 import com.music.spotui.ui.navigation.artistRoute
 import com.music.spotui.ui.navigation.playlistRoute
+import com.music.spotui.ui.navigation.showRoute
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.theme.GridBackground
 import com.music.spotui.ui.viewmodel.HomeViewModel
+import com.music.spotui.ui.viewmodel.PlayerViewModel
 import java.time.LocalTime
 
 
@@ -80,6 +90,12 @@ fun HomeScreen(navController: NavController){
     val home by homeViewModel.home.collectAsState()
     val albums by homeViewModel.albums.collectAsState()
     val artists by homeViewModel.artists.collectAsState()
+    val songs by homeViewModel.songs.collectAsState()
+    val podcasts by homeViewModel.podcasts.collectAsState()
+    val audiobooks by homeViewModel.audiobooks.collectAsState()
+    val followedArtists by homeViewModel.followedArtists.collectAsState()
+    val selectedFilter by homeViewModel.selectedFilter.collectAsState()
+    val isFollowingOnly by homeViewModel.isFollowingOnly.collectAsState()
 
     Surface(
         modifier = Modifier
@@ -88,77 +104,113 @@ fun HomeScreen(navController: NavController){
             .statusBarsPadding()
     ) {
         val feed = (home as? Response.Success)?.data
-        // Each feed resolves independently — albums (new releases) often succeeds
-        // while artists (personalized) gets rate-limited. Render whatever arrived
-        // instead of casting blindly (which crashed when one feed was an Error).
         val albumsList = (albums as? Response.Success)?.data.orEmpty()
         val artistsList = (artists as? Response.Success)?.data.orEmpty()
+        val songsList = (songs as? Response.Success)?.data.orEmpty()
 
-        when {
-            // Preferred: the real personalized Spotify home feed.
-            feed != null && feed.sections.isNotEmpty() -> {
-                HomeFeedContent(navController, feed)
+        when (selectedFilter) {
+            "Music" -> {
+                HomeMusicFeedContent(
+                    navController = navController,
+                    homeViewModel = homeViewModel,
+                    feed = feed,
+                    albumsList = albumsList,
+                    artistsList = artistsList,
+                    songsList = songsList,
+                    followedArtists = followedArtists,
+                    selectedFilter = selectedFilter,
+                    isFollowingOnly = isFollowingOnly
+                )
             }
-
-            // Still resolving the real personalized home feed. Show the loader even
-            // if the new-releases/artists fallbacks already arrived from cache —
-            // otherwise the old "Sum up" layout flashes for a beat before the real
-            // Spotify-style feed swaps in.
-            home is Response.Loading -> {
-                Loader()
+            "Podcasts" -> {
+                HomePodcastsFeedContent(
+                    navController = navController,
+                    homeViewModel = homeViewModel,
+                    podcastsResult = podcasts,
+                    selectedFilter = selectedFilter,
+                    isFollowingOnly = isFollowingOnly
+                )
             }
-
-            // Fallback: home feed errored but new-releases / artists came through.
-            albumsList.isNotEmpty() || artistsList.isNotEmpty() -> {
-                SumUpHomeScreen(navController = navController, albums = albumsList, artists = artistsList)
+            "Audiobooks" -> {
+                HomeAudiobooksFeedContent(
+                    navController = navController,
+                    homeViewModel = homeViewModel,
+                    audiobooksResult = audiobooks,
+                    selectedFilter = selectedFilter
+                )
             }
-
             else -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                        modifier = Modifier.padding(24.dp)
-                    ) {
-                        Text(
-                            text = "Spotify session expired or unauthenticated",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp,
-                            textAlign = TextAlign.Center
+                when {
+                    feed != null && feed.sections.isNotEmpty() -> {
+                        HomeFeedContent(
+                            navController = navController,
+                            feed = feed,
+                            homeViewModel = homeViewModel,
+                            selectedFilter = selectedFilter,
+                            isFollowingOnly = isFollowingOnly
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Log in to load your personalized playlists, recommendations, and library.",
-                            color = Color.Gray,
-                            fontSize = 13.sp,
-                            textAlign = TextAlign.Center
+                    }
+                    home is Response.Loading -> {
+                        Loader()
+                    }
+                    albumsList.isNotEmpty() || artistsList.isNotEmpty() -> {
+                        SumUpHomeScreen(
+                            navController = navController,
+                            albums = albumsList,
+                            artists = artistsList,
+                            homeViewModel = homeViewModel,
+                            selectedFilter = selectedFilter,
+                            isFollowingOnly = isFollowingOnly
                         )
-                        Spacer(modifier = Modifier.height(24.dp))
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(24.dp))
-                                .background(Color(0xFF1ED760))
-                                .clickable { navController.navigate(Routes.Login.route) }
-                                .padding(horizontal = 24.dp, vertical = 12.dp)
-                        ) {
-                            Text(
-                                text = "Log in to Spotify",
-                                color = Color.Black,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
+                    }
+                    else -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(24.dp)
+                            ) {
+                                Text(
+                                    text = "Spotify session expired or unauthenticated",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Log in to load your personalized playlists, recommendations, and library.",
+                                    color = Color.Gray,
+                                    fontSize = 13.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(24.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(24.dp))
+                                        .background(Color(0xFF1ED760))
+                                        .clickable { navController.navigate(Routes.Login.route) }
+                                        .padding(horizontal = 24.dp, vertical = 12.dp)
+                                ) {
+                                    Text(
+                                        text = "Log in to Spotify",
+                                        color = Color.Black,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = "Go to Downloads",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 14.sp,
+                                    modifier = Modifier
+                                        .clickable { navController.navigate(Routes.Downloads.route) }
+                                        .padding(8.dp)
+                                )
+                            }
                         }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = "Go to Downloads",
-                            color = Color.White,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 14.sp,
-                            modifier = Modifier
-                                .clickable { navController.navigate(Routes.Downloads.route) }
-                                .padding(8.dp)
-                        )
                     }
                 }
             }
@@ -170,7 +222,6 @@ private fun onHomeItemClick(navController: NavController, item: HomeItem) {
     when (item) {
         is HomeItem.Album -> navController.navigate(albumRoute(item.name, item.artists.ifBlank { item.subtitle }))
         is HomeItem.Artist -> navController.navigate(artistRoute(item.name, item.id))
-        // Load the real playlist content by its Spotify id (daily mixes, etc).
         is HomeItem.Playlist ->
             if (item.id.isNotBlank()) navController.navigate(playlistRoute(item.id, item.name))
             else navController.navigate(albumRoute(item.name))
@@ -179,12 +230,13 @@ private fun onHomeItemClick(navController: NavController, item: HomeItem) {
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun HomeFeedContent(navController: NavController, feed: HomeFeedModel) {
-    // Mirror open.spotify.com exactly: sections render in the order the feed
-    // returns them. The 2-column "shortcuts" grid is only used for the UNTITLED
-    // section the web home starts with — if the feed leads with a titled section
-    // ("Jump back in", "Made For …"), it renders as a titled carousel first,
-    // not force-squeezed into the grid.
+fun HomeFeedContent(
+    navController: NavController,
+    feed: HomeFeedModel,
+    homeViewModel: HomeViewModel,
+    selectedFilter: String,
+    isFollowingOnly: Boolean
+) {
     val sections = feed.sections
     val gridSection = sections.firstOrNull()?.takeIf { it.title.isBlank() }
     val carousels = if (gridSection != null) sections.drop(1) else sections
@@ -195,7 +247,14 @@ fun HomeFeedContent(navController: NavController, feed: HomeFeedModel) {
             .background(Color(AppBackground.toArgb()))
     ) {
         item {
-            HomeHeaderRow(navController)
+            HomeHeaderRow(
+                navController = navController,
+                selectedFilter = selectedFilter,
+                isFollowingOnly = isFollowingOnly,
+                onSelectFilter = { homeViewModel.setSelectedFilter(it) },
+                onToggleFollowing = { homeViewModel.toggleFollowing() },
+                onResetFilters = { homeViewModel.resetFilters() }
+            )
         }
         gridSection?.let { section ->
             item {
@@ -209,11 +268,16 @@ fun HomeFeedContent(navController: NavController, feed: HomeFeedModel) {
     }
 }
 
-/** Spotify-style top row: profile avatar on the left (opens Settings, like the
- *  official app's profile drawer), then the filter pills — one single row. */
 @OptIn(ExperimentalGlideComposeApi::class)
 @Composable
-private fun HomeHeaderRow(navController: NavController) {
+private fun HomeHeaderRow(
+    navController: NavController,
+    selectedFilter: String,
+    isFollowingOnly: Boolean,
+    onSelectFilter: (String) -> Unit,
+    onToggleFollowing: () -> Unit,
+    onResetFilters: () -> Unit,
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.runtime.LaunchedEffect(Unit) {
         com.music.spotui.data.api.ProfileCache.ensure(context)
@@ -255,38 +319,569 @@ private fun HomeHeaderRow(navController: NavController) {
                 )
             }
         }
-        // Filter pills — Podcasts/Audiobooks jump to Search (where they're indexed).
-        val filters = listOf("All", "Music", "Podcasts", "Audiobooks")
-        var selected by remember { androidx.compose.runtime.mutableStateOf("All") }
         LazyRow(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.weight(1f),
         ) {
+            val filters = listOf("All", "Music", "Podcasts", "Audiobooks")
             items(filters.size) { i ->
                 val label = filters[i]
-                val isSel = label == selected
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(if (isSel) Color(0xFF1ED760) else Color(0xFF2A2A2A))
-                        .clickable {
-                            selected = label
-                            if (label == "Podcasts" || label == "Audiobooks") {
-                                navController.navigate(Routes.Search.route)
+                when (label) {
+                    "All" -> {
+                        val isSel = selectedFilter == "All"
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(if (isSel) Color(0xFF64D36D) else Color(0xFF2A2A2A))
+                                .clickable { onResetFilters() }
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        ) {
+                            Text(
+                                text = "All",
+                                color = if (isSel) Color.Black else Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                            )
+                        }
+                    }
+                    "Music" -> {
+                        val isSel = selectedFilter == "Music"
+                        if (isSel) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .zIndex(2f)
+                                        .clip(RoundedCornerShape(50))
+                                        .background(Color(0xFF64D36D))
+                                        .clickable { onResetFilters() }
+                                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                                ) {
+                                    Text(
+                                        text = "Music",
+                                        color = Color.Black,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .zIndex(1f)
+                                        .offset(x = (-16).dp)
+                                        .clip(RoundedCornerShape(topEndPercent = 50, bottomEndPercent = 50, topStartPercent = 0, bottomStartPercent = 0))
+                                        .background(if (isFollowingOnly) Color(0xFF59B861) else Color(0xFF2A2A2A))
+                                        .clickable { onToggleFollowing() }
+                                        .padding(start = 24.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)
+                                ) {
+                                    Text(
+                                        text = "Following",
+                                        color = if (isFollowingOnly) Color.Black else Color.White,
+                                        fontSize = 14.sp,
+                                        fontWeight = if (isFollowingOnly) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Color(0xFF2A2A2A))
+                                    .clickable { onSelectFilter("Music") }
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                            ) {
+                                Text(
+                                    text = "Music",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                )
                             }
                         }
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
-                ) {
-                    Text(
-                        text = label,
-                        color = if (isSel) Color.Black else Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                    )
+                    }
+                    "Podcasts" -> {
+                        val isSel = selectedFilter == "Podcasts"
+                        if (isSel) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .zIndex(2f)
+                                        .clip(RoundedCornerShape(50))
+                                        .background(Color(0xFF64D36D))
+                                        .clickable { onResetFilters() }
+                                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                                ) {
+                                    Text(
+                                        text = "Podcasts",
+                                        color = Color.Black,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .zIndex(1f)
+                                        .offset(x = (-16).dp)
+                                        .clip(RoundedCornerShape(topEndPercent = 50, bottomEndPercent = 50, topStartPercent = 0, bottomStartPercent = 0))
+                                        .background(if (isFollowingOnly) Color(0xFF59B861) else Color(0xFF2A2A2A))
+                                        .clickable { onToggleFollowing() }
+                                        .padding(start = 24.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)
+                                ) {
+                                    Text(
+                                        text = "Following",
+                                        color = if (isFollowingOnly) Color.Black else Color.White,
+                                        fontSize = 14.sp,
+                                        fontWeight = if (isFollowingOnly) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(Color(0xFF2A2A2A))
+                                    .clickable { onSelectFilter("Podcasts") }
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                            ) {
+                                Text(
+                                    text = "Podcasts",
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
+                        }
+                    }
+                    "Audiobooks" -> {
+                        val isSel = selectedFilter == "Audiobooks"
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(50))
+                                .background(if (isSel) Color(0xFF64D36D) else Color(0xFF2A2A2A))
+                                .clickable {
+                                    if (isSel) onResetFilters() else onSelectFilter("Audiobooks")
+                                }
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        ) {
+                            Text(
+                                text = "Audiobooks",
+                                color = if (isSel) Color.Black else Color.White,
+                                fontSize = 14.sp,
+                                fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalGlideComposeApi::class)
+@Composable
+private fun HomeMusicFeedContent(
+    navController: NavController,
+    homeViewModel: HomeViewModel,
+    feed: HomeFeedModel?,
+    albumsList: List<AlbumsModel>,
+    artistsList: List<ArtistsModel>,
+    songsList: List<SongsModel>,
+    followedArtists: List<ArtistsModel>,
+    selectedFilter: String,
+    isFollowingOnly: Boolean,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val playerViewModel: PlayerViewModel = hiltViewModel()
+
+    val followedNames = remember(followedArtists) { followedArtists.map { it.name.lowercase().trim() }.toSet() }
+
+    val filteredAlbums = remember(albumsList, isFollowingOnly, followedNames) {
+        if (!isFollowingOnly || followedNames.isEmpty()) albumsList
+        else albumsList.filter { album ->
+            followedNames.any { fName -> album.artists.lowercase().contains(fName) }
+        }
+    }
+
+    val filteredArtists = remember(artistsList, followedArtists, isFollowingOnly) {
+        if (!isFollowingOnly) artistsList
+        else if (followedArtists.isNotEmpty()) followedArtists
+        else artistsList
+    }
+
+    val filteredSongs = remember(songsList, isFollowingOnly, followedNames) {
+        if (!isFollowingOnly || followedNames.isEmpty()) songsList
+        else songsList.filter { song ->
+            followedNames.any { fName -> song.singer.lowercase().contains(fName) }
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(AppBackground.toArgb()))
+    ) {
+        item {
+            HomeHeaderRow(
+                navController = navController,
+                selectedFilter = selectedFilter,
+                isFollowingOnly = isFollowingOnly,
+                onSelectFilter = { homeViewModel.setSelectedFilter(it) },
+                onToggleFollowing = { homeViewModel.toggleFollowing() },
+                onResetFilters = { homeViewModel.resetFilters() }
+            )
+        }
+
+        val gridItems = feed?.sections?.firstOrNull()?.items.orEmpty().take(8)
+        if (gridItems.isNotEmpty() && !isFollowingOnly) {
+            item {
+                HomeShortcutGrid(navController, gridItems)
+            }
+        }
+
+        if (filteredSongs.isNotEmpty()) {
+            item {
+                Text(
+                    text = if (isFollowingOnly) "Songs from Artists You Follow" else "Top Songs",
+                    color = Color.White,
+                    fontSize = 21.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 8.dp)
+                )
+            }
+            items(filteredSongs.take(10).size) { i ->
+                val song = filteredSongs[i]
+                HomeSongRow(
+                    song = song,
+                    onPlay = {
+                        SongPlayer.playSong(song.url, context)
+                        playerViewModel.updateSongState(
+                            song.coverUri,
+                            song.title,
+                            song.singer,
+                            true,
+                            song.id,
+                            0,
+                            song.album
+                        )
+                    }
+                )
+            }
+        }
+
+        if (filteredAlbums.isNotEmpty()) {
+            item {
+                HomeAlbums(album = filteredAlbums, navController = navController)
+            }
+        }
+
+        if (filteredArtists.isNotEmpty()) {
+            item {
+                HomeArtists(artists = filteredArtists, navController = navController)
+            }
+        }
+
+        item { Spacer(modifier = Modifier.height(160.dp)) }
+    }
+}
+
+@OptIn(ExperimentalGlideComposeApi::class)
+@Composable
+private fun HomeSongRow(
+    song: SongsModel,
+    onPlay: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 5.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFF181818))
+            .clickable { onPlay() }
+            .padding(8.dp)
+    ) {
+        GlideImage(
+            model = song.coverUri,
+            contentDescription = song.title,
+            contentScale = ContentScale.Crop,
+            loading = placeholder(R.drawable.placeholder),
+            failure = placeholder(R.drawable.placeholder),
+            modifier = Modifier
+                .size(48.dp)
+                .clip(RoundedCornerShape(4.dp))
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = song.title,
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = song.singer,
+                color = Color(0xFFB3B3B3),
+                fontSize = 12.sp,
+                maxLines = 1
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(Color(0xFF1ED760))
+        ) {
+            Icon(
+                imageVector = Icons.Default.PlayArrow,
+                contentDescription = "Play",
+                tint = Color.Black,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalGlideComposeApi::class)
+@Composable
+private fun HomePodcastsFeedContent(
+    navController: NavController,
+    homeViewModel: HomeViewModel,
+    podcastsResult: Response<com.music.spotui.data.entity.SearchResults>,
+    selectedFilter: String,
+    isFollowingOnly: Boolean
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val playerViewModel: PlayerViewModel = hiltViewModel()
+
+    val searchResults = (podcastsResult as? Response.Success)?.data
+    val shows = searchResults?.shows.orEmpty()
+    val episodes = searchResults?.episodes.orEmpty()
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(AppBackground.toArgb()))
+    ) {
+        item {
+            HomeHeaderRow(
+                navController = navController,
+                selectedFilter = selectedFilter,
+                isFollowingOnly = isFollowingOnly,
+                onSelectFilter = { homeViewModel.setSelectedFilter(it) },
+                onToggleFollowing = { homeViewModel.toggleFollowing() },
+                onResetFilters = { homeViewModel.resetFilters() }
+            )
+        }
+
+        item {
+            Text(
+                text = "Podcasts & Shows",
+                color = Color.White,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 8.dp)
+            )
+        }
+
+        if (shows.isNotEmpty()) {
+            item {
+                Text(
+                    text = "Top Shows",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(16.dp, 12.dp, 16.dp, 8.dp)
+                )
+                LazyRow(
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(shows.size) { i ->
+                        val show = shows[i]
+                        Column(
+                            modifier = Modifier
+                                .width(140.dp)
+                                .clickable {
+                                    navController.navigate(showRoute(show.id, show.name))
+                                }
+                        ) {
+                            GlideImage(
+                                model = show.coverUri,
+                                contentDescription = show.name,
+                                contentScale = ContentScale.Crop,
+                                loading = placeholder(R.drawable.placeholder),
+                                failure = placeholder(R.drawable.placeholder),
+                                modifier = Modifier
+                                    .size(140.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = show.name,
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = show.publisher,
+                                color = Color(0xFFB3B3B3),
+                                fontSize = 11.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (episodes.isNotEmpty()) {
+            item {
+                Text(
+                    text = "Recent Episodes",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 8.dp)
+                )
+            }
+
+            items(episodes.size) { i ->
+                val ep = episodes[i]
+                HomeSongRow(
+                    song = ep,
+                    onPlay = {
+                        SongPlayer.playSong(ep.url, context)
+                        playerViewModel.updateSongState(
+                            ep.coverUri,
+                            ep.title,
+                            ep.singer,
+                            true,
+                            ep.id,
+                            0,
+                            ep.album
+                        )
+                    }
+                )
+            }
+        } else if (shows.isEmpty() && podcastsResult is Response.Loading) {
+            item {
+                Loader()
+            }
+        }
+
+        item { Spacer(modifier = Modifier.height(160.dp)) }
+    }
+}
+
+@OptIn(ExperimentalGlideComposeApi::class)
+@Composable
+private fun HomeAudiobooksFeedContent(
+    navController: NavController,
+    homeViewModel: HomeViewModel,
+    audiobooksResult: Response<com.music.spotui.data.entity.SearchResults>,
+    selectedFilter: String,
+) {
+    val searchResults = (audiobooksResult as? Response.Success)?.data
+    val albums = searchResults?.albums.orEmpty()
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(AppBackground.toArgb()))
+    ) {
+        item {
+            HomeHeaderRow(
+                navController = navController,
+                selectedFilter = selectedFilter,
+                isFollowingOnly = false,
+                onSelectFilter = { homeViewModel.setSelectedFilter(it) },
+                onToggleFollowing = { homeViewModel.toggleFollowing() },
+                onResetFilters = { homeViewModel.resetFilters() }
+            )
+        }
+
+        item {
+            Text(
+                text = "Audiobooks & Stories",
+                color = Color.White,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 8.dp)
+            )
+        }
+
+        if (albums.isNotEmpty()) {
+            item {
+                Text(
+                    text = "Popular Audiobooks",
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(16.dp, 12.dp, 16.dp, 8.dp)
+                )
+                LazyRow(
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(albums.size) { i ->
+                        val ab = albums[i]
+                        Column(
+                            modifier = Modifier
+                                .width(140.dp)
+                                .clickable {
+                                    navController.navigate(albumRoute(ab.name, ab.artists))
+                                }
+                        ) {
+                            GlideImage(
+                                model = ab.coverUri,
+                                contentDescription = ab.name,
+                                contentScale = ContentScale.Crop,
+                                loading = placeholder(R.drawable.placeholder),
+                                failure = placeholder(R.drawable.placeholder),
+                                modifier = Modifier
+                                    .size(140.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = ab.name,
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = ab.artists.ifBlank { "Audiobook" },
+                                color = Color(0xFFB3B3B3),
+                                fontSize = 11.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (audiobooksResult is Response.Loading && albums.isEmpty()) {
+            item {
+                Loader()
+            }
+        }
+
+        item { Spacer(modifier = Modifier.height(160.dp)) }
     }
 }
 
@@ -404,22 +999,34 @@ private fun HomeFeedCard(item: HomeItem, onClick: () -> Unit) {
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
-fun SumUpHomeScreen(navController : NavController, albums: List<AlbumsModel>, artists: List<ArtistsModel>) {
+fun SumUpHomeScreen(
+    navController: NavController,
+    albums: List<AlbumsModel>,
+    artists: List<ArtistsModel>,
+    homeViewModel: HomeViewModel,
+    selectedFilter: String,
+    isFollowingOnly: Boolean
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .background(Color(AppBackground.toArgb()))
     ){
-
+        HomeHeaderRow(
+            navController = navController,
+            selectedFilter = selectedFilter,
+            isFollowingOnly = isFollowingOnly,
+            onSelectFilter = { homeViewModel.setSelectedFilter(it) },
+            onToggleFollowing = { homeViewModel.toggleFollowing() },
+            onResetFilters = { homeViewModel.resetFilters() }
+        )
         GreetingSection()
-        //ChipSection(chip = listOf(" All ", "Music", "Podcasts"))
 
         if (albums.isNotEmpty()) {
             HomePlaylistGrid(navController, albums)
             HomeAlbums(album = albums, navController)
         }
-        //HomeRecentlyPlayed(navController, albums = listOf("karan aujla", "diljit", "fudfu", "frref", "frrf"))
         if (artists.isNotEmpty()) {
             HomeArtists(artists = artists, navController)
         }
