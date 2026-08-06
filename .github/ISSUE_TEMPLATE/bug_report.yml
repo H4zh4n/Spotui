@@ -1,0 +1,41 @@
+name: Bug Report
+description: Create a report to help us improve
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: checkboxes
+    id: search-check
+    attributes:
+      label: Duplicate Check
+      description: Please verify that this issue hasn't been reported before.
+      options:
+        - label: I have searched the existing issues and confirm this has not been reported.
+          required: true
+
+  - type: textarea
+    id: overview
+    attributes:
+      label: 📝 Overview
+      description: Please provide a clear, detailed, and concise description of what the bug is.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 🚶‍♂️ Steps to Reproduce
+      description: List the exact, step-by-step actions required to reproduce the behavior.
+      placeholder: |
+        1. Go to '...'
+        2. Click on '....'
+        3. See error
+    validations:
+      required: true
+
+  - type: input
+    id: env-os
+    attributes:
+      label: Operating System
+      placeholder: e.g., Windows 11, macOS 14, Android
+    validations:
+      required: true
