@@ -294,6 +294,15 @@ object SongPlayer {
         YouTubeUrlParser.extractVideoId(text)
             ?: text.trim().takeIf { it.matches(Regex("""[A-Za-z0-9_-]{11}""")) }
 
+    fun clearMediaCacheForTrack(context: Context, song: String) {
+        runCatching {
+            val cache = mediaCache(context)
+            val spotifyId = trackIdRegistry[song] ?: spotifyTrackIdForPlayback(song)
+            val key = com.music.spotui.audio.LosslessCacheKeyFactory.buildCacheKey(spotifyId, song)
+            cache.removeResource(key)
+        }
+    }
+
     fun invalidateResolvedStream(song: String) {
         streamCache.remove(song)
         sourceCache.remove(song)
@@ -303,6 +312,7 @@ object SongPlayer {
         appCtx?.let { ctx ->
             com.music.spotui.data.preferences.clearCachedVideoId(ctx, song)
             com.music.spotui.data.preferences.clearCachedStream(ctx, song)
+            clearMediaCacheForTrack(ctx, song)
         }
     }
 
@@ -499,8 +509,7 @@ object SongPlayer {
     private fun cacheDataSourceFactory(context: Context): androidx.media3.datasource.cache.CacheDataSource.Factory {
         val http = androidx.media3.datasource.DefaultHttpDataSource.Factory()
             .setUserAgent(
-                "Mozilla/5.0 (Linux; Android 14; Pixel) AppleWebKit/537.36 " +
-                    "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+                "com.google.ios.youtube/21.03.1 (iPhone16,2; U; CPU iOS 18_2 like Mac OS X;)",
             )
             .setAllowCrossProtocolRedirects(true)
         val upstream = androidx.media3.datasource.DefaultDataSource.Factory(context, http)
@@ -578,14 +587,21 @@ object SongPlayer {
         if (forPlayback) {
             updateResolveStatus(true, "Checking cache...")
         }
-        streamCache[song]?.let {
+        streamCache[song]?.let { url ->
             if (qualityTierCache[song] == expectedTier || qualityTierCache[song] == null) {
-                if (forPlayback) {
-                    currentSource = sourceCache[song] ?: "YouTube"
-                    currentQuality = qualityCache[song] ?: ""
-                    updateResolveStatus(false)
+                if (YTPlayerUtils.validateStatus(url)) {
+                    if (forPlayback) {
+                        currentSource = sourceCache[song] ?: "YouTube"
+                        currentQuality = qualityCache[song] ?: ""
+                        updateResolveStatus(false)
+                    }
+                    return url
+                } else {
+                    streamCache.remove(song)
+                    sourceCache.remove(song)
+                    qualityCache.remove(song)
+                    qualityTierCache.remove(song)
                 }
-                return it
             } else {
                 streamCache.remove(song)
                 sourceCache.remove(song)
@@ -599,17 +615,21 @@ object SongPlayer {
             updateResolveStatus(true, "Checking saved cache...")
         }
         com.music.spotui.data.preferences.getCachedStream(appContext, song, expectedTier = expectedTier)?.let { (url, source, cachedQuality) ->
-            // Promote back into the in-memory caches for this session.
-            streamCache[song] = url
-            sourceCache[song] = source
-            qualityCache[song] = cachedQuality
-            qualityTierCache[song] = expectedTier
-            if (forPlayback) {
-                currentSource = source
-                currentQuality = cachedQuality
-                updateResolveStatus(false)
+            if (YTPlayerUtils.validateStatus(url)) {
+                // Promote back into the in-memory caches for this session.
+                streamCache[song] = url
+                sourceCache[song] = source
+                qualityCache[song] = cachedQuality
+                qualityTierCache[song] = expectedTier
+                if (forPlayback) {
+                    currentSource = source
+                    currentQuality = cachedQuality
+                    updateResolveStatus(false)
+                }
+                return url
+            } else {
+                com.music.spotui.data.preferences.clearCachedStream(appContext, song)
             }
-            return url
         }
         if (forPlayback) {
             updateResolveStatus(true, "Checking alternative source...")
@@ -1740,7 +1760,7 @@ object SongPlayer {
             }
             return null
         }
-        tryIds(resolveVideoCandidates(query, forPlayback = forPlayback).take(3), skipValidation = true)?.let { return it }
+        tryIds(resolveVideoCandidates(query, forPlayback = forPlayback).take(3), skipValidation = false)?.let { return it }
         if (!com.music.spotui.data.preferences.isVideoFallbackEnabled(appContext)) {
             Log.w(TAG, "song candidates exhausted and video fallback disabled for: ${searchTextForPlayback(query)}")
             return null
@@ -1749,7 +1769,7 @@ object SongPlayer {
         // we're not signed in to YouTube). Regular video uploads — lyric videos,
         // reuploads — usually aren't age-gated: last-resort pass over those.
         Log.w(TAG, "song candidates exhausted, trying video search for: ${searchTextForPlayback(query)}")
-        tryIds(resolveVideoCandidates(query, YouTube.SearchFilter.FILTER_VIDEO, forPlayback = forPlayback).take(3), skipValidation = true)?.let { return it }
+        tryIds(resolveVideoCandidates(query, YouTube.SearchFilter.FILTER_VIDEO, forPlayback = forPlayback).take(3), skipValidation = false)?.let { return it }
         Log.e(TAG, "All YouTube candidates failed for: ${searchTextForPlayback(query)}")
         return null
     }

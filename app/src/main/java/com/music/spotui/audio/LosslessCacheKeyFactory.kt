@@ -8,15 +8,27 @@ object LosslessCacheKeyFactory : CacheKeyFactory {
     private const val SPOTIFY_PREFIX = "spotify:track:"
 
     fun buildCacheKey(spotifyTrackId: String?, url: String): String {
+        val uri = Uri.parse(url)
+        val host = uri.host.orEmpty()
+        val path = uri.path.orEmpty()
+
+        // YouTube dynamic stream URLs: must NOT use fixed spotui-flac cache keys,
+        // because dynamic URLs for YouTube change and expire across resolutions.
+        if (host.contains("googlevideo.com") || host.contains("youtube.com")) {
+            val videoId = uri.getQueryParameter("docid") ?: uri.getQueryParameter("id")
+            return if (!videoId.isNullOrBlank()) {
+                "spotui-yt:$videoId:$path"
+            } else {
+                "spotui-yt-path:$path"
+            }
+        }
+
         val cleanId = spotifyTrackId?.removePrefix(SPOTIFY_PREFIX)?.substringBefore('|')?.trim()
         if (!cleanId.isNullOrBlank()) {
             return "spotui-flac:$cleanId"
         }
-        // Fallback: use bare URL path without query parameters if no track id
-        val uri = Uri.parse(url)
+
         val scheme = uri.scheme
-        val host = uri.host.orEmpty()
-        val path = uri.path.orEmpty()
         return if (scheme != null && host.isNotBlank()) {
             "spotui-uri:$scheme://$host$path"
         } else {

@@ -14,6 +14,7 @@ import com.metrolist.innertube.NewPipeExtractor
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.YouTubeClient
 import com.metrolist.innertube.models.YouTubeClient.Companion.ANDROID_CREATOR
+import com.metrolist.innertube.models.YouTubeClient.Companion.ANDROID_NO_SDK
 import com.metrolist.innertube.models.YouTubeClient.Companion.ANDROID_VR_1_43_32
 import com.metrolist.innertube.models.YouTubeClient.Companion.ANDROID_VR_1_61_48
 import com.metrolist.innertube.models.YouTubeClient.Companion.ANDROID_VR_NO_AUTH
@@ -63,15 +64,16 @@ object YTPlayerUtils {
     private val MAIN_CLIENT: YouTubeClient = WEB_REMIX
 
     private val STREAM_FALLBACK_CLIENTS: Array<YouTubeClient> = arrayOf(
-        TVHTML5_SIMPLY_EMBEDDED_PLAYER,  // Try embedded player first for age-restricted content
+        IOS,
+        IPADOS,
+        MOBILE,
+        ANDROID_NO_SDK,
+        TVHTML5_SIMPLY_EMBEDDED_PLAYER,
         TVHTML5,
         ANDROID_VR_1_43_32,
         ANDROID_VR_1_61_48,
         ANDROID_CREATOR,
-        IPADOS,
         ANDROID_VR_NO_AUTH,
-        MOBILE,
-        IOS,
         WEB,
         WEB_CREATOR
     )
@@ -342,14 +344,14 @@ object YTPlayerUtils {
                 Timber.tag(TAG).d("  useWebPoTokens: ${currentClient.useWebPoTokens}")
 
                 // Apply n-transform and PoToken for web clients OR for private tracks (including TVHTML5)
-                val needsNTransform = currentClient.useWebPoTokens ||
-                    currentClient.clientName in listOf("WEB", "WEB_REMIX", "WEB_CREATOR", "TVHTML5") ||
+                val hasNParam = streamUrl.contains(Regex("[?&]n="))
+                val needsNTransform = hasNParam || currentClient.useWebPoTokens ||
+                    currentClient.clientName in listOf("WEB", "WEB_REMIX", "WEB_CREATOR", "TVHTML5", "TVHTML5_SIMPLY_EMBEDDED_PLAYER") ||
                     isPrivatelyOwnedTrack
 
                 Timber.tag(TAG).d("N-transform decision:")
                 Timber.tag(TAG).d("  needsNTransform: $needsNTransform")
-                Timber.tag(TAG).d("  Reason: useWebPoTokens=${currentClient.useWebPoTokens}, " +
-                    "clientInList=${currentClient.clientName in listOf("WEB", "WEB_REMIX", "WEB_CREATOR", "TVHTML5")}, " +
+                Timber.tag(TAG).d("  Reason: hasNParam=$hasNParam, useWebPoTokens=${currentClient.useWebPoTokens}, " +
                     "isPrivatelyOwnedTrack=$isPrivatelyOwnedTrack")
 
                 if (needsNTransform) {
@@ -359,8 +361,12 @@ object YTPlayerUtils {
                         Timber.tag(TAG).d("  Original URL preview: ${streamUrl.take(100)}...")
 
                         val originalUrl = streamUrl
-                        // Use CipherDeobfuscator for n-transform (fixed implementation)
+                        // Use CipherDeobfuscator for n-transform
                         streamUrl = CipherDeobfuscator.transformNParamInUrl(streamUrl)
+                        if (hasNParam && streamUrl == originalUrl) {
+                            Timber.tag(TAG).d("CipherDeobfuscator left n-param unchanged, trying EjsNTransformSolver fallback...")
+                            streamUrl = EjsNTransformSolver.transformNParamInUrl(originalUrl)
+                        }
 
                         Timber.tag(TAG).d("  Transformed URL length: ${streamUrl.length}")
                         Timber.tag(TAG).d("  URL changed: ${originalUrl != streamUrl}")
@@ -527,11 +533,12 @@ object YTPlayerUtils {
      *    killing the client here just cascades us down the fallback chain for no reason
      *  - other HTTP codes (4xx/5xx) → invalid
      */
-    private fun validateStatus(url: String): Boolean {
-        Timber.tag(logTag).d("Validating stream URL status")
+    internal fun validateStatus(url: String): Boolean {
+        Timber.tag(logTag).d("Validating stream URL status via GET Range bytes=0-0")
         try {
             val requestBuilder = okhttp3.Request.Builder()
-                .head()
+                .get()
+                .addHeader("Range", "bytes=0-0")
                 .url(url)
 
             YouTube.cookie?.let { cookie ->
@@ -541,13 +548,13 @@ object YTPlayerUtils {
             val response = httpClient.newCall(requestBuilder.build()).execute()
             response.close()
             val code = response.code
-            val accepted = response.isSuccessful || code == 405 || code == 403 || code == 410
+            val accepted = (response.isSuccessful || code == 206) && code != 403 && code != 404 && code != 410
             Timber.tag(logTag).d("Stream URL validation: code=$code accepted=$accepted")
             return accepted
         } catch (e: java.io.IOException) {
-            // Network timeout / reset while HEAD-probing. The stream URL itself may still
+            // Network timeout / reset while probing. The stream URL itself may still
             // be fine — let ExoPlayer attempt GET rather than burning a fallback client.
-            Timber.tag(logTag).w(e, "Stream URL HEAD probe failed (IO); accepting optimistically")
+            Timber.tag(logTag).w(e, "Stream URL probe failed (IO); accepting optimistically")
             return true
         } catch (e: Exception) {
             Timber.tag(logTag).e(e, "Stream URL validation failed with exception")
