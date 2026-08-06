@@ -152,8 +152,10 @@ fun HistoryScreen(navController: NavController) {
     val maxTrackPlays = remember(topTracks) { topTracks.firstOrNull()?.value?.toFloat() ?: 1f }
 
     Surface(modifier = Modifier.fillMaxSize()) {
+        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
         Box(modifier = Modifier.fillMaxSize()) {
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color(AppBackground.toArgb()))
@@ -446,6 +448,11 @@ fun HistoryScreen(navController: NavController) {
                 }
                 item { Spacer(Modifier.height(140.dp)) }
             }
+
+            com.music.spotui.ui.components.FastScrollbarForLazyList(
+                state = listState,
+                modifier = Modifier.align(Alignment.CenterEnd)
+            )
 
             if (showSortSheet) {
                 ModalBottomSheet(

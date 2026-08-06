@@ -185,8 +185,10 @@ fun LikedSongsScreen(navController: NavController) {
                 )
             }
         ) {
+            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
             Box(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color(AppBackground.toArgb()))
@@ -573,6 +575,11 @@ fun LikedSongsScreen(navController: NavController) {
 
                     item { Spacer(modifier = Modifier.height(160.dp)) }
                 }
+
+                com.music.spotui.ui.components.FastScrollbarForLazyList(
+                    state = listState,
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                )
 
                 if (showSortSheet) {
                     ModalBottomSheet(

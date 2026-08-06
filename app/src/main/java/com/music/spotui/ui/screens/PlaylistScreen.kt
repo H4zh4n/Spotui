@@ -352,11 +352,14 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                 )
             }
         ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(AppBackground.toArgb()))
-            ) {
+            val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+            Box(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(AppBackground.toArgb()))
+                ) {
                 item {
                     Column(
                         modifier = Modifier
@@ -790,6 +793,11 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
 
                 item { Spacer(modifier = Modifier.height(160.dp)) }
             }
+            com.music.spotui.ui.components.FastScrollbarForLazyList(
+                state = listState,
+                modifier = Modifier.align(androidx.compose.ui.Alignment.CenterEnd)
+            )
+        }
         }
         if (showSortSheet) {
             ModalBottomSheet(

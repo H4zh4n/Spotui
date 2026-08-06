@@ -280,12 +280,13 @@ fun SumUpAlbumScreen(
         }
     ){
 
-
-        Column(modifier = Modifier
-            .fillMaxSize()
-            .background(Color(AppBackground.toArgb()))
-            .verticalScroll(rememberScrollState())
-        ) {
+        val scrollState = androidx.compose.foundation.rememberScrollState()
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier
+                .fillMaxSize()
+                .background(Color(AppBackground.toArgb()))
+                .verticalScroll(scrollState)
+            ) {
 
             Column(
                 modifier = Modifier
@@ -780,6 +781,11 @@ fun SumUpAlbumScreen(
 
             Spacer(modifier = Modifier.height(160.dp))
         }
+        com.music.spotui.ui.components.FastScrollbarForScrollState(
+            state = scrollState,
+            modifier = Modifier.align(androidx.compose.ui.Alignment.CenterEnd)
+        )
+    }
 
         if (showSortSheet) {
             ModalBottomSheet(

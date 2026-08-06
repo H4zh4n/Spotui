@@ -161,13 +161,16 @@ fun SumUpSearchScreen(
         }
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(AppBackground.toArgb()))
-            .statusBarsPadding()
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(AppBackground.toArgb()))
+                .statusBarsPadding()
 
-    ) {
+        ) {
         item {
             SearchTopBar()
         }
@@ -366,6 +369,11 @@ fun SumUpSearchScreen(
         }
 
     }
+    com.music.spotui.ui.components.FastScrollbarForLazyList(
+        state = listState,
+        modifier = Modifier.align(Alignment.CenterEnd)
+    )
+}
 }
 
 /** A single row in the search results: a track, an artist, or an album. */

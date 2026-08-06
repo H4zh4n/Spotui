@@ -713,12 +713,15 @@ fun SumUpLibraryScreen(
         }
         return
     }
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(padding)
-            .background(Color(0xFF0E0E13))
-    ) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(Color(0xFF0E0E13))
+        ) {
         item { Spacer(modifier = Modifier.height(10.dp)) }
         if (showHistoryTile) {
             // Listening history & stats entry.
@@ -868,6 +871,13 @@ fun SumUpLibraryScreen(
         }
         item { Spacer(modifier = Modifier.height(160.dp)) }
     }
+    com.music.spotui.ui.components.FastScrollbarForLazyList(
+        state = listState,
+        modifier = Modifier
+            .padding(padding)
+            .align(Alignment.CenterEnd)
+    )
+}
 }
 
 private fun openLibraryEntry(entry: LibraryEntry, navController: NavController) {

@@ -108,7 +108,12 @@ fun QueueScreen(navController: NavController) {
             Text("Queue", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
 
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+        Box(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize()
+            ) {
             current?.let {
                 item {
                     Text(
@@ -196,7 +201,12 @@ fun QueueScreen(navController: NavController) {
                     }
                 }
             }
-            item { Spacer(modifier = Modifier.height(120.dp)) }
+                item { Spacer(modifier = Modifier.height(120.dp)) }
+            }
+            com.music.spotui.ui.components.FastScrollbarForLazyList(
+                state = listState,
+                modifier = Modifier.align(Alignment.CenterEnd)
+            )
         }
     }
 }

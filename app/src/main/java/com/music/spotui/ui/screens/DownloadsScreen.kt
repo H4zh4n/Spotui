@@ -181,12 +181,14 @@ fun DownloadsScreen(navController: NavController) {
                 )
             }
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(AppBackground.toArgb()))
-                    .verticalScroll(rememberScrollState())
-            ) {
+            val scrollState = androidx.compose.foundation.rememberScrollState()
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(AppBackground.toArgb()))
+                        .verticalScroll(scrollState)
+                ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -497,7 +499,14 @@ fun DownloadsScreen(navController: NavController) {
                 }
 
                 Spacer(modifier = Modifier.height(160.dp))
-                if (showSortSheet) {
+            }
+
+            com.music.spotui.ui.components.FastScrollbarForScrollState(
+                state = scrollState,
+                modifier = Modifier.align(Alignment.CenterEnd)
+            )
+
+            if (showSortSheet) {
                     ModalBottomSheet(
                         onDismissRequest = { showSortSheet = false },
                         containerColor = Color(0xFF1A1A1A)

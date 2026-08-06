@@ -144,11 +144,14 @@ private fun ArtistOverviewContent(
         artistViewModel.updateSongState(s.coverUri, s.title, s.singer, true, s.id, index)
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(AppBackground.toArgb()))
-    ) {
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(AppBackground.toArgb()))
+        ) {
         // ── Header: big artist image with scrim + name ──
         item {
             Box(modifier = Modifier
@@ -463,6 +466,11 @@ private fun ArtistOverviewContent(
         }
 
             item { Spacer(Modifier.height(160.dp)) }
+        }
+        com.music.spotui.ui.components.FastScrollbarForLazyList(
+            state = listState,
+            modifier = Modifier.align(Alignment.CenterEnd)
+        )
     }
 }
 
