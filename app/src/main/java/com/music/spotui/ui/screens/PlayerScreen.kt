@@ -439,6 +439,7 @@ fun PlayerScreen(navController: NavController) {
     var dominentColor by remember {
         mutableStateOf(Color(AppBackground.toArgb()))
     }
+    var showDevicesSheet by remember { mutableStateOf(false) }
     Palette().extractSecondColorFromCoverUrl(context = context, songCoverUri) { color ->
         dominentColor = color
     }
@@ -791,11 +792,12 @@ fun PlayerScreen(navController: NavController) {
                         navController = navController,
                         context = context,
                         currentTrack = queueSongs.firstOrNull { it.id == playerViewModel.currentSongId.value },
+                        onOpenDevices = { showDevicesSheet = true }
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    //PlayerEndInfo()
+                    //PlayerEndInfo(onOpenDevices = { showDevicesSheet = true })
                 }
             }
             item {
@@ -816,6 +818,13 @@ fun PlayerScreen(navController: NavController) {
                 album = playerViewModel.currentSongAlbum.value,
                 accentColor = dominentColor,
                 onClose = { showLyrics = false }
+            )
+        }
+
+        if (showDevicesSheet) {
+            com.music.spotui.ui.components.DevicesSheet(
+                context = context,
+                onDismiss = { showDevicesSheet = false }
             )
         }
     }
@@ -1457,7 +1466,7 @@ fun PlayerFull(
             if (repeat != RepeatMode.OFF) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Box(
-                    modifier = Modifier
+modifier = Modifier
                         .size(4.dp)
                         .background(Color(0xFF1ED760), shape = CircleShape)
                 )
@@ -1468,27 +1477,37 @@ fun PlayerFull(
     }
 }
 
-/** The current audio output route name for the Connect indicator (BT name if
- *  connected, else Headphones / This device). Uses AudioDeviceInfo.productName
- *  which needs no Bluetooth permission. */
-private fun currentAudioRoute(context: Context): String {
-    return try {
-        val am = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-        val outs = am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
-        val bt = outs.firstOrNull {
-            it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                    it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO
-        }
-        if (bt != null) return bt.productName?.toString()?.takeIf { it.isNotBlank() } ?: "Bluetooth"
-        val wired = outs.firstOrNull {
-            it.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
-                    it.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET ||
-                    it.type == android.media.AudioDeviceInfo.TYPE_USB_HEADSET
-        }
-        if (wired != null) "Headphones" else "This device"
-    } catch (e: Exception) {
-        "This device"
+@Composable
+fun PlayerEndInfo(onOpenDevices: () -> Unit = {}) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(20.dp)
+    ) {
+        Icon(
+            modifier = Modifier
+                .size(22.dp)
+                .clickable { onOpenDevices() },
+            painter = painterResource(id = R.drawable.ic_devices),
+            tint = Color.White,
+            contentDescription = "Devices"
+        )
+        Icon(
+            modifier = Modifier
+                .size(16.dp),
+            painter = painterResource(id = R.drawable.ic_share),
+            tint = Color.White,
+            contentDescription = ""
+        )
     }
+}
+
+/** The current audio output route name for the Connect indicator (BT name if
+ *  connected, else Headphones / This device). */
+private fun currentAudioRoute(context: Context): String {
+    return com.music.spotui.ui.utils.AudioDeviceHelper.getCurrentAudioRouteName(context)
 }
 
 @Composable
@@ -1496,8 +1515,26 @@ fun PlayerConnectRow(
     navController: NavController,
     context: Context,
     currentTrack: SongsModel?,
+    onOpenDevices: () -> Unit = {},
 ) {
-    val routeName = remember(currentTrack?.id) { currentAudioRoute(context) }
+    DisposableEffect(context) {
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        val callback = object : android.media.AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>?) {
+                com.music.spotui.ui.utils.AudioDeviceHelper.updateRouteName(context)
+            }
+            override fun onAudioDevicesRemoved(removedDevices: Array<out android.media.AudioDeviceInfo>?) {
+                com.music.spotui.ui.utils.AudioDeviceHelper.updateRouteName(context)
+            }
+        }
+        am.registerAudioDeviceCallback(callback, null)
+        com.music.spotui.ui.utils.AudioDeviceHelper.updateRouteName(context)
+        onDispose {
+            am.unregisterAudioDeviceCallback(callback)
+        }
+    }
+
+    val routeName by com.music.spotui.ui.utils.AudioDeviceHelper.currentRouteNameState
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1506,7 +1543,15 @@ fun PlayerConnectRow(
             .padding(horizontal = 25.dp, vertical = 4.dp),
     ) {
         // Device / Spotify Connect indicator (green, like the official app).
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) { onOpenDevices() }
+        ) {
             Icon(
                 painter = painterResource(id = R.drawable.ic_devices),
                 tint = Color(0xFF1ED760),

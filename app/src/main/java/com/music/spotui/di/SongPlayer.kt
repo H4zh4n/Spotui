@@ -1814,6 +1814,16 @@ object SongPlayer {
     /** The live ExoPlayer instance (may be null before first play). */
     val exoPlayer: ExoPlayer? get() = player
 
+    /** Sets the preferred audio output device for all active ExoPlayer instances. */
+    fun setPreferredAudioDevice(deviceInfo: android.media.AudioDeviceInfo?) {
+        try {
+            player?.setPreferredAudioDevice(deviceInfo)
+            secondaryPlayer?.setPreferredAudioDevice(deviceInfo)
+        } catch (e: Exception) {
+            // Ignore if setting preferred device is not supported
+        }
+    }
+
     /** Make sure the player exists (used by the media-session service). */
     fun ensureCreated(context: Context) = ensurePlayer(context.applicationContext)
 

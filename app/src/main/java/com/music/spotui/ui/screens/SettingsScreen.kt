@@ -6,6 +6,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.res.painterResource
+import com.music.spotui.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -216,6 +218,8 @@ fun SettingsScreen(navController: NavController) {
             )
         }
     ) { padding ->
+        var showDevicesSheet by remember { mutableStateOf(false) }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -226,6 +230,34 @@ fun SettingsScreen(navController: NavController) {
                 // (account / log out) isn't hidden under the bar.
                 .padding(bottom = 200.dp)
         ) {
+            SectionTitle("Devices & Bluetooth")
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { showDevicesSheet = true }
+                    .background(Color(0xFF1A1A20))
+                    .padding(horizontal = 12.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Audio Output Devices", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        com.music.spotui.ui.utils.AudioDeviceHelper.getCurrentAudioRouteName(context),
+                        color = Color(0xFF1ED760),
+                        fontSize = 12.sp,
+                    )
+                }
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_devices),
+                    contentDescription = "Devices",
+                    tint = Color(0xFF1ED760),
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+
             SectionTitle("Background playback")
             Row(
                 modifier = Modifier
@@ -722,6 +754,13 @@ fun SettingsScreen(navController: NavController) {
                     showDefaultGuide = false
                     isDefaultLinkHandler = DefaultLinkHelper.isAppDefaultLinkHandler(context)
                 }
+            )
+        }
+
+        if (showDevicesSheet) {
+            com.music.spotui.ui.components.DevicesSheet(
+                context = context,
+                onDismiss = { showDevicesSheet = false }
             )
         }
 
