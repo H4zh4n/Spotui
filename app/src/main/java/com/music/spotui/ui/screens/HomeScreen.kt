@@ -117,24 +117,47 @@ fun HomeScreen(navController: NavController){
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(24.dp)
                     ) {
                         Text(
-                            text = "Couldn't load music.\nCheck your connection and try again.",
+                            text = "Spotify session expired or unauthenticated",
                             color = Color.White,
-                            textAlign = TextAlign.Center,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Log in to load your personalized playlists, recommendations, and library.",
+                            color = Color.Gray,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(24.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(Color(0xFF1ED760))
+                                .clickable { navController.navigate(Routes.Login.route) }
+                                .padding(horizontal = 24.dp, vertical = 12.dp)
+                        ) {
+                            Text(
+                                text = "Log in to Spotify",
+                                color = Color.Black,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "Go to Downloads",
-                            color = Color(0xFF1ED760), // Spotify Green
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
+                            color = Color.White,
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 14.sp,
                             modifier = Modifier
-                                .clickable {
-                                    navController.navigate(Routes.Downloads.route)
-                                }
-                                .padding(12.dp)
+                                .clickable { navController.navigate(Routes.Downloads.route) }
+                                .padding(8.dp)
                         )
                     }
                 }
