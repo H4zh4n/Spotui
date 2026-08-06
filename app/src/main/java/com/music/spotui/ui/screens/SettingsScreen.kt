@@ -344,17 +344,21 @@ fun SettingsScreen(navController: NavController) {
                 title = "Streaming over Wi-Fi",
                 selected = wifiQ,
                 showFlacWarning = wifiQ == StreamQuality.LOSSLESS,
+                onDeezerLogin = { navController.navigate(com.music.spotui.ui.navigation.Routes.DeezerLogin.route) }
             ) { wifiQ = it; setWifiQuality(context, it) }
 
             QualityPicker(
                 title = "Streaming over cellular",
                 selected = cellQ,
                 showFlacWarning = cellQ == StreamQuality.LOSSLESS,
+                onDeezerLogin = { navController.navigate(com.music.spotui.ui.navigation.Routes.DeezerLogin.route) }
             ) { cellQ = it; setCellularQuality(context, it) }
 
             QualityPicker(
                 title = "Download quality",
                 selected = dlQ,
+                showFlacWarning = dlQ == StreamQuality.LOSSLESS,
+                onDeezerLogin = { navController.navigate(com.music.spotui.ui.navigation.Routes.DeezerLogin.route) }
             ) { dlQ = it; setDownloadQuality(context, it) }
 
             Spacer(Modifier.height(6.dp))
@@ -1037,8 +1041,12 @@ private fun QualityPicker(
     title: String,
     selected: StreamQuality,
     showFlacWarning: Boolean = false,
+    onDeezerLogin: (() -> Unit)? = null,
     onSelect: (StreamQuality) -> Unit
 ) {
+    val context = LocalContext.current
+    val deezerConnected = remember(selected) { com.music.spotui.data.preferences.getDeezerArl(context) != null }
+
     Column(modifier = Modifier.padding(vertical = 8.dp)) {
         Text(title, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
@@ -1067,20 +1075,54 @@ private fun QualityPicker(
                         )
                     }
                 }
-                if (isSel && q == StreamQuality.LOSSLESS) {
-                    if (showFlacWarning) {
-                        Spacer(Modifier.height(6.dp))
+                if (isSel && q == StreamQuality.LOSSLESS && showFlacWarning) {
+                    Spacer(Modifier.height(6.dp))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x33FFB74D))
+                            .border(1.dp, Color(0x66FFB74D), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                    ) {
                         Text(
-                            text = "Lossless streams are resolved per-session and aren't cached to disk, which may add a few seconds of loading time when playing music.",
+                            text = "⚠️ Deezer Login Recommended for Lossless",
                             color = Color(0xFFFFB74D),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Deezer is the most reliable & successful provider for Lossless FLAC playback and downloads. Please log in to Deezer for optimal Lossless availability.",
+                            color = Color(0xFFFFE0B2),
                             fontSize = 12.sp,
                             lineHeight = 16.sp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0x33FFB74D))
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
                         )
+                        Spacer(Modifier.height(8.dp))
+                        if (deezerConnected) {
+                            Text(
+                                text = "✓ Deezer account connected (Lossless ready)",
+                                color = Color(0xFF1ED760),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        } else if (onDeezerLogin != null) {
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(AppPalette)
+                                    .clickable { onDeezerLogin() }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Log in to Deezer now",
+                                    color = Color.Black,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                 }
             }
