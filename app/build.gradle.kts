@@ -23,6 +23,12 @@ android {
         }
     }
 
+    testOptions {
+        unitTests {
+            isReturnDefaultValues = true
+        }
+    }
+
     signingConfigs {
         create("sharedDebug") {
             storeFile = file("debug.keystore")

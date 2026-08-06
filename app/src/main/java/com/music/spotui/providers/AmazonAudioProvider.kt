@@ -184,13 +184,13 @@ object AmazonAudioProvider {
 
         val amznHeaders = buildHeaders(pageUrl)
         val bodyObj = JSONObject().apply {
-            put("filter", JSONObject().put("IsLibrary", JSONArray().put("false")).toString())
+            put("filter", JSONObject().apply { put("IsLibrary", JSONArray().apply { put("false") }) }.toString())
             put("keyword", JSONObject().apply {
                 put("interface", "Web.TemplatesInterface.v1_0.Touch.SearchTemplateInterface.SearchKeywordClientInformation")
                 put("keyword", term)
             }.toString())
             put("suggestedKeyword", term)
-            put("userHash", JSONObject().put("level", "LIBRARY_MEMBER").toString())
+            put("userHash", JSONObject().apply { put("level", "LIBRARY_MEMBER") }.toString())
             put("headers", JSONObject(amznHeaders).toString())
         }
 

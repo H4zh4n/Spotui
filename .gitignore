@@ -21,3 +21,5 @@ app/release/
 /.github/git-commit-instructions.md
 /app/build/
 /.artifacts/
+/AGENT_RULES.md
+AGENT_RULES.md
