@@ -22,24 +22,41 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddCircleOutline
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.music.spotui.data.api.SpotifySync
+import com.music.spotui.data.preferences.OfflineCollectionsPref
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -539,56 +556,415 @@ private fun HomeMusicFeedContent(
             )
         }
 
-        val gridItems = feed?.sections?.firstOrNull()?.items.orEmpty().take(8)
-        if (gridItems.isNotEmpty() && !isFollowingOnly) {
-            item {
-                HomeShortcutGrid(navController, gridItems)
-            }
-        }
-
-        if (filteredSongs.isNotEmpty()) {
+        if (isFollowingOnly) {
+            // ── Spotify "Latest releases" Feed ──
             item {
                 Text(
-                    text = if (isFollowingOnly) "Songs from Artists You Follow" else "Top Songs",
+                    text = "Latest releases",
                     color = Color.White,
-                    fontSize = 21.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 8.dp)
+                    modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 12.dp)
                 )
             }
-            items(filteredSongs.take(10).size) { i ->
-                val song = filteredSongs[i]
-                HomeSongRow(
-                    song = song,
-                    onPlay = {
-                        SongPlayer.playSong(song.url, context)
-                        playerViewModel.updateSongState(
-                            song.coverUri,
-                            song.title,
-                            song.singer,
-                            true,
-                            song.id,
-                            0,
-                            song.album
-                        )
-                    }
-                )
-            }
-        }
 
-        if (filteredAlbums.isNotEmpty()) {
-            item {
-                HomeAlbums(album = filteredAlbums, navController = navController)
+            if (filteredAlbums.isNotEmpty()) {
+                items(filteredAlbums.size) { i ->
+                    val album = filteredAlbums[i]
+                    LatestReleaseCard(
+                        album = album,
+                        navController = navController,
+                        homeViewModel = homeViewModel,
+                        playerViewModel = playerViewModel
+                    )
+                }
             }
-        }
 
-        if (filteredArtists.isNotEmpty()) {
-            item {
-                HomeArtists(artists = filteredArtists, navController = navController)
+            if (filteredArtists.isNotEmpty()) {
+                item {
+                    HomeArtists(artists = filteredArtists, navController = navController)
+                }
+            }
+        } else {
+            // ── Standard Music Feed ──
+            val gridItems = feed?.sections?.firstOrNull()?.items.orEmpty().take(8)
+            if (gridItems.isNotEmpty()) {
+                item {
+                    HomeShortcutGrid(navController, gridItems)
+                }
+            }
+            if (filteredSongs.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "Top Songs",
+                        color = Color.White,
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 8.dp)
+                    )
+                }
+                val topList = filteredSongs.take(10)
+                items(topList.size) { i ->
+                    val song = topList[i]
+                    HomeSongRow(
+                        song = song,
+                        onPlay = {
+                            playerViewModel.updateQueue(topList)
+                            playerViewModel.playSongAt(topList, i, context)
+                        }
+                    )
+                }
+            }
+
+            if (filteredAlbums.isNotEmpty()) {
+                item {
+                    HomeAlbums(album = filteredAlbums, navController = navController)
+                }
+            }
+
+            if (filteredArtists.isNotEmpty()) {
+                item {
+                    HomeArtists(artists = filteredArtists, navController = navController)
+                }
             }
         }
 
         item { Spacer(modifier = Modifier.height(160.dp)) }
+    }
+}
+
+@OptIn(ExperimentalGlideComposeApi::class, ExperimentalMaterial3Api::class)
+@Composable
+private fun LatestReleaseCard(
+    album: AlbumsModel,
+    navController: NavController,
+    homeViewModel: HomeViewModel,
+    playerViewModel: PlayerViewModel
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    var isSaved by remember { mutableStateOf(false) }
+    var showBottomSheet by remember { mutableStateOf(false) }
+    var isPlayingLoading by remember { mutableStateOf(false) }
+
+    val isSingle = album.type.equals("single", ignoreCase = true)
+    val cardBg = if (album.id % 2 == 0) Color(0xFF23171B) else Color(0xFF242424)
+    val formattedTime = remember(album.time) { formatReleaseDate(album.time) }
+
+    val toggleSave = {
+        isSaved = !isSaved
+        if (isSaved) {
+            OfflineCollectionsPref.saveCollection(
+                context = context,
+                id = "album:${album.name}|${album.artists}",
+                name = album.name,
+                coverUri = album.coverUri,
+                artists = album.artists,
+                isPlaylist = false,
+                songs = emptyList()
+            )
+            SpotifySync.setAlbumSaved(context, album.id.toString(), true)
+            Toast.makeText(context, "Added to Your Library", Toast.LENGTH_SHORT).show()
+        } else {
+            SpotifySync.setAlbumSaved(context, album.id.toString(), false)
+            Toast.makeText(context, "Removed from Your Library", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val playRelease = {
+        if (!isPlayingLoading) {
+            isPlayingLoading = true
+            scope.launch {
+                try {
+                    var played = false
+                    homeViewModel.getAlbumSongs(album.name, album.artists).collect { res ->
+                        if (!played && res is Response.Success && !res.data.isNullOrEmpty()) {
+                            played = true
+                            val songs = res.data
+                            val song = songs[0]
+                            playerViewModel.updateQueue(songs)
+                            SongPlayer.playSong(song.url, context)
+                            playerViewModel.updateSongState(
+                                song.coverUri,
+                                song.title,
+                                song.singer,
+                                true,
+                                song.id,
+                                0,
+                                album.name
+                            )
+                        }
+                    }
+                    if (!played) {
+                        navController.navigate(albumRoute(album.name, album.artists))
+                    }
+                } finally {
+                    isPlayingLoading = false
+                }
+            }
+        }
+    }
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .clickable {
+                navController.navigate(albumRoute(album.name, album.artists))
+            }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            // Top Row: Artwork + Title/Artist + Options (⋮)
+            Row(
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                GlideImage(
+                    model = album.coverUri,
+                    contentDescription = album.name,
+                    contentScale = ContentScale.Crop,
+                    loading = placeholder(R.drawable.placeholder),
+                    failure = placeholder(R.drawable.placeholder),
+                    modifier = Modifier
+                        .size(76.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                )
+                Spacer(modifier = Modifier.width(14.dp))
+                Column(
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = album.artists.ifBlank { "Artist" },
+                        color = Color.White,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "${album.name}${if (formattedTime.isNotBlank()) " • $formattedTime" else ""}",
+                        color = Color(0xFFB3B3B3),
+                        fontSize = 13.sp,
+                        maxLines = 1
+                    )
+                }
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .clickable { showBottomSheet = true }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Options",
+                        tint = Color(0xFFB3B3B3),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Middle Summary Text
+            val songText = if (isSingle) "1 song" else "12 songs"
+            Text(
+                text = "$songText • ${album.name}",
+                color = Color(0xFFCCCCCC),
+                fontSize = 13.sp,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Bottom Control Row: (+) Save and (▶) Play buttons aligned to right
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Spacer(modifier = Modifier.weight(1f))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // (+) / (✓) Add to library button
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .clickable { toggleSave() }
+                    ) {
+                        Icon(
+                            imageVector = if (isSaved) Icons.Default.CheckCircle else Icons.Default.AddCircleOutline,
+                            contentDescription = if (isSaved) "In library" else "Add to library",
+                            tint = if (isSaved) Color(0xFF64D36D) else Color.White,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+
+                    // (▶) Play button with loading state
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(Color.White)
+                            .clickable(enabled = !isPlayingLoading) { playRelease() }
+                    ) {
+                        if (isPlayingLoading) {
+                            CircularProgressIndicator(
+                                color = Color.Black,
+                                strokeWidth = 2.5.dp,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "Play release",
+                                tint = Color.Black,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showBottomSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showBottomSheet = false },
+            containerColor = Color(0xFF1E1E1E),
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp)
+            ) {
+                Text(
+                    text = album.name,
+                    color = Color.White,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = album.artists,
+                    color = Color(0xFFB3B3B3),
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                // Option 1: Go to album
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            showBottomSheet = false
+                            navController.navigate(albumRoute(album.name, album.artists))
+                        }
+                        .padding(vertical = 12.dp, horizontal = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "Go to album",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Text(text = "Go to album", color = Color.White, fontSize = 15.sp)
+                }
+
+                // Option 2: Go to artist
+                if (album.artists.isNotBlank()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                showBottomSheet = false
+                                navController.navigate(artistRoute(album.artists))
+                            }
+                            .padding(vertical = 12.dp, horizontal = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Go to artist",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Text(text = "Go to artist", color = Color.White, fontSize = 15.sp)
+                    }
+                }
+
+                // Option 3: Save to library
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            showBottomSheet = false
+                            toggleSave()
+                        }
+                        .padding(vertical = 12.dp, horizontal = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isSaved) Icons.Default.CheckCircle else Icons.Default.AddCircleOutline,
+                        contentDescription = "Save album",
+                        tint = if (isSaved) Color(0xFF64D36D) else Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Text(
+                        text = if (isSaved) "Remove from Your Library" else "Save to Your Library",
+                        color = Color.White,
+                        fontSize = 15.sp
+                    )
+                }
+
+                // Option 4: Share
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable {
+                            showBottomSheet = false
+                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                putExtra(Intent.EXTRA_TEXT, "Check out ${album.name} by ${album.artists} on Spotui!")
+                                type = "text/plain"
+                            }
+                            context.startActivity(Intent.createChooser(sendIntent, "Share Release"))
+                        }
+                        .padding(vertical = 12.dp, horizontal = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = "Share",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Text(text = "Share release", color = Color.White, fontSize = 15.sp)
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+            }
+        }
     }
 }
 
@@ -695,6 +1071,12 @@ private fun HomePodcastsFeedContent(
             )
         }
 
+        if (podcastsResult is Response.Loading && shows.isEmpty()) {
+            item {
+                Loader()
+            }
+        }
+
         if (shows.isNotEmpty()) {
             item {
                 Text(
@@ -763,16 +1145,8 @@ private fun HomePodcastsFeedContent(
                 HomeSongRow(
                     song = ep,
                     onPlay = {
-                        SongPlayer.playSong(ep.url, context)
-                        playerViewModel.updateSongState(
-                            ep.coverUri,
-                            ep.title,
-                            ep.singer,
-                            true,
-                            ep.id,
-                            0,
-                            ep.album
-                        )
+                        playerViewModel.updateQueue(episodes)
+                        playerViewModel.playSongAt(episodes, i, context)
                     }
                 )
             }
@@ -1390,6 +1764,43 @@ fun ImageCard(
         }
         Spacer(modifier = Modifier.height(160.dp))
     }
+}
+
+private fun formatReleaseDate(raw: String): String {
+    val trimmed = raw.trim()
+    if (trimmed.isBlank()) return ""
+
+    if (trimmed.contains("ago", ignoreCase = true) || trimmed.matches(Regex("^[A-Z][a-z]{2}\\s+\\d{1,2}$"))) {
+        return trimmed
+    }
+
+    val parsedDate: java.util.Date? = runCatching {
+        val format = when {
+            trimmed.contains("T") -> java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US)
+            trimmed.length == 10 && trimmed.contains("-") -> java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            trimmed.length == 4 -> java.text.SimpleDateFormat("yyyy", java.util.Locale.US)
+            else -> null
+        }
+        format?.parse(trimmed)
+    }.getOrNull()
+
+    if (parsedDate != null) {
+        val diffMs = System.currentTimeMillis() - parsedDate.time
+        val diffDays = (diffMs / (1000 * 60 * 60 * 24)).toInt().coerceAtLeast(0)
+        return when {
+            diffDays == 0 -> "Today"
+            diffDays == 1 -> "1 day ago"
+            diffDays in 2..6 -> "$diffDays days ago"
+            diffDays in 7..13 -> "1 week ago"
+            diffDays in 14..27 -> "${diffDays / 7} weeks ago"
+            else -> {
+                val sdf = java.text.SimpleDateFormat("MMM d", java.util.Locale.US)
+                sdf.format(parsedDate)
+            }
+        }
+    }
+
+    return trimmed
 }
 
 

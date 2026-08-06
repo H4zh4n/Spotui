@@ -97,17 +97,35 @@ class HomeViewModel @Inject constructor(private val repository: AppRepository)  
 
     private fun fetchPodcasts() = viewModelScope.launch(Dispatchers.IO) {
         repository.searchEverything("podcast").collect { podRes ->
-            _podcasts.value = podRes
+            if (podRes is Response.Success && (podRes.data.shows.isNotEmpty() || podRes.data.episodes.isNotEmpty())) {
+                _podcasts.value = podRes
+            } else if (podRes is Response.Error || (podRes is Response.Success && podRes.data.shows.isEmpty())) {
+                repository.searchEverything("show").collect { fallbackRes ->
+                    _podcasts.value = fallbackRes
+                }
+            } else {
+                _podcasts.value = podRes
+            }
         }
     }
 
     private fun fetchAudiobooks() = viewModelScope.launch(Dispatchers.IO) {
         repository.searchEverything("audiobook").collect { abRes ->
-            _audiobooks.value = abRes
+            if (abRes is Response.Success && (abRes.data.shows.isNotEmpty() || abRes.data.episodes.isNotEmpty() || abRes.data.albums.isNotEmpty())) {
+                _audiobooks.value = abRes
+            } else if (abRes is Response.Error || (abRes is Response.Success && abRes.data.albums.isEmpty())) {
+                repository.searchEverything("story").collect { fallbackRes ->
+                    _audiobooks.value = fallbackRes
+                }
+            } else {
+                _audiobooks.value = abRes
+            }
         }
     }
 
     private fun fetchFollowedArtists() = viewModelScope.launch(Dispatchers.IO) {
         _followedArtists.value = repository.provideFollowedArtists()
     }
+
+    suspend fun getAlbumSongs(albumName: String, artist: String = "") = repository.provideAlbumSongs(albumName, artist)
 }
