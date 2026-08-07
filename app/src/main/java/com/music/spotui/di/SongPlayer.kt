@@ -834,7 +834,7 @@ object SongPlayer {
                     }
                 }.getOrNull()
                 val durationMs = durationRegistry[song]?.toLong()
-                val providerOrder = com.music.spotui.data.preferences.getAudioProviderOrder(appContext)
+                val providerOrder = com.music.spotui.data.preferences.getEnabledAudioProviderOrder(appContext)
                 val cleanTitle = cleanTrackTitle(song, metaArtist)
 
                 if (forPlayback) {

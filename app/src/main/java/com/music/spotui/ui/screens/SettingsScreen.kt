@@ -38,6 +38,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.music.spotui.data.preferences.AudioProviderOrderItem
 import com.music.spotui.data.preferences.getAudioProviderOrder
 import com.music.spotui.data.preferences.setAudioProviderOrder
+import com.music.spotui.data.preferences.isAudioProviderEnabled
+import com.music.spotui.data.preferences.setAudioProviderEnabled
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -939,21 +943,45 @@ fun SettingsScreen(navController: NavController) {
         }
 
         if (showProviderOrderDialog) {
+            var disabledSet by remember { mutableStateOf(com.music.spotui.data.preferences.getDisabledAudioProviders(context)) }
             AlertDialog(
                 onDismissRequest = { showProviderOrderDialog = false },
                 title = { Text("Audio Provider Priority", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
                 text = {
                     Column {
-                        Text("Higher providers are attempted first when resolving high-res & lossless streams:", color = Color.Gray, fontSize = 12.sp)
+                        Text("Check to enable/disable and re-order providers for streaming & downloads:", color = Color.Gray, fontSize = 12.sp)
                         Spacer(Modifier.height(8.dp))
                         providerOrder.forEachIndexed { index, item ->
+                            val isYoutube = item == AudioProviderOrderItem.YOUTUBE_MUSIC
+                            val isEnabled = if (isYoutube) true else item.id !in disabledSet
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
+                                    .padding(vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("${index + 1}. ${item.displayName}", color = Color.White, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                                if (isYoutube) {
+                                    Spacer(Modifier.width(48.dp))
+                                } else {
+                                    Checkbox(
+                                        checked = isEnabled,
+                                        onCheckedChange = { checked ->
+                                            setAudioProviderEnabled(context, item.id, checked)
+                                            disabledSet = com.music.spotui.data.preferences.getDisabledAudioProviders(context)
+                                        },
+                                        colors = CheckboxDefaults.colors(
+                                            checkedColor = AppPalette,
+                                            uncheckedColor = Color.Gray,
+                                            checkmarkColor = Color.Black,
+                                        )
+                                    )
+                                }
+                                Text(
+                                    text = "${index + 1}. ${item.displayName}" + if (isYoutube) " (Always Fallback)" else "",
+                                    color = if (isEnabled) Color.White else Color.Gray,
+                                    fontSize = 14.sp,
+                                    modifier = Modifier.weight(1f)
+                                )
                                 if (index > 0) {
                                     IconButton(onClick = {
                                         val mutable = providerOrder.toMutableList()
