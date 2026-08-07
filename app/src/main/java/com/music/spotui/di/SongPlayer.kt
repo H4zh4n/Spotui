@@ -1317,18 +1317,18 @@ object SongPlayer {
         appContext: Context,
     ): Boolean {
         val dlQuality = com.music.spotui.data.preferences.getDownloadQuality(appContext)
-        // Prefer a true lossless FLAC download (SpotiFLAC) when the download quality is
-        // Lossless and we have a Spotify id, but bound it with a timeout — the community
-        // proxies are often slow/on-cooldown and must NOT stall the whole download. On any
-        // miss/timeout fall back to the YouTube m4a path at the chosen quality.
-        if (song.spotifyTrackId.isNotBlank()) {
-            val flacOk = kotlinx.coroutines.withTimeoutOrNull(30_000) {
-                runCatching { downloadFlacToFile(song, appContext) }.getOrDefault(false)
+        val losslessDownloading = losslessStreaming
+
+        // Attempt Lossless download across all configured providers (Amazon, Qobuz, Deezer, SpotiFLAC, SoundCloud)
+        if (dlQuality.lossless || losslessDownloading) {
+            val flacOk = kotlinx.coroutines.withTimeoutOrNull(45_000) {
+                runCatching { downloadLosslessTrackToFile(song, appContext) }.getOrDefault(false)
             } ?: false
             if (flacOk) return true
         }
+
         if (!youtubeEnabled) {
-            lastDownloadError = "Track not available on lossless providers"
+            lastDownloadError = "Track not available on configured audio providers"
             return false
         }
 
@@ -1383,43 +1383,41 @@ object SongPlayer {
     }
 
     /**
-     * Download a true lossless FLAC via SpotiFLAC. Resolves the track's ISRC first
-     * (improves Qobuz matching), asks SpotiFLAC for a FLAC URL, and saves it as
-     * `<id>.flac`. Returns false on any miss/cooldown so the caller can fall back.
+     * Download a true lossless track via configured Lossless providers (Amazon, Qobuz, Deezer, SpotiFLAC, SoundCloud).
+     * Saves the downloaded file as `<id>.flac` (or `.mp3`). Returns false on miss so the caller can fall back.
      */
-    private suspend fun downloadFlacToFile(
+    private suspend fun downloadLosslessTrackToFile(
         song: com.music.spotui.data.entity.SongsModel,
         appContext: Context,
     ): Boolean {
-        val isrc = runCatching {
-            com.metrolist.spotify.Spotify.track(song.spotifyTrackId).getOrNull()?.isrc
-        }.getOrNull()
-        val flacResult = runCatching {
-            com.metrolist.spotify.SpotiFlac.resolve(
-                song.spotifyTrackId, isrc, preferHiRes = losslessHiRes,
-            )
-        }.getOrNull()
-        val flac = when (flacResult) {
-            is com.metrolist.spotify.SpotiFlac.Result.Success -> flacResult.track
-            is com.metrolist.spotify.SpotiFlac.Result.Cooldown -> {
-                Log.w(TAG, "FLAC download on cooldown for ${song.title}: ${flacResult.message}")
-                return false
-            }
-            else -> return false
+        // Resolve stream URL using the provider hierarchy (Amazon, Qobuz, Deezer, SpotiFLAC, SoundCloud)
+        val streamUrl = resolveStreamUrl(song.url, appContext, forPlayback = false)
+        if (streamUrl.isNullOrBlank()) return false
+
+        val source = sourceCache[song.url] ?: "Lossless"
+        val quality = qualityCache[song.url] ?: "FLAC"
+
+        // Do not use YouTube stream URLs for FLAC downloads (YouTube falls back to m4a in downloadToFile)
+        if (source.contains("YouTube", ignoreCase = true) || streamUrl.contains("googlevideo.com") || streamUrl.contains("youtube.com")) {
+            return false
         }
 
         val dir = java.io.File(appContext.filesDir, "downloads").apply { mkdirs() }
-        val outFile = java.io.File(dir, "${song.id}.flac")
-        val tmpFile = java.io.File(dir, "${song.id}.flacpart")
-        // TIDAL lossless is segmented DASH — remux the segments into a real .flac;
-        // single-file providers (Qobuz) download directly.
-        val ok = if (flac.container == "dash") {
-            com.metrolist.spotify.SpotiFlac.downloadDashFlacToFile(flac.url, tmpFile)
+        val ext = when {
+            streamUrl.contains(".flac", ignoreCase = true) || source.contains("FLAC", ignoreCase = true) -> "flac"
+            streamUrl.contains(".mp3", ignoreCase = true) || source.contains("MP3", ignoreCase = true) -> "mp3"
+            else -> "flac"
+        }
+        val outFile = java.io.File(dir, "${song.id}.$ext")
+        val tmpFile = java.io.File(dir, "${song.id}.${ext}part")
+
+        val ok = if (streamUrl.contains("manifest") || streamUrl.contains(".mpd")) {
+            com.metrolist.spotify.SpotiFlac.downloadDashFlacToFile(streamUrl, tmpFile)
         } else {
-            httpDownloadRanged(flac.url, tmpFile, song.url)
+            httpDownloadRanged(streamUrl, tmpFile, song.url)
         }
         if (!ok) {
-            Log.e(TAG, "FLAC download failed for ${song.title}: $lastDownloadError")
+            Log.e(TAG, "Lossless download failed for ${song.title}: $lastDownloadError")
             runCatching { tmpFile.delete() }
             return false
         }
@@ -1435,7 +1433,7 @@ object SongPlayer {
             LyricsApi.fetch(song.title, song.singer, song.album, song.durationMs / 1000)
         }.getOrNull() != null
         if (!lyricsOk) LyricsApi.removeFromCache(song.title, song.singer)
-        Log.d(TAG, "FLAC downloaded (${flac.provider} ${flac.quality}-bit): ${song.title}")
+        Log.d(TAG, "Lossless downloaded ($source $quality): ${song.title}")
         return true
     }
 
