@@ -77,3 +77,10 @@ fun clearAlternativeStream(context: Context, key: String) {
         .remove(key)
         .apply()
 }
+
+fun clearAllAlternativeStreams(context: Context) {
+    context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        .edit()
+        .clear()
+        .apply()
+}

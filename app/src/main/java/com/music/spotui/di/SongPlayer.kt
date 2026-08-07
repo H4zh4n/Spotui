@@ -51,13 +51,34 @@ object SongPlayer {
     private val videoCandidatesCache = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
 
     fun clearCaches(context: Context) {
+        val appContext = context.applicationContext
         streamCache.clear()
         sourceCache.clear()
         qualityCache.clear()
         qualityTierCache.clear()
         videoCandidatesCache.clear()
-        com.metrolist.music.utils.YTPlayerUtils.resetSession(context)
-        com.music.spotui.data.preferences.clearAllCachedStreams(context)
+        inFlightResolutions.values.forEach { runCatching { it.cancel() } }
+        inFlightResolutions.clear()
+        alternativeKeyRegistry.clear()
+        com.metrolist.music.utils.YTPlayerUtils.resetSession(appContext)
+        com.music.spotui.data.preferences.clearAllCachedStreams(appContext)
+        com.music.spotui.data.preferences.clearAllAlternativeStreams(appContext)
+        com.music.spotui.data.preferences.clearAllResolvedVideos(appContext)
+
+        val currentPlayingSong = boundState?.queue?.value?.firstOrNull { 
+            it.id == boundState?.songId?.value || (it.url == boundState?.songUrl?.value && it.url.isNotBlank())
+        }
+        val playingUrl = boundState?.songUrl?.value
+        if (!playingUrl.isNullOrBlank()) {
+            exoPlayer?.stop()
+            exoPlayer?.clearMediaItems()
+            if (currentPlayingSong != null) {
+                playSong(currentPlayingSong.url, appContext, "song/${currentPlayingSong.id}")
+            } else {
+                val currentId = boundState?.songId?.value
+                playSong(playingUrl, appContext, if (currentId != null && currentId != 0) "song/$currentId" else null)
+            }
+        }
     }
 
     fun onQualitySettingChanged(context: Context) {
