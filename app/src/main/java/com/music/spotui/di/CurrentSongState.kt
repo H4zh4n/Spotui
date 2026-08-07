@@ -251,8 +251,8 @@ class CurrentSongState @Inject constructor() {
         }
         _playGen++
         if (playingState) _lastPlayGen = _playGen
-        _playingState.value = playingState
-        _songIndex.value = songIndex
+        val actualIndex = _queue.value.indexOfFirst { it.id == songId }
+        _songIndex.value = if (actualIndex >= 0) actualIndex else songIndex
         _songId.value = songId
         // Feed the system media notification (MediaSession) with the current track.
         SongPlayer.setNowPlayingMeta(title, singer, coverUri)

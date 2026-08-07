@@ -539,7 +539,6 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                                                     indication = null,
                                                 ) {
                                                     playlistViewModel.startShuffled(songs)?.let { first ->
-                                                        SongPlayer.playSong(first.url, context)
                                                         playlistViewModel.updateSongState(
                                                             first.coverUri,
                                                             first.title,
@@ -549,6 +548,7 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                                                             0,
                                                             playlist.name,
                                                         )
+                                                        SongPlayer.playSong(first.url, context, "song/${first.id}")
                                                     }
                                                 },
                                             contentDescription = "Shuffle play",
@@ -589,7 +589,6 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                                                 currentInList -> playlistViewModel.setPlaying(!playing)
                                                 filteredSongs.isNotEmpty() -> {
                                                     playlistViewModel.updateQueue(filteredSongs)
-                                                    SongPlayer.playSong(filteredSongs[0].url, context)
                                                     playlistViewModel.updateSongState(
                                                         filteredSongs[0].coverUri,
                                                         filteredSongs[0].title,
@@ -599,6 +598,7 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                                                         0,
                                                         playlist.name
                                                     )
+                                                    SongPlayer.playSong(filteredSongs[0].url, context, "song/${filteredSongs[0].id}")
                                                 }
                                             }
                                         }
@@ -742,7 +742,6 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                                     onLongClick = { menuSong = song },
                                     onClick = {
                                         playlistViewModel.updateQueue(filteredSongs)
-                                        SongPlayer.playSong(song.url, context)
                                         playlistViewModel.updateSongState(
                                             song.coverUri,
                                             song.title,
@@ -752,6 +751,7 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                                             index,
                                             playlist.name
                                         )
+                                        SongPlayer.playSong(song.url, context, "song/${song.id}")
                                     },
                                 )
                                 .padding(20.dp, 8.dp)

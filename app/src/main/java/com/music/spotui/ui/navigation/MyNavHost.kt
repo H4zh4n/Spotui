@@ -82,7 +82,7 @@ fun MyNavHost(
                 if (com.music.spotui.data.preferences.isAutoPlayEnabled(context)) {
                     playerViewModel.updateSongState(
                         song.coverUri, song.title, song.singer, true, song.id, idx, song.album)
-                    com.music.spotui.di.SongPlayer.playSong(song.url, context)
+                    com.music.spotui.di.SongPlayer.playSong(song.url, context, "song/${song.id}")
                 }
             }
         }

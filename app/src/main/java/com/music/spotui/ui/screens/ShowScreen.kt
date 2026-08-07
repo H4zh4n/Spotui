@@ -316,8 +316,8 @@ fun ShowScreen(navController: NavController, showId: String, showName: String = 
                                     indication = null,
                                 ) {
                                     vm.updateQueue(filteredEpisodes)
-                                    SongPlayer.playSong(ep.url, context)
                                     vm.updateSongState(ep.coverUri, ep.title, ep.singer, true, ep.id, i, ep.album)
+                                    SongPlayer.playSong(ep.url, context, "song/${ep.id}")
                                 }
                                 .padding(16.dp, 10.dp),
                         ) {

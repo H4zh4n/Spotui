@@ -192,13 +192,13 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
             nextIdx,
             nextSong.album
         )
-        SongPlayer.playSong(nextSong.url, context)
+        SongPlayer.playSong(nextSong.url, context, "song/${nextSong.id}")
     }
 
     /**
      * Opens the artist page for a track: resolves the EXACT artist (name + id)
      * from the track's Spotify id when available, so a display name like "RAM"
-     * can't fuzzy-match to "Rammstein". Falls back to the display name.
+     * can'fuzzy-match to "Rammstein". Falls back to the display name.
      */
     // Spotify Canvas (looping video) URL for the current track, or null. Fetched
     // per track; null means no canvas / not resolved yet.
@@ -253,7 +253,7 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
                         val next = q[queueSongs.size]
                         withContext(Dispatchers.Main) {
                             updateSongState(next.coverUri, next.title, next.singer, true, next.id, queueSongs.size, next.album)
-                            SongPlayer.playSong(next.url, context)
+                            SongPlayer.playSong(next.url, context, "song/${next.id}")
                         }
                         return@launch
                     }
@@ -261,7 +261,7 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
                         val first = queueSongs.first()
                         withContext(Dispatchers.Main) {
                             updateSongState(first.coverUri, first.title, first.singer, true, first.id, 0, first.album)
-                            SongPlayer.playSong(first.url, context)
+                            SongPlayer.playSong(first.url, context, "song/${first.id}")
                         }
                         return@launch
                     }
@@ -271,7 +271,7 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
                 val first = queueSongs.first()
                 withContext(Dispatchers.Main) {
                     updateSongState(first.coverUri, first.title, first.singer, true, first.id, 0, first.album)
-                    SongPlayer.playSong(first.url, context)
+                    SongPlayer.playSong(first.url, context, "song/${first.id}")
                 }
             } finally {
                 awaitingRadioContinue = false
@@ -287,11 +287,12 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
      */
     fun playSongAt(queueSongs: List<SongsModel>, index: Int, context: Context) {
         if (index !in queueSongs.indices) return
+        val curIdx = currentPositionIn(queueSongs)
+        if (index == curIdx) return
         val song = queueSongs[index]
-        if (song.id == currentSongId.value) return
         maybeExtendRadio(queueSongs, index)
         updateSongState(song.coverUri, song.title, song.singer, true, song.id, index, song.album)
-        SongPlayer.playSong(song.url, context)
+        SongPlayer.playSong(song.url, context, "song/${song.id}")
     }
 
     // Function to play the previous song in the album
@@ -309,7 +310,7 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
         }
         val previousSong = queueSongs[prevIdx]
         updateSongState(previousSong.coverUri, previousSong.title, previousSong.singer, true, previousSong.id, prevIdx, previousSong.album)
-        SongPlayer.playSong(previousSong.url, context)
+        SongPlayer.playSong(previousSong.url, context, "song/${previousSong.id}")
     }
 
     private fun fetchSongs() = viewModelScope.launch(Dispatchers.IO) {

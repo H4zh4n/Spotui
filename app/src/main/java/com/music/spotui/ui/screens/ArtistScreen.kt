@@ -140,8 +140,8 @@ private fun ArtistOverviewContent(
         val songs = tracks.map { it.song }
         artistViewModel.updateQueue(songs)
         val s = songs[index]
-        SongPlayer.playSong(s.url, context)
         artistViewModel.updateSongState(s.coverUri, s.title, s.singer, true, s.id, index)
+        SongPlayer.playSong(s.url, context, "song/${s.id}")
     }
 
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()

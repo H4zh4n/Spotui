@@ -683,7 +683,6 @@ private fun LatestReleaseCard(
                             val songs = res.data
                             val song = songs[0]
                             playerViewModel.updateQueue(songs)
-                            SongPlayer.playSong(song.url, context)
                             playerViewModel.updateSongState(
                                 song.coverUri,
                                 song.title,
@@ -693,6 +692,7 @@ private fun LatestReleaseCard(
                                 0,
                                 album.name
                             )
+                            SongPlayer.playSong(song.url, context, "song/${song.id}")
                         }
                     }
                     if (!played) {

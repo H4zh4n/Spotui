@@ -208,11 +208,11 @@ fun LocalFilesScreen(navController: NavController) {
                                     },
                                     onClick = {
                                         playerViewModel.updateQueue(songs)
-                                        SongPlayer.playSong(song.url, context)
                                         playerViewModel.updateSongState(
                                             song.coverUri, song.title, song.singer,
                                             true, song.id, index, song.album,
                                         )
+                                        SongPlayer.playSong(song.url, context, "song/${song.id}")
                                     },
                                 ),
                         ) {

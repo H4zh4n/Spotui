@@ -252,7 +252,6 @@ fun SumUpSearchScreen(
                                             durationMs = item.durationMs,
                                         )
                                         searchViewModel.startRadioFromSong(song)
-                                        SongPlayer.playSong(song.url, context)
                                         searchViewModel.updateSongState(
                                             song.coverUri,
                                             song.title,
@@ -262,6 +261,7 @@ fun SumUpSearchScreen(
                                             0,
                                             song.album
                                         )
+                                        SongPlayer.playSong(song.url, context, "song/${song.id}")
                                     }
 
                                     "artist" -> navController.navigate(
@@ -535,7 +535,6 @@ fun SearchSongRow(
                     // Start a radio from the tapped track (queue = this song + Spotify
                     // recommendations) rather than queuing the whole search list.
                     searchViewModel.startRadioFromSong(song)
-                    SongPlayer.playSong(song.url, context)
                     searchViewModel.updateSongState(
                         song.coverUri,
                         song.title,
@@ -545,6 +544,7 @@ fun SearchSongRow(
                         0,
                         song.album,
                     )
+                    SongPlayer.playSong(song.url, context, "song/${song.id}")
                 }
                 .padding(16.dp, 8.dp),
         ) {

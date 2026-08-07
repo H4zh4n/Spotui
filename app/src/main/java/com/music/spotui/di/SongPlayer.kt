@@ -224,7 +224,25 @@ object SongPlayer {
         metaTitle = title
         metaArtist = artist
         metaCover = coverUri
+        if (currentMediaId == null && boundState != null) {
+            val id = boundState?.songId?.value ?: 0
+            if (id != 0) currentMediaId = "song/$id"
+        }
         refreshArtworkInBackground(currentMediaId, coverUri)
+        if (player != null && (title.isNotBlank() || artist.isNotBlank())) {
+            scope.launch(Dispatchers.Main) {
+                val p = player ?: return@launch
+                val item = p.currentMediaItem ?: return@launch
+                if (item.mediaMetadata.title != title || item.mediaMetadata.artist != artist) {
+                    val updatedMeta = item.mediaMetadata.buildUpon()
+                        .setTitle(title)
+                        .setArtist(artist)
+                        .build()
+                    val updatedItem = item.buildUpon().setMediaMetadata(updatedMeta).build()
+                    p.replaceMediaItem(p.currentMediaItemIndex.coerceAtLeast(0), updatedItem)
+                }
+            }
+        }
     }
 
     private fun refreshArtworkInBackground(songIdStr: String?, coverUrl: String) {
@@ -323,7 +341,17 @@ object SongPlayer {
         val appContext = context.applicationContext
         appCtx = appContext
         currentRequest = song
-        currentMediaId = mediaId
+        val resolvedMediaId = mediaId ?: boundState?.queue?.value?.firstOrNull { it.url == song }?.let { "song/${it.id}" }
+            ?: boundState?.songId?.value?.let { if (it != 0) "song/$it" else null }
+        currentMediaId = resolvedMediaId
+
+        // Immediately populate now-playing metadata if matching track exists in queue
+        boundState?.queue?.value?.firstOrNull { it.url == song }?.let { track ->
+            if (track.title.isNotBlank()) metaTitle = track.title
+            if (track.singer.isNotBlank()) metaArtist = track.singer
+            if (track.coverUri.isNotBlank()) metaCover = track.coverUri
+        }
+
         playWhenResolved = true
         // Remember the play-query so history can replay this track on tap.
         boundState?.setSongUrl(song)
@@ -599,6 +627,10 @@ object SongPlayer {
         val expectedTier = quality.name
 
         if (forPlayback) {
+            resolutionLogs.clear()
+            val cleanTitle = cleanTrackTitle(song, metaArtist)
+            logResolution("Resolving stream for '$cleanTitle' by '$metaArtist'")
+            boundState?.updateResolveError(null)
             updateResolveStatus(true, "Checking cache...")
         }
         streamCache[song]?.let { url ->
@@ -607,6 +639,11 @@ object SongPlayer {
                     if (forPlayback) {
                         currentSource = sourceCache[song] ?: "YouTube"
                         currentQuality = qualityCache[song] ?: ""
+                        val src = currentSource
+                        val q = currentQuality
+                        val note = if (q.isNotBlank()) "Source: $src • Format: $q (Loaded from memory cache)" else "Source: $src (Loaded from memory cache)"
+                        logResolution("✓ Stream served directly from session memory cache ($src, $q)")
+                        boundState?.updateResolveDetailNote(note)
                         updateResolveStatus(false)
                     }
                     return url
@@ -638,6 +675,9 @@ object SongPlayer {
                 if (forPlayback) {
                     currentSource = source
                     currentQuality = cachedQuality
+                    val note = if (cachedQuality.isNotBlank()) "Source: $source • Format: $cachedQuality (Loaded from disk cache)" else "Source: $source (Loaded from disk cache)"
+                    logResolution("✓ Stream served from persistent disk cache ($source, $cachedQuality)")
+                    boundState?.updateResolveDetailNote(note)
                     updateResolveStatus(false)
                 }
                 return url
@@ -654,6 +694,9 @@ object SongPlayer {
                     if (forPlayback) {
                         currentSource = "Alternative file"
                         currentQuality = alt.label.substringAfterLast('.', "").uppercase().takeIf { it.length in 2..5 }.orEmpty()
+                        val note = "Source: Alternative File • Format: ${currentQuality.ifBlank { "Local" }}"
+                        logResolution("✓ Playing user alternative local file")
+                        boundState?.updateResolveDetailNote(note)
                         updateResolveStatus(false)
                     }
                     alt.value
@@ -662,6 +705,7 @@ object SongPlayer {
                     if (forPlayback) {
                         currentSource = "Alternative YouTube"
                         currentQuality = ""
+                        logResolution("Resolving user alternative YouTube link...")
                     }
                     val playback = resolveYtPlayback(alt.value, quality.audioQuality, appContext, forPlayback = forPlayback) ?: run {
                         if (forPlayback) updateResolveStatus(false)
@@ -674,6 +718,9 @@ object SongPlayer {
                         .filter { it.isNotBlank() }.joinToString(" ")
                     if (forPlayback) {
                         currentQuality = ytQuality
+                        val note = "Source: Alternative YouTube • Format: $ytQuality"
+                        logResolution("✓ Alternative YouTube stream resolved ($ytQuality)")
+                        boundState?.updateResolveDetailNote(note)
                         updateResolveStatus(false)
                     }
 
@@ -697,6 +744,9 @@ object SongPlayer {
             if (forPlayback) {
                 currentSource = "Downloaded"
                 currentQuality = path.substringAfterLast('.', "").uppercase()
+                val note = "Source: Downloaded Local File • Format: $currentQuality"
+                logResolution("✓ Playing downloaded offline file ($currentQuality)")
+                boundState?.updateResolveDetailNote(note)
                 updateResolveStatus(false)
             }
             return android.net.Uri.fromFile(java.io.File(path)).toString()
@@ -720,9 +770,6 @@ object SongPlayer {
         }
 
         if (forPlayback) {
-            resolutionLogs.clear()
-            val cleanTitle = cleanTrackTitle(song, metaArtist)
-            logResolution("Resolving stream for '$cleanTitle' by '$metaArtist'")
             if (shouldTryFlac) {
                 currentSource = "Lossless"
                 currentQuality = ""

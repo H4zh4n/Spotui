@@ -172,7 +172,7 @@ fun QueueScreen(navController: NavController) {
                                     song.coverUri, song.title, song.singer, true,
                                     song.id, idx.coerceAtLeast(0), song.album
                                 )
-                                SongPlayer.playSong(song.url, context)
+                                SongPlayer.playSong(song.url, context, "song/${song.id}")
                                 navController.navigateUp()
                             },
                             dragHandle = Modifier.pointerInput(song.id) {

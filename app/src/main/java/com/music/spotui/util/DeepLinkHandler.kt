@@ -90,7 +90,7 @@ object DeepLinkHandler {
                             song.coverUri, song.title, song.singer, true, song.id, 0, song.album
                         )
                         SongPlayer.invalidateResolvedStream(song.url)
-                        SongPlayer.playSong(song.url, context)
+                        SongPlayer.playSong(song.url, context, "song/${song.id}")
                         navigateToPlayer(navController)
                     }
                 }
@@ -188,7 +188,7 @@ object DeepLinkHandler {
                             song.coverUri, song.title, song.singer, true, song.id, 0, song.album
                         )
                         SongPlayer.invalidateResolvedStream(song.url)
-                        SongPlayer.playSong(song.url, context)
+                        SongPlayer.playSong(song.url, context, "song/${song.id}")
                         navigateToPlayer(navController)
                     }
                 }

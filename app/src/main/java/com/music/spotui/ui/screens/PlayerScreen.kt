@@ -485,10 +485,11 @@ fun PlayerScreen(navController: NavController) {
             .distinctUntilChanged()
             .collect { page ->
                 val currentQueue = playerViewModel.queue.value
-                val currentId = playerViewModel.currentSongId.value
-                currentQueue.getOrNull(page)?.let { target ->
-                    if (target.id != currentId && artworkPagerState.isScrollInProgress) {
-                        playerViewModel.playSongAt(currentQueue, page, context)
+                val currentIdx = currentQueue.indexOfFirst { it.id == playerViewModel.currentSongId.value }
+                    .let { if (it >= 0) it else 0 }
+                if (page != currentIdx && page in currentQueue.indices) {
+                    playerViewModel.playSongAt(currentQueue, page, context)
+                    currentQueue.getOrNull(page)?.let { target ->
                         isLiked.value = isSongLiked(context, target.id.toString())
                     }
                 }

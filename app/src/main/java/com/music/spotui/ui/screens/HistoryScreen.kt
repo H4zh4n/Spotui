@@ -128,10 +128,10 @@ fun HistoryScreen(navController: NavController) {
                 url = entry.url,
             ),
         ))
-        SongPlayer.playSong(entry.url, context)
         playerViewModel.updateSongState(
             entry.image, entry.title, entry.singer, true, entry.songId, 0, entry.album,
         )
+        SongPlayer.playSong(entry.url, context, "song/${entry.songId}")
     }
 
     val topArtists = remember(history) {

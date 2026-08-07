@@ -8,11 +8,6 @@ object LosslessCacheKeyFactory : CacheKeyFactory {
     private const val SPOTIFY_PREFIX = "spotify:track:"
 
     fun buildCacheKey(spotifyTrackId: String?, url: String): String {
-        val cleanId = spotifyTrackId?.removePrefix(SPOTIFY_PREFIX)?.substringBefore('|')?.trim()
-        if (!cleanId.isNullOrBlank()) {
-            return "spotui-flac:$cleanId"
-        }
-
         val uri = Uri.parse(url)
         val host = uri.host.orEmpty()
         val path = uri.path.orEmpty()
@@ -27,6 +22,11 @@ object LosslessCacheKeyFactory : CacheKeyFactory {
                 val urlHash = java.util.zip.CRC32().apply { update(url.toByteArray()) }.value
                 "spotui-yt-url:$urlHash:$path"
             }
+        }
+
+        val cleanId = spotifyTrackId?.removePrefix(SPOTIFY_PREFIX)?.substringBefore('|')?.trim()
+        if (!cleanId.isNullOrBlank()) {
+            return "spotui-flac:$cleanId"
         }
 
         val scheme = uri.scheme

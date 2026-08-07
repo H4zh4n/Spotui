@@ -319,7 +319,6 @@ fun LikedSongsScreen(navController: NavController) {
                                                         indication = null,
                                                     ) {
                                                         likedSongsViewModel.startShuffled(songs)?.let { first ->
-                                                            SongPlayer.playSong(first.url, context)
                                                             likedSongsViewModel.updateSongState(
                                                                 first.coverUri,
                                                                 first.title,
@@ -329,6 +328,7 @@ fun LikedSongsScreen(navController: NavController) {
                                                                 0,
                                                                 "Liked Songs",
                                                             )
+                                                            SongPlayer.playSong(first.url, context, "song/${first.id}")
                                                         }
                                                     },
                                                 contentDescription = "Shuffle play",
@@ -353,7 +353,6 @@ fun LikedSongsScreen(navController: NavController) {
                                                     currentInList -> likedSongsViewModel.setPlaying(!playing)
                                                     else -> {
                                                         likedSongsViewModel.updateQueue(songs)
-                                                        SongPlayer.playSong(songs[0].url, context)
                                                         likedSongsViewModel.updateSongState(
                                                             songs[0].coverUri,
                                                             songs[0].title,
@@ -363,6 +362,7 @@ fun LikedSongsScreen(navController: NavController) {
                                                             0,
                                                             "Liked Songs"
                                                         )
+                                                        SongPlayer.playSong(songs[0].url, context, "song/${songs[0].id}")
                                                     }
                                                 }
                                             }
@@ -523,7 +523,6 @@ fun LikedSongsScreen(navController: NavController) {
                                             onLongClick = { menuSong = song },
                                             onClick = {
                                                 likedSongsViewModel.updateQueue(filteredSongs)
-                                                SongPlayer.playSong(song.url, context)
                                                 likedSongsViewModel.updateSongState(
                                                     song.coverUri,
                                                     song.title,
@@ -533,6 +532,7 @@ fun LikedSongsScreen(navController: NavController) {
                                                     index,
                                                     "Liked Songs"
                                                 )
+                                                SongPlayer.playSong(song.url, context, "song/${song.id}")
                                             },
                                         )
                                         .padding(20.dp, 8.dp)

@@ -449,11 +449,11 @@ fun DownloadsScreen(navController: NavController) {
                                         onLongClick = { menuSong = song },
                                         onClick = {
                                             playerViewModel.updateQueue(displayedSongs)
-                                            SongPlayer.playSong(song.url, context)
                                             playerViewModel.updateSongState(
                                                 song.coverUri, song.title, song.singer,
                                                 true, song.id, index, "Downloaded"
                                             )
+                                            SongPlayer.playSong(song.url, context, "song/${song.id}")
                                         },
                                     )
                                     .padding(20.dp, 8.dp)
