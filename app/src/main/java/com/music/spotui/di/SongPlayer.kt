@@ -2351,22 +2351,27 @@ object SongPlayer {
                 val djMode = com.music.spotui.data.preferences.isCrossfadeDjMode(ctx)
 
                 withContext(Dispatchers.Main) {
-                    // Advance the app's now-playing state immediately so the in-app UI follows
-                    // the incoming track during the blend. Also sets the now-playing meta used
-                    // to tag the secondary player's MediaItem.
-                    state.updateSongState(
-                        nextSong.coverUri, nextSong.title, nextSong.singer, true,
-                        nextSong.id, cur + 1, nextSong.album,
-                    )
                     val (sp, sf) = createPlayerWithFilter(ctx, handleAudioFocus = false)
                     secondaryPlayer = sp
                     secondaryPlayerFilter = sf
-                    sp.setMediaItem(buildMediaItem(nextUrl, streamMimeType(nextUrl)))
+                    val metadataBuilder = androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle(nextSong.title)
+                        .setArtist(nextSong.singer)
+                    com.music.spotui.util.ArtworkHelper.attachArtwork(
+                        metadataBuilder, ctx, nextSong.coverUri, "song/${nextSong.id}", nextUrl
+                    )
+                    val item = MediaItem.Builder()
+                        .setMediaId("song/${nextSong.id}")
+                        .setUri(nextUrl)
+                        .apply { streamMimeType(nextUrl)?.let { setMimeType(it) } }
+                        .setMediaMetadata(metadataBuilder.build())
+                        .build()
+                    sp.setMediaItem(item)
                     sp.prepare()
                     sp.volume = 0f
                     sp.playWhenReady = true
                 }
-                performCrossfade(effectiveMs, djMode)
+                performCrossfade(effectiveMs, djMode, nextSong, cur + 1)
             } catch (e: Exception) {
                 Log.e(TAG, "crossfade failed", e)
                 cancelCrossfade()
@@ -2374,7 +2379,12 @@ object SongPlayer {
         }
     }
 
-    private suspend fun performCrossfade(effectiveMs: Int, djMode: Boolean) {
+    private suspend fun performCrossfade(
+        effectiveMs: Int,
+        djMode: Boolean,
+        nextSong: com.music.spotui.data.entity.SongsModel,
+        nextIdx: Int,
+    ) {
         val steps = 50
         val delayPerStep = (effectiveMs / steps).coerceAtLeast(20)
         if (djMode) {
@@ -2405,7 +2415,7 @@ object SongPlayer {
                     }
                     kotlinx.coroutines.delay(delayPerStep.toLong())
                 }
-                finalizeCrossfade()
+                finalizeCrossfade(nextSong, nextIdx)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             }
@@ -2414,7 +2424,10 @@ object SongPlayer {
         job.join()
     }
 
-    private suspend fun finalizeCrossfade() {
+    private suspend fun finalizeCrossfade(
+        nextSong: com.music.spotui.data.entity.SongsModel,
+        nextIdx: Int,
+    ) {
         withContext(Dispatchers.Main) {
             val incoming = secondaryPlayer ?: run { isCrossfading = false; return@withContext }
             val old = player
@@ -2426,6 +2439,18 @@ object SongPlayer {
             secondaryPlayer = null
             secondaryPlayerFilter = null
             incoming.volume = 1f
+
+            // Update now-playing UI state right as the incoming track takes over full volume!
+            metaTitle = nextSong.title
+            metaArtist = nextSong.singer
+            metaCover = nextSong.coverUri
+            currentMediaId = "song/${nextSong.id}"
+            boundState?.setSongUrl(nextSong.url)
+            boundState?.updateSongState(
+                nextSong.coverUri, nextSong.title, nextSong.singer, true,
+                nextSong.id, nextIdx, nextSong.album,
+            )
+
             // The promoted player now owns audio focus / becoming-noisy handling.
             incoming.setAudioAttributes(buildAudioAttributes(), /* handleAudioFocus = */ true)
             incoming.setHandleAudioBecomingNoisy(true)
