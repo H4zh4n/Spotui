@@ -65,6 +65,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -1856,10 +1857,9 @@ fun PlayerOptionsSheet(
                 picked,
                 picked.lastPathSegment.orEmpty()
             )
-            SongPlayer.invalidateResolvedStream(song.url)
             currentAlternative = getAlternativeStream(context, alternativeKey)
-            Toast.makeText(context, "Alternative stream set to local file", Toast.LENGTH_SHORT)
-                .show()
+            Toast.makeText(context, "Alternative stream set to local file", Toast.LENGTH_SHORT).show()
+            SongPlayer.invalidateSongCache(song, context, reloadIfPlaying = true)
         }
 
     if (showSavedIn && currentSong != null) {
@@ -1894,7 +1894,6 @@ fun PlayerOptionsSheet(
                     onUseVideoId = { videoId ->
                         val song = currentSong ?: return@YouTubeSearchView
                         setYouTubeAlternativeStream(context, alternativeKey, videoId)
-                        SongPlayer.invalidateResolvedStream(song.url)
                         currentAlternative = getAlternativeStream(context, alternativeKey)
                         showYouTubeSearch = false
                         showAlternativeStream = false
@@ -1903,6 +1902,7 @@ fun PlayerOptionsSheet(
                             "Alternative stream set to YouTube",
                             Toast.LENGTH_SHORT
                         ).show()
+                        SongPlayer.invalidateSongCache(song, context, reloadIfPlaying = true)
                         onDismiss()
                     },
                 )
@@ -1922,13 +1922,13 @@ fun PlayerOptionsSheet(
                             ).show()
                         } else {
                             setYouTubeAlternativeStream(context, alternativeKey, videoId)
-                            SongPlayer.invalidateResolvedStream(song.url)
                             currentAlternative = getAlternativeStream(context, alternativeKey)
                             Toast.makeText(
                                 context,
                                 "Alternative stream set to YouTube",
                                 Toast.LENGTH_SHORT
                             ).show()
+                            SongPlayer.invalidateSongCache(song, context, reloadIfPlaying = true)
                         }
                     },
                     onPickLocal = {
@@ -1937,10 +1937,9 @@ fun PlayerOptionsSheet(
                     onClear = {
                         val song = currentSong ?: return@AlternativeStreamEditor
                         clearAlternativeStream(context, alternativeKey)
-                        SongPlayer.invalidateResolvedStream(song.url)
                         currentAlternative = null
-                        Toast.makeText(context, "Alternative stream cleared", Toast.LENGTH_SHORT)
-                            .show()
+                        Toast.makeText(context, "Alternative stream cleared", Toast.LENGTH_SHORT).show()
+                        SongPlayer.invalidateSongCache(song, context, reloadIfPlaying = true)
                     },
                     onOpenYouTubeSearch = { showYouTubeSearch = true },
                 )
@@ -1985,7 +1984,6 @@ fun PlayerOptionsSheet(
                     icon = Icons.Default.Share,
                     label = "Share"
                 ) {
-                    // Share the real Spotify track link when we know the id.
                     val shareText = currentSong?.spotifyTrackId?.takeIf { it.isNotBlank() }
                         ?.let { "https://open.spotify.com/track/$it" }
                         ?: "Listening to $title by $singer"
@@ -2031,6 +2029,15 @@ fun PlayerOptionsSheet(
                     trailingArrow = true,
                 ) {
                     showAlternativeStream = true
+                }
+                PlayerMenuRow(
+                    icon = Icons.Default.Refresh,
+                    label = "Invalidate cache",
+                    enabled = currentSong != null,
+                ) {
+                    val song = currentSong ?: return@PlayerMenuRow
+                    onDismiss()
+                    SongPlayer.invalidateSongCache(song, context, reloadIfPlaying = true)
                 }
                 PlayerMenuRow(
                     icon = if (isLiked.value) Icons.Default.Favorite else Icons.Default.FavoriteBorder,

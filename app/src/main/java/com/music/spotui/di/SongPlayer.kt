@@ -326,12 +326,60 @@ object SongPlayer {
         streamCache.remove(song)
         sourceCache.remove(song)
         qualityCache.remove(song)
+        qualityTierCache.remove(song)
         videoCandidatesCache.remove("$song|FILTER_SONG")
         videoCandidatesCache.remove("$song|FILTER_VIDEO")
         appCtx?.let { ctx ->
             com.music.spotui.data.preferences.clearCachedVideoId(ctx, song)
             com.music.spotui.data.preferences.clearCachedStream(ctx, song)
             clearMediaCacheForTrack(ctx, song)
+        }
+    }
+
+    fun invalidateSongCache(
+        song: com.music.spotui.data.entity.SongsModel,
+        context: Context,
+        reloadIfPlaying: Boolean = true,
+    ) {
+        invalidateSongCacheByUrl(song.url, context, reloadIfPlaying, songTitle = song.title, songId = song.id)
+    }
+
+    fun invalidateSongCacheByUrl(
+        songUrl: String,
+        context: Context,
+        reloadIfPlaying: Boolean = true,
+        songTitle: String? = null,
+        songId: Int? = null,
+    ) {
+        if (songUrl.isBlank()) return
+        val appContext = context.applicationContext
+
+        // 1. Clear memory & disk cache for this track ONLY
+        invalidateResolvedStream(songUrl)
+        inFlightResolutions.remove(songUrl)?.cancel()
+
+        // 2. Determine if currently playing
+        val currentPlayingId = boundState?.songId?.value
+        val isCurrentlyPlaying = (songId != null && songId != 0 && currentPlayingId == songId) ||
+                (boundState?.songUrl?.value == songUrl && songUrl.isNotBlank())
+
+        val title = songTitle ?: boundState?.queue?.value?.firstOrNull { it.url == songUrl }?.title ?: "track"
+
+        if (isCurrentlyPlaying && reloadIfPlaying) {
+            exoPlayer?.stop()
+            exoPlayer?.clearMediaItems()
+            android.widget.Toast.makeText(
+                appContext,
+                "Cache cleared for '$title' — Reloading...",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+            playSong(songUrl, appContext, if (songId != null && songId != 0) "song/$songId" else null)
+        } else {
+            android.widget.Toast.makeText(
+                appContext,
+                "Cache cleared for '$title'",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
         }
     }
 

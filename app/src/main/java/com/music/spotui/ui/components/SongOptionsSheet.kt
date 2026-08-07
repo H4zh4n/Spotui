@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -213,6 +214,13 @@ fun SongOptionsSheet(
                         }
                     }
                 }
+            }
+            SongMenuRow(
+                icon = Icons.Default.Refresh,
+                label = "Invalidate cache",
+            ) {
+                onDismiss()
+                com.music.spotui.di.SongPlayer.invalidateSongCache(song, context, reloadIfPlaying = true)
             }
             val artist = song.singer.substringBefore(",").trim()
             SongMenuRow(Icons.Default.Person, "Go to artist", enabled = artist.isNotBlank(), trailingArrow = true) {
