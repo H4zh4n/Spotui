@@ -495,14 +495,12 @@ object SongPlayer {
     fun prefetch(song: String, context: Context) {
         if (song.isBlank() || streamCache.containsKey(song)) return
         val appContext = context.applicationContext
-        // No point resolving YouTube streams while Spotify web is the engine — it's
-        // wasted network/CPU that competes with the streaming audio (caused stutter).
+        // No point resolving streams while Spotify web is the active engine.
         if (webPlaybackActive()) return
-        if (deezerEnabled && com.music.spotui.data.preferences.isDeezerEnabled(appContext)) return
-        // Lossless FLAC pre-buffering now uses stable cache keys (LosslessCacheKeyFactory)
-        // and ResolvingDataSource to handle stream URLs without expiring mid-track.
+        // Lossless FLAC & YouTube pre-buffering uses LosslessCacheKeyFactory
+        // and ResolvingDataSource to handle stream URLs seamlessly.
         scope.launch {
-            val url = runCatching { resolveStreamUrl(song, appContext) }.getOrNull()
+            val url = runCatching { resolveStreamUrl(song, appContext, forPlayback = false) }.getOrNull()
             if (url != null) cacheIntro(url, appContext)
         }
     }
@@ -609,6 +607,8 @@ object SongPlayer {
         }.onFailure { Log.d(TAG, "intro preload skipped: ${it.message}") }
     }
 
+    private val inFlightResolutions = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.Deferred<String?>>()
+
     // forPlayback=true only for the track actually being played — so background
     // prefetch of upcoming tracks doesn't clobber the current source badge (a
     // prefetch resolving the NEXT track via YouTube was flipping the badge to
@@ -622,6 +622,42 @@ object SongPlayer {
             }
             return song
         }
+
+        // If an in-flight resolution for this exact song query is already running
+        // (e.g. background prefetch was resolving it and user tapped to play it),
+        // await the existing in-flight job instead of starting from scratch!
+        val existingDeferred = inFlightResolutions[song]
+        if (existingDeferred != null && existingDeferred.isActive) {
+            if (forPlayback) {
+                val cleanTitle = cleanTrackTitle(song, metaArtist)
+                logResolution("Awaiting in-flight background resolution for '$cleanTitle'...")
+                updateResolveStatus(true, "Resolving stream...")
+            }
+            val result = existingDeferred.await()
+            if (forPlayback && result != null) {
+                val source = sourceCache[song] ?: "Lossless"
+                val quality = qualityCache[song] ?: ""
+                currentSource = source
+                currentQuality = quality
+                val note = if (quality.isNotBlank()) "Source: $source • Format: $quality" else "Source: $source"
+                boundState?.updateResolveDetailNote(note)
+                updateResolveStatus(false)
+            }
+            return result
+        }
+
+        val deferred = scope.async {
+            doResolveStreamUrl(song, appContext, forPlayback)
+        }
+        inFlightResolutions[song] = deferred
+        try {
+            return deferred.await()
+        } finally {
+            inFlightResolutions.remove(song, deferred)
+        }
+    }
+
+    private suspend fun doResolveStreamUrl(song: String, appContext: Context, forPlayback: Boolean): String? {
 
         val quality = com.music.spotui.data.preferences.currentStreamingQuality(appContext)
         val expectedTier = quality.name
