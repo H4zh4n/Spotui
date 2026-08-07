@@ -340,14 +340,23 @@ object SongPlayer {
         song: com.music.spotui.data.entity.SongsModel,
         context: Context,
         reloadIfPlaying: Boolean = true,
+        clearAltStream: Boolean = true,
     ) {
-        invalidateSongCacheByUrl(song.url, context, reloadIfPlaying, songTitle = song.title, songId = song.id)
+        invalidateSongCacheByUrl(
+            songUrl = song.url,
+            context = context,
+            reloadIfPlaying = reloadIfPlaying,
+            clearAltStream = clearAltStream,
+            songTitle = song.title,
+            songId = song.id
+        )
     }
 
     fun invalidateSongCacheByUrl(
         songUrl: String,
         context: Context,
         reloadIfPlaying: Boolean = true,
+        clearAltStream: Boolean = true,
         songTitle: String? = null,
         songId: Int? = null,
     ) {
@@ -358,12 +367,29 @@ object SongPlayer {
         invalidateResolvedStream(songUrl)
         inFlightResolutions.remove(songUrl)?.cancel()
 
+        val matchSong = boundState?.queue?.value?.firstOrNull { it.url == songUrl }
+
+        // Clear stored alternative stream overrides if requested (e.g. manual Invalidate Cache tap)
+        if (clearAltStream) {
+            val altKey = alternativeKeyRegistry.remove(songUrl)
+            if (altKey != null) {
+                com.music.spotui.data.preferences.clearAlternativeStream(appContext, altKey)
+            }
+            if (matchSong != null) {
+                val key = com.music.spotui.data.preferences.alternativeStreamKey(matchSong)
+                com.music.spotui.data.preferences.clearAlternativeStream(appContext, key)
+            }
+            if (songId != null && songId != 0) {
+                com.music.spotui.data.preferences.clearAlternativeStream(appContext, "song/$songId")
+            }
+        }
+
         // 2. Determine if currently playing
         val currentPlayingId = boundState?.songId?.value
         val isCurrentlyPlaying = (songId != null && songId != 0 && currentPlayingId == songId) ||
                 (boundState?.songUrl?.value == songUrl && songUrl.isNotBlank())
 
-        val title = songTitle ?: boundState?.queue?.value?.firstOrNull { it.url == songUrl }?.title ?: "track"
+        val title = songTitle ?: matchSong?.title ?: "track"
 
         if (isCurrentlyPlaying && reloadIfPlaying) {
             exoPlayer?.stop()

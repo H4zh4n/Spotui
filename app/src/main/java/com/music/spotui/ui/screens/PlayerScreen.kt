@@ -1859,7 +1859,7 @@ fun PlayerOptionsSheet(
             )
             currentAlternative = getAlternativeStream(context, alternativeKey)
             Toast.makeText(context, "Alternative stream set to local file", Toast.LENGTH_SHORT).show()
-            SongPlayer.invalidateSongCache(song, context, reloadIfPlaying = true)
+            SongPlayer.invalidateSongCache(song, context, reloadIfPlaying = true, clearAltStream = false)
         }
 
     if (showSavedIn && currentSong != null) {
@@ -1902,7 +1902,7 @@ fun PlayerOptionsSheet(
                             "Alternative stream set to YouTube",
                             Toast.LENGTH_SHORT
                         ).show()
-                        SongPlayer.invalidateSongCache(song, context, reloadIfPlaying = true)
+                        SongPlayer.invalidateSongCache(song, context, reloadIfPlaying = true, clearAltStream = false)
                         onDismiss()
                     },
                 )
@@ -1928,7 +1928,7 @@ fun PlayerOptionsSheet(
                                 "Alternative stream set to YouTube",
                                 Toast.LENGTH_SHORT
                             ).show()
-                            SongPlayer.invalidateSongCache(song, context, reloadIfPlaying = true)
+                            SongPlayer.invalidateSongCache(song, context, reloadIfPlaying = true, clearAltStream = false)
                         }
                     },
                     onPickLocal = {
@@ -1939,7 +1939,7 @@ fun PlayerOptionsSheet(
                         clearAlternativeStream(context, alternativeKey)
                         currentAlternative = null
                         Toast.makeText(context, "Alternative stream cleared", Toast.LENGTH_SHORT).show()
-                        SongPlayer.invalidateSongCache(song, context, reloadIfPlaying = true)
+                        SongPlayer.invalidateSongCache(song, context, reloadIfPlaying = true, clearAltStream = true)
                     },
                     onOpenYouTubeSearch = { showYouTubeSearch = true },
                 )
