@@ -151,10 +151,10 @@ private const val KEY_AUDIO_PROVIDER_ORDER = "audio_provider_order"
 fun getAudioProviderOrder(c: Context): List<AudioProviderOrderItem> {
     val defaultList = listOf(
         AudioProviderOrderItem.DEEZER,
+        AudioProviderOrderItem.SPOTIFLAC,
         AudioProviderOrderItem.AMAZON,
         AudioProviderOrderItem.QOBUZ,
         AudioProviderOrderItem.TIDAL,
-        AudioProviderOrderItem.SPOTIFLAC,
         AudioProviderOrderItem.SOUNDCLOUD,
         AudioProviderOrderItem.YOUTUBE_MUSIC,
     )
@@ -170,7 +170,7 @@ fun getAudioProviderOrder(c: Context): List<AudioProviderOrderItem> {
 
     val missing = AudioProviderOrderItem.values().filter { it !in parsed }
     return if (missing.isNotEmpty()) {
-        val complete = (missing + parsed).distinct()
+        val complete = (parsed + missing).distinct()
         setAudioProviderOrder(c, complete)
         complete
     } else {
