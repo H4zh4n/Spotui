@@ -5,6 +5,62 @@ compared to the main Spotui repository.
 
 ---
 
+## 🚀 Release v1.4.5
+
+### 💾 Lossless & Stream Controls
+
+* **Universal Downloads:** Lossless downloads now work directly from Amazon, Qobuz, Deezer, and
+  SoundCloud based on provider priority.
+* **Provider Toggles:** Enable or disable individual audio providers using checkboxes in Settings (
+  YouTube Music remains fallback).
+* **Cache Resets:** Per-song "Invalidate cache" player menu option and global cache reset for stream
+  overrides.
+
+### 🛠 Playback Polish & Fixes
+
+* **Crossfade Sync:** Fixed UI flickering and premature metadata/artwork updates during crossfades.
+* **Accurate Resolution Logs:** Trace logs report whether playback originates from memory, disk
+  cache, or offline downloads.
+* **Gesture & Engine Fixes:** Resolved swipe-to-skip artwork desync, YouTube cache poisoning, replay
+  loops, and prefetch network restarts.
+
+---
+
+## 🚀 Release v1.4.4
+
+### 🎧 Lossless Ecosystem & Deezer
+
+* **Native Provider Integration:** Direct stream resolution for Amazon Music, Qobuz, SoundCloud, and
+  Deezer.
+* **Custom Provider Priority:** Rank search order for audio providers in Settings.
+* **Native Deezer Login:** Secure ARL login support for direct FLAC/HQ streaming with automated
+  prompts.
+* **Live Bitrate Display:** Parses FLAC frames in real time to display live stream bitrates on
+  screen.
+* **Resilient Playback:** Instant connection recovery at the exact millisecond during network drops.
+
+### 📱 Library, Home & Local Files
+
+* **Local Music Import:** Import device audio files with full metadata and embedded artwork parsing.
+* **Home Screen Filters & Feed:** Added category filter pills (Music, Podcasts, Audiobooks, Followed
+  Artists) and a "Latest Releases" feed.
+* **Fast Scrollbars:** Spotify-style draggable scrollbar thumb with floating position indicators
+  across long lists.
+* **Global Search & Sorting:** Inline search and multi-criteria sorting across Albums, Liked Songs,
+  History, Podcasts, and Library.
+
+### ⚙️ Player UI & System Integration
+
+* **Audio Device Switcher:** Direct output selector (Speaker, Bluetooth, Wired) accessible from the
+  player screen or Settings.
+* **Mini-Player Gestures:** Swipe left or right on the mini-player to quickly skip tracks.
+* **Quality-Aware Caching:** Hot-swaps playback quality immediately upon changing settings without
+  stopping playback.
+* **Trace Logs & Bot Detection:** Copyable provider attempt logs and a manual "Reset Session" button
+  for YouTube bot blocks.
+
+---
+
 ## 🚀 Release v1.4.3
 
 ### 🎧 Audio Engine
