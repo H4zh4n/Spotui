@@ -64,6 +64,11 @@ object SongPlayer {
         com.music.spotui.data.preferences.clearAllCachedStreams(appContext)
         com.music.spotui.data.preferences.clearAllAlternativeStreams(appContext)
         com.music.spotui.data.preferences.clearAllResolvedVideos(appContext)
+        runCatching {
+            mediaCache?.keys?.forEach { key ->
+                runCatching { mediaCache?.removeResource(key) }
+            }
+        }
 
         val currentPlayingSong = boundState?.queue?.value?.firstOrNull { 
             it.id == boundState?.songId?.value || (it.url == boundState?.songUrl?.value && it.url.isNotBlank())
@@ -441,7 +446,11 @@ object SongPlayer {
         currentMediaId = resolvedMediaId
 
         // Immediately populate now-playing metadata if matching track exists in queue
-        boundState?.queue?.value?.firstOrNull { it.url == song }?.let { track ->
+        val matchTrack = boundState?.queue?.value?.firstOrNull { it.url == song }
+            ?: (resolvedMediaId?.removePrefix("song/")?.toIntOrNull())?.let { id ->
+                boundState?.queue?.value?.firstOrNull { it.id == id }
+            }
+        matchTrack?.let { track ->
             if (track.title.isNotBlank()) metaTitle = track.title
             if (track.singer.isNotBlank()) metaArtist = track.singer
             if (track.coverUri.isNotBlank()) metaCover = track.coverUri
@@ -528,7 +537,7 @@ object SongPlayer {
                         return@withContext
                     }
                     ensurePlayer(appContext)
-                    player!!.setMediaItem(buildMediaItem(streamUrl, streamMimeType(streamUrl)))
+                    player!!.setMediaItem(buildMediaItem(streamUrl, streamMimeType(streamUrl), song))
                     player!!.prepare()
                     // Restored session: continue from where the last run stopped.
                     if (song == restoreQuery && restorePositionMs > 0) {
@@ -550,7 +559,7 @@ object SongPlayer {
 
     // Build a MediaItem carrying the current track's metadata so the system media
     // notification (MediaSession) shows the right title / artist / artwork.
-    private fun buildMediaItem(streamUrl: String, mimeType: String? = null): MediaItem {
+    private fun buildMediaItem(streamUrl: String, mimeType: String? = null, songQuery: String = ""): MediaItem {
         val metadataBuilder = androidx.media3.common.MediaMetadata.Builder()
             .setTitle(metaTitle)
             .setArtist(metaArtist)
@@ -559,9 +568,14 @@ object SongPlayer {
             metadataBuilder, ctx, metaCover, currentMediaId, streamUrl
         )
         val metadata = metadataBuilder.build()
+        val query = songQuery.ifBlank { currentRequest }
+        val spotifyId = trackIdRegistry[query] ?: spotifyTrackIdForPlayback(query)
+        val stableKey = com.music.spotui.audio.LosslessCacheKeyFactory.buildCacheKey(spotifyId, streamUrl)
+
         return MediaItem.Builder()
             .apply { currentMediaId?.let { setMediaId(it) } }
             .setUri(streamUrl)
+            .setCustomCacheKey(stableKey)
             // Hint the container so ExoPlayer picks the right source/extractor even
             // when the URL has no extension: TIDAL lossless is a DASH .mpd manifest,
             // and single-file lossless is FLAC.
@@ -650,10 +664,13 @@ object SongPlayer {
         val cacheFactory = cacheDataSourceFactory(context)
 
         val resolvingFactory = androidx.media3.datasource.ResolvingDataSource.Factory(cacheFactory) { dataSpec ->
+            if (!dataSpec.key.isNullOrBlank()) {
+                return@Factory dataSpec
+            }
             val uriStr = dataSpec.uri.toString()
             val cleanId = trackIdRegistry.entries.firstOrNull { (_, spotifyId) ->
                 spotifyId.isNotBlank() && uriStr.contains(spotifyId)
-            }?.value ?: spotifyTrackIdForPlayback(currentRequest)
+            }?.value
 
             val stableKey = com.music.spotui.audio.LosslessCacheKeyFactory.buildCacheKey(cleanId, uriStr)
             dataSpec.buildUpon()
@@ -2145,8 +2162,9 @@ object SongPlayer {
         }
         val curId = state.songId.value
         val cur = q.indexOfFirst { it.id == curId }
-            .let { if (it >= 0) it else state.songIndex.value }
-            .coerceIn(0, q.size - 1)
+            .takeIf { it >= 0 }
+            ?: q.indexOfFirst { it.url == state.songUrl.value }.takeIf { it >= 0 }
+            ?: state.songIndex.value.coerceIn(0, q.size - 1)
         android.util.Log.d(TAG, "next: cur=$cur q.size=${q.size} repeat=${state.repeat.value} curId=$curId")
         val nextIdx: Int
         if (cur < q.size - 1) {
@@ -2181,8 +2199,9 @@ object SongPlayer {
         }
         val curId = state.songId.value
         val cur = q.indexOfFirst { it.id == curId }
-            .let { if (it >= 0) it else state.songIndex.value }
-            .coerceIn(0, q.size - 1)
+            .takeIf { it >= 0 }
+            ?: q.indexOfFirst { it.url == state.songUrl.value }.takeIf { it >= 0 }
+            ?: state.songIndex.value.coerceIn(0, q.size - 1)
         android.util.Log.d(TAG, "previous: cur=$cur q.size=${q.size} repeat=${state.repeat.value}")
         val nextIdx: Int
         if (cur > 0) {
@@ -2333,6 +2352,9 @@ object SongPlayer {
         val q = state.queue.value
         if (q.isEmpty()) return
         val cur = q.indexOfFirst { it.id == state.songId.value }
+            .takeIf { it >= 0 }
+            ?: q.indexOfFirst { it.url == state.songUrl.value }.takeIf { it >= 0 }
+            ?: state.songIndex.value.coerceIn(0, q.size - 1)
         if (cur < 0 || cur >= q.size - 1) return // last track ends normally
         val nextSong = q[cur + 1]
         isCrossfading = true
@@ -2360,9 +2382,13 @@ object SongPlayer {
                     com.music.spotui.util.ArtworkHelper.attachArtwork(
                         metadataBuilder, ctx, nextSong.coverUri, "song/${nextSong.id}", nextUrl
                     )
+                    val stableKey = com.music.spotui.audio.LosslessCacheKeyFactory.buildCacheKey(
+                        nextSong.spotifyTrackId.ifBlank { null }, nextUrl
+                    )
                     val item = MediaItem.Builder()
                         .setMediaId("song/${nextSong.id}")
                         .setUri(nextUrl)
+                        .setCustomCacheKey(stableKey)
                         .apply { streamMimeType(nextUrl)?.let { setMimeType(it) } }
                         .setMediaMetadata(metadataBuilder.build())
                         .build()

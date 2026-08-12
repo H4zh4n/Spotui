@@ -86,28 +86,23 @@ class PlaybackService : MediaLibraryService() {
                     // The crossfade routine itself handles the transition and promotes the new player.
                     return
                 }
-                val p = SongPlayer.exoPlayer
-                if (p != null) {
-                    val duration = p.duration
-                    val position = p.currentPosition
-                    if (duration <= 0 || position < duration - 6000) {
-                        // Spurious STATE_ENDED event (e.g. player cleared/reset or ended prematurely before loading)! Ignore it!
-                        return
-                    }
-                }
                 when (currentSongState.repeat.value) {
                     RepeatMode.ONE -> {
-                        val queue = currentSongState.queue.value
-                        if (queue.isNotEmpty()) {
-                            val curId = currentSongState.songId.value
-                            val cur = queue.indexOfFirst { it.id == curId }
-                                .let { if (it >= 0) it else currentSongState.songIndex.value }
-                                .coerceIn(0, queue.size - 1)
-                            val song = queue[cur]
-                            SongPlayer.playSong(song.url, applicationContext, "song/${song.id}")
+                        val p = SongPlayer.exoPlayer
+                        if (p != null) {
+                            p.seekTo(0)
+                            p.play()
                         } else {
-                            SongPlayer.exoPlayer?.seekTo(0)
-                            SongPlayer.exoPlayer?.play()
+                            val queue = currentSongState.queue.value
+                            if (queue.isNotEmpty()) {
+                                val curId = currentSongState.songId.value
+                                val cur = queue.indexOfFirst { it.id == curId }
+                                    .takeIf { it >= 0 }
+                                    ?: queue.indexOfFirst { it.url == currentSongState.songUrl.value }.takeIf { it >= 0 }
+                                    ?: currentSongState.songIndex.value.coerceIn(0, queue.size - 1)
+                                val song = queue[cur]
+                                SongPlayer.playSong(song.url, applicationContext, "song/${song.id}")
+                            }
                         }
                     }
 
@@ -120,8 +115,9 @@ class PlaybackService : MediaLibraryService() {
                         if (queue.isNotEmpty()) {
                             val curId = currentSongState.songId.value
                             val cur = queue.indexOfFirst { it.id == curId }
-                                .let { if (it >= 0) it else currentSongState.songIndex.value }
-                                .coerceIn(0, queue.size - 1)
+                                .takeIf { it >= 0 }
+                                ?: queue.indexOfFirst { it.url == currentSongState.songUrl.value }.takeIf { it >= 0 }
+                                ?: currentSongState.songIndex.value.coerceIn(0, queue.size - 1)
                             if (cur < queue.size - 1) {
                                 advance(forward = true)
                             }
@@ -205,6 +201,7 @@ class PlaybackService : MediaLibraryService() {
 
         // Let the player advance the in-app queue itself during a crossfade.
         SongPlayer.bindState(currentSongState)
+        SongPlayer.ensureCreated(this)
         val base = SongPlayer.exoPlayer ?: return
         base.addListener(playerListener)
 
@@ -226,6 +223,10 @@ class PlaybackService : MediaLibraryService() {
 
         // When a crossfade promotes a new ExoPlayer instance, re-bind the session to it
         // (runs on the main thread; setPlayer is the supported way to swap a session's player).
+        SongPlayer.onPlayerCreated = { newPlayer ->
+            if (!showingWeb) mediaSession?.player = wrap(newPlayer)
+            newPlayer.addListener(playerListener)
+        }
         SongPlayer.onPlayerSwapped = { newPlayer ->
             if (!showingWeb) mediaSession?.player = wrap(newPlayer)
             newPlayer.addListener(playerListener)
@@ -347,13 +348,23 @@ class PlaybackService : MediaLibraryService() {
                     .add(COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
                     .add(COMMAND_SEEK_TO_PREVIOUS)
                     .add(COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+                    .add(COMMAND_PLAY_PAUSE)
                     .build()
 
             override fun isCommandAvailable(command: Int): Boolean = when (command) {
                 COMMAND_SEEK_TO_NEXT, COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
-                COMMAND_SEEK_TO_PREVIOUS, COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> true
+                COMMAND_SEEK_TO_PREVIOUS, COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
+                COMMAND_PLAY_PAUSE -> true
 
                 else -> super.isCommandAvailable(command)
+            }
+
+            override fun play() {
+                SongPlayer.play()
+            }
+
+            override fun pause() {
+                SongPlayer.pause()
             }
 
             override fun hasNextMediaItem() = true

@@ -8,6 +8,11 @@ object LosslessCacheKeyFactory : CacheKeyFactory {
     private const val SPOTIFY_PREFIX = "spotify:track:"
 
     fun buildCacheKey(spotifyTrackId: String?, url: String): String {
+        val cleanId = spotifyTrackId?.removePrefix(SPOTIFY_PREFIX)?.substringBefore('|')?.trim()
+        if (!cleanId.isNullOrBlank()) {
+            return "spotui-flac:$cleanId"
+        }
+
         val uri = Uri.parse(url)
         val host = uri.host.orEmpty()
         val path = uri.path.orEmpty()
@@ -16,25 +21,13 @@ object LosslessCacheKeyFactory : CacheKeyFactory {
             val videoId = uri.getQueryParameter("docid")
                 ?: uri.getQueryParameter("id")
                 ?: uri.getQueryParameter("v")
-            return if (!videoId.isNullOrBlank()) {
-                "spotui-yt:$videoId:$path"
-            } else {
-                val urlHash = java.util.zip.CRC32().apply { update(url.toByteArray()) }.value
-                "spotui-yt-url:$urlHash:$path"
+            if (!videoId.isNullOrBlank()) {
+                return "spotui-yt:$videoId:$path"
             }
         }
 
-        val cleanId = spotifyTrackId?.removePrefix(SPOTIFY_PREFIX)?.substringBefore('|')?.trim()
-        if (!cleanId.isNullOrBlank()) {
-            return "spotui-flac:$cleanId"
-        }
-
-        val scheme = uri.scheme
-        return if (scheme != null && host.isNotBlank()) {
-            "spotui-uri:$scheme://$host$path"
-        } else {
-            "spotui-raw:$url"
-        }
+        val urlHash = java.util.zip.CRC32().apply { update(url.toByteArray()) }.value
+        return "spotui-raw:$urlHash"
     }
 
     override fun buildCacheKey(dataSpec: DataSpec): String {

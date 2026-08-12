@@ -110,6 +110,8 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
     private fun currentPositionIn(queueSongs: List<SongsModel>): Int {
         val byId = queueSongs.indexOfFirst { it.id == currentSongId.value }
         if (byId >= 0) return byId
+        val byUrl = queueSongs.indexOfFirst { it.url == currentSongState.songUrl.value }
+        if (byUrl >= 0) return byUrl
         return currentSongIndex.value.coerceIn(0, queueSongs.size - 1)
     }
 
@@ -163,10 +165,10 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
         val cur = currentPositionIn(queueSongs)
         // Top up the queue with Spotify recommendations as we approach the end.
         // Don't append radio tracks when repeat-ALL is on — we want to loop the exact queue.
-        if (currentSongState.repeat.value != RepeatMode.ALL) {
+        if (currentSongState.repeat.value != RepeatMode.ALL && currentSongState.repeat.value != RepeatMode.ONE) {
             maybeExtendRadio(queueSongs, cur)
         }
-        if (cur >= queueSongs.size - 1 && autoplayRadioEnabled && currentSongState.repeat.value != RepeatMode.ALL) {
+        if (cur >= queueSongs.size - 1 && autoplayRadioEnabled && currentSongState.repeat.value == RepeatMode.OFF) {
             // End of the queue (e.g. a single). Don't loop back to the start —
             // wait for the radio fetch kicked off above to append tracks and
             // continue into them, like Spotify's autoplay.
@@ -258,20 +260,24 @@ class PlayerViewModel @Inject constructor(private val currentSongState: CurrentS
                         return@launch
                     }
                     if (!radioLoading) {
-                        val first = queueSongs.first()
-                        withContext(Dispatchers.Main) {
-                            updateSongState(first.coverUri, first.title, first.singer, true, first.id, 0, first.album)
-                            SongPlayer.playSong(first.url, context, "song/${first.id}")
+                        if (currentSongState.repeat.value == RepeatMode.ALL) {
+                            val first = queueSongs.first()
+                            withContext(Dispatchers.Main) {
+                                updateSongState(first.coverUri, first.title, first.singer, true, first.id, 0, first.album)
+                                SongPlayer.playSong(first.url, context, "song/${first.id}")
+                            }
                         }
                         return@launch
                     }
                     delay(250L)
                 }
-                // Radio never arrived (offline / no seed id) — loop like before.
-                val first = queueSongs.first()
-                withContext(Dispatchers.Main) {
-                    updateSongState(first.coverUri, first.title, first.singer, true, first.id, 0, first.album)
-                    SongPlayer.playSong(first.url, context, "song/${first.id}")
+                // Radio never arrived (offline / no seed id) — loop only if repeat is ALL.
+                if (currentSongState.repeat.value == RepeatMode.ALL) {
+                    val first = queueSongs.first()
+                    withContext(Dispatchers.Main) {
+                        updateSongState(first.coverUri, first.title, first.singer, true, first.id, 0, first.album)
+                        SongPlayer.playSong(first.url, context, "song/${first.id}")
+                    }
                 }
             } finally {
                 awaitingRadioContinue = false

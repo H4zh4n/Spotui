@@ -466,9 +466,21 @@ fun PlayerScreen(navController: NavController) {
     val currentIndex = queueSongs.indexOfFirst { it.id == songId }
         .let { if (it >= 0) it else 0 }
     val artworkPagerState = rememberPagerState(
-        initialPage = currentIndex,
+        initialPage = currentIndex.coerceIn(0, (queueSongs.size - 1).coerceAtLeast(0)),
         pageCount = { queueSongs.size.coerceAtLeast(1) },
     )
+    var wasUserDragged by remember { mutableStateOf(false) }
+
+    LaunchedEffect(artworkPagerState) {
+        artworkPagerState.interactionSource.interactions.collect { interaction ->
+            when (interaction) {
+                is androidx.compose.foundation.interaction.DragInteraction.Start -> wasUserDragged = true
+                is androidx.compose.foundation.interaction.DragInteraction.Cancel -> wasUserDragged = false
+                is androidx.compose.foundation.interaction.DragInteraction.Stop -> {}
+            }
+        }
+    }
+
     // External track changes (auto-advance, prev/next buttons, queue edits) → snap the
     // pager to the new track. Guard on settled state so we don't fight an in-progress swipe.
     LaunchedEffect(currentIndex, queueSongs.size) {
@@ -479,19 +491,22 @@ fun PlayerScreen(navController: NavController) {
             artworkPagerState.scrollToPage(currentIndex)
         }
     }
-    // User settled the pager on a different page → play that track. Compare against the
+    // User settled the pager on a different page via touch drag → play that track. Compare against the
     // live current id to avoid a replay feedback loop.
     LaunchedEffect(artworkPagerState) {
         snapshotFlow { artworkPagerState.settledPage }
             .distinctUntilChanged()
             .collect { page ->
-                val currentQueue = playerViewModel.queue.value
-                val currentIdx = currentQueue.indexOfFirst { it.id == playerViewModel.currentSongId.value }
-                    .let { if (it >= 0) it else 0 }
-                if (page != currentIdx && page in currentQueue.indices) {
-                    playerViewModel.playSongAt(currentQueue, page, context)
-                    currentQueue.getOrNull(page)?.let { target ->
-                        isLiked.value = isSongLiked(context, target.id.toString())
+                if (wasUserDragged) {
+                    wasUserDragged = false
+                    val currentQueue = playerViewModel.queue.value
+                    val currentIdx = currentQueue.indexOfFirst { it.id == playerViewModel.currentSongId.value }
+                        .let { if (it >= 0) it else 0 }
+                    if (page != currentIdx && page in currentQueue.indices) {
+                        playerViewModel.playSongAt(currentQueue, page, context)
+                        currentQueue.getOrNull(page)?.let { target ->
+                            isLiked.value = isSongLiked(context, target.id.toString())
+                        }
                     }
                 }
             }
