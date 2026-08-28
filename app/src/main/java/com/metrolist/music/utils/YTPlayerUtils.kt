@@ -47,9 +47,9 @@ object YTPlayerUtils {
     private const val logTag = "YTPlayerUtils"
     private const val TAG = "YTPlayerUtils"
     /** Max seconds to wait for signature-timestamp resolution before giving up. */
-    private const val SIG_FUTURE_TIMEOUT_SEC = 10L
+    private const val SIG_FUTURE_TIMEOUT_SEC = 5L
     /** Max seconds to wait for PoToken generation before giving up. */
-    private const val POT_FUTURE_TIMEOUT_SEC = 14L
+    private const val POT_FUTURE_TIMEOUT_SEC = 5L
 
     private val httpClient = OkHttpClient.Builder()
         .proxy(YouTube.proxy)

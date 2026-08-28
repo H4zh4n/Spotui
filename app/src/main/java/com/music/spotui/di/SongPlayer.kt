@@ -2,6 +2,8 @@ package com.music.spotui.di
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.wifi.WifiManager
+import android.os.PowerManager
 import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
@@ -40,6 +42,40 @@ object SongPlayer {
     private const val SPOTIFY_TRACK_PREFIX = "spotify:track:"
     private var player: ExoPlayer? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
+
+    @Synchronized
+    fun acquireWakeLock(context: Context, tag: String = "spotui:playback", timeoutMs: Long = 60_000L) {
+        runCatching {
+            val appContext = context.applicationContext
+            if (wakeLock == null) {
+                val pm = appContext.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                wakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Spotui:AudioWakeLock")?.apply {
+                    setReferenceCounted(false)
+                }
+            }
+            wakeLock?.acquire(timeoutMs)
+
+            if (wifiLock == null) {
+                val wm = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+                @Suppress("DEPRECATION")
+                wifiLock = wm?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "Spotui:WifiLock")?.apply {
+                    setReferenceCounted(false)
+                }
+            }
+            wifiLock?.acquire()
+        }.onFailure { Log.w(TAG, "Failed to acquire wake/wifi lock for $tag", it) }
+    }
+
+    @Synchronized
+    fun releaseWakeLock(tag: String? = null) {
+        runCatching {
+            if (wakeLock?.isHeld == true) wakeLock?.release()
+            if (wifiLock?.isHeld == true) wifiLock?.release()
+        }.onFailure { Log.w(TAG, "Failed to release wake/wifi lock for $tag", it) }
+    }
 
     // Cache of resolved stream URLs keyed by the "title artist" query, so replays
     // and prefetched neighbours start instantly instead of re-hitting the network.
@@ -507,9 +543,11 @@ object SongPlayer {
             }
             Log.w(TAG, "web playback on but no Spotify id for query: $song — using fallback engine")
         }
+        acquireWakeLock(appContext, "spotui:playSong", 60_000L)
         scope.launch {
             try {
                 val streamUrl = resolveStreamUrl(song, appContext, forPlayback = true) ?: run {
+                    releaseWakeLock("spotui:playSong")
                     // Tell the user instead of silently leaving the request on.
                     val existingError = boundState?.resolveError?.value
                     if (currentRequest == song && existingError.isNullOrBlank()) {
@@ -528,11 +566,13 @@ object SongPlayer {
                 }
                 // A newer tap superseded this one while we were resolving — drop it.
                 if (currentRequest != song) {
+                    releaseWakeLock("spotui:playSong")
                     updateResolveStatus(false)
                     return@launch
                 }
                 withContext(Dispatchers.Main) {
                     if (currentRequest != song) {
+                        releaseWakeLock("spotui:playSong")
                         updateResolveStatus(false)
                         return@withContext
                     }
@@ -550,6 +590,7 @@ object SongPlayer {
                 }
                 startPositionWatch()
             } catch (e: Exception) {
+                releaseWakeLock("spotui:playSong")
                 Log.e(TAG, "playSong failed for query: $song", e)
                 boundState?.updateResolveError(e.message ?: "Playback failed")
                 updateResolveStatus(false)
@@ -609,8 +650,13 @@ object SongPlayer {
         // Lossless FLAC & YouTube pre-buffering uses LosslessCacheKeyFactory
         // and ResolvingDataSource to handle stream URLs seamlessly.
         scope.launch {
-            val url = runCatching { resolveStreamUrl(song, appContext, forPlayback = false) }.getOrNull()
-            if (url != null) cacheIntro(url, appContext)
+            acquireWakeLock(appContext, "spotui:prefetch", 30_000L)
+            try {
+                val url = runCatching { resolveStreamUrl(song, appContext, forPlayback = false) }.getOrNull()
+                if (url != null) cacheIntro(url, appContext)
+            } finally {
+                releaseWakeLock("spotui:prefetch")
+            }
         }
     }
 
@@ -740,22 +786,29 @@ object SongPlayer {
         // await the existing in-flight job instead of starting from scratch!
         val existingDeferred = inFlightResolutions[song]
         if (existingDeferred != null && existingDeferred.isActive) {
+            val trackMeta = metadataRegistry[song]
+            val fallbackSong = boundState?.queue?.value?.firstOrNull { it.url == song }
+            val logArtist = trackMeta?.artist ?: fallbackSong?.singer ?: metaArtist
+            val logTitle = trackMeta?.title ?: fallbackSong?.title ?: cleanTrackTitle(song, logArtist)
             if (forPlayback) {
-                val cleanTitle = cleanTrackTitle(song, metaArtist)
-                logResolution("Awaiting in-flight background resolution for '$cleanTitle'...")
+                logResolution("Awaiting in-flight background resolution for '$logTitle'...")
                 updateResolveStatus(true, "Resolving stream...")
             }
-            val result = existingDeferred.await()
-            if (forPlayback && result != null) {
-                val source = sourceCache[song] ?: "Lossless"
-                val quality = qualityCache[song] ?: ""
-                currentSource = source
-                currentQuality = quality
-                val note = if (quality.isNotBlank()) "Source: $source • Format: $quality" else "Source: $source"
-                boundState?.updateResolveDetailNote(note)
-                updateResolveStatus(false)
+            val result = runCatching { existingDeferred.await() }.getOrNull()
+            if (result != null) {
+                if (forPlayback) {
+                    val source = sourceCache[song] ?: "Lossless"
+                    val quality = qualityCache[song] ?: ""
+                    currentSource = source
+                    currentQuality = quality
+                    val note = if (quality.isNotBlank()) "Source: $source • Format: $quality" else "Source: $source"
+                    boundState?.updateResolveDetailNote(note)
+                    updateResolveStatus(false)
+                }
+                return result
             }
-            return result
+            // If the in-flight prefetch returned null (e.g. initial attempt failed/cancelled),
+            // fall through to attempt fresh resolution for playback.
         }
 
         val deferred = scope.async {
@@ -774,10 +827,18 @@ object SongPlayer {
         val quality = com.music.spotui.data.preferences.currentStreamingQuality(appContext)
         val expectedTier = quality.name
 
+        val meta = metadataRegistry[song]
+        val matchSong = boundState?.queue?.value?.firstOrNull { it.url == song }
+        val songArtist = meta?.artist?.ifBlank { null } ?: matchSong?.singer?.ifBlank { null } ?: if (forPlayback) metaArtist else ""
+        val rawTitle = meta?.title?.ifBlank { null } ?: matchSong?.title?.ifBlank { null } ?: cleanTrackTitle(song, songArtist)
+        val cleanTitle = cleanTrackTitle(rawTitle, songArtist)
+        val songAlbum = meta?.album ?: matchSong?.album
+        val songDurationMs = durationRegistry[song]?.toLong() ?: matchSong?.durationMs?.takeIf { it > 0 }?.toLong()
+        val flacSpotifyId = trackIdRegistry[song] ?: matchSong?.spotifyTrackId?.ifBlank { null } ?: spotifyTrackIdForPlayback(song)
+
         if (forPlayback) {
             resolutionLogs.clear()
-            val cleanTitle = cleanTrackTitle(song, metaArtist)
-            logResolution("Resolving stream for '$cleanTitle' by '$metaArtist'")
+            logResolution("Resolving stream for '$cleanTitle' by '$songArtist'")
             boundState?.updateResolveError(null)
             updateResolveStatus(true, "Checking cache...")
         }
@@ -935,7 +996,6 @@ object SongPlayer {
             scope.async {
                 // Resolve ISRC and metadata *before* the provider loop so these
                 // network calls don't eat into the provider time budget.
-                val flacSpotifyId = trackIdRegistry[song] ?: spotifyTrackIdForPlayback(song)
                 val isrc = (flacSpotifyId?.let { isrcRegistry[it] }) ?: runCatching {
                     withTimeoutOrNull(1500L) {
                         flacSpotifyId?.let { id ->
@@ -945,9 +1005,8 @@ object SongPlayer {
                         }
                     }
                 }.getOrNull()
-                val durationMs = durationRegistry[song]?.toLong()
+                val durationMs = songDurationMs
                 val providerOrder = com.music.spotui.data.preferences.getEnabledAudioProviderOrder(appContext)
-                val cleanTitle = cleanTrackTitle(song, metaArtist)
 
                 if (forPlayback) {
                     logResolution("Priority Order: ${providerOrder.joinToString(" → ") { it.displayName }}")
@@ -958,7 +1017,7 @@ object SongPlayer {
                 // timeouts internally. The previous withTimeoutOrNull(4-8s)
                 // was starving providers since ISRC resolution alone took ~3s.
                 if (forPlayback) {
-                    logResolution("Query: mediaId=${flacSpotifyId ?: "(none)"}, title='$cleanTitle', artist='$metaArtist', isrc=${isrc ?: "(none)"}, duration=${durationMs ?: "(none)"}ms")
+                    logResolution("Query: mediaId=${flacSpotifyId ?: "(none)"}, title='$cleanTitle', artist='$songArtist', isrc=${isrc ?: "(none)"}, duration=${durationMs ?: "(none)"}ms")
                 }
                 var result: Triple<String, String, String>? = null
                 var dzLossyFallback: Triple<String, String, String>? = null
@@ -973,8 +1032,8 @@ object SongPlayer {
                                     com.music.spotui.providers.AmazonAudioProvider.Query(
                                         mediaId = flacSpotifyId ?: song,
                                         title = cleanTitle,
-                                        artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
-                                        album = null,
+                                        artists = listOfNotNull(songArtist.takeIf { it.isNotBlank() }),
+                                        album = songAlbum,
                                         durationMs = durationMs,
                                         quality = if (losslessHiRes) "HI_RES" else "LOSSLESS",
                                     )
@@ -995,8 +1054,8 @@ object SongPlayer {
                                     com.music.spotui.providers.QobuzAudioProvider.Query(
                                         mediaId = flacSpotifyId ?: song,
                                         title = cleanTitle,
-                                        artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
-                                        album = null,
+                                        artists = listOfNotNull(songArtist.takeIf { it.isNotBlank() }),
+                                        album = songAlbum,
                                         isrc = isrc,
                                         durationMs = durationMs,
                                     ),
@@ -1019,8 +1078,8 @@ object SongPlayer {
                                     com.music.spotui.providers.TidalAudioProvider.Query(
                                         mediaId = flacSpotifyId ?: song,
                                         title = cleanTitle,
-                                        artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
-                                        album = null,
+                                        artists = listOfNotNull(songArtist.takeIf { it.isNotBlank() }),
+                                        album = songAlbum,
                                         isrc = isrc,
                                         durationMs = durationMs,
                                     ),
@@ -1043,7 +1102,7 @@ object SongPlayer {
                                         appContext,
                                         spotifyId = flacSpotifyId,
                                         isrc = isrc,
-                                        searchQuery = "$cleanTitle $metaArtist",
+                                        searchQuery = "$cleanTitle $songArtist".trim(),
                                     )
                                 }.getOrNull()
                                 if (dzRes is com.music.spotui.deezer.DeezerSource.Result.Success) {
@@ -1062,8 +1121,8 @@ object SongPlayer {
                                         com.music.spotui.providers.DeezerAudioProvider.Query(
                                             mediaId = flacSpotifyId ?: song,
                                             title = cleanTitle,
-                                            artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
-                                            album = null,
+                                            artists = listOfNotNull(songArtist.takeIf { it.isNotBlank() }),
+                                            album = songAlbum,
                                             isrc = isrc,
                                             durationMs = durationMs,
                                         )
@@ -1116,8 +1175,8 @@ object SongPlayer {
                                     com.music.spotui.providers.SoundCloudAudioProvider.Query(
                                         mediaId = flacSpotifyId ?: song,
                                         title = cleanTitle,
-                                        artists = listOfNotNull(metaArtist.takeIf { it.isNotBlank() }),
-                                        album = null,
+                                        artists = listOfNotNull(songArtist.takeIf { it.isNotBlank() }),
+                                        album = songAlbum,
                                         isrc = isrc,
                                         durationMs = durationMs,
                                     )
@@ -2052,6 +2111,7 @@ object SongPlayer {
             .setRenderersFactory(renderers)
             .setAudioAttributes(buildAudioAttributes(), handleAudioFocus)
             .setHandleAudioBecomingNoisy(handleAudioFocus)
+            .setWakeMode(androidx.media3.common.C.WAKE_MODE_NETWORK)
             .build()
         return p to filter
     }
@@ -2135,6 +2195,7 @@ object SongPlayer {
     fun pause() {
         cancelCrossfade()
         playWhenResolved = false
+        releaseWakeLock("spotui:pause")
         if (webPlaybackActive()) { SpotifyWebPlayer.pause(); return }
         player?.let {
             it.playWhenReady = false
@@ -2148,6 +2209,7 @@ object SongPlayer {
 
     fun stop() {
         cancelCrossfade()
+        releaseWakeLock("spotui:stop")
         player?.stop()
         loadedQuery = null
         currentRequest = ""
@@ -2164,14 +2226,17 @@ object SongPlayer {
     }
 
     fun next(context: Context) {
+        acquireWakeLock(context, "spotui:next", 60_000L)
         val state = boundState
         if (state == null) {
             android.util.Log.w(TAG, "next: boundState is null")
+            releaseWakeLock("spotui:next")
             return
         }
         val q = state.queue.value
         if (q.isEmpty()) {
             android.util.Log.w(TAG, "next: queue is empty")
+            releaseWakeLock("spotui:next")
             return
         }
         val curId = state.songId.value
@@ -2188,6 +2253,7 @@ object SongPlayer {
                 nextIdx = 0
             } else {
                 android.util.Log.d(TAG, "next: at end, repeat off - not advancing")
+                releaseWakeLock("spotui:next")
                 return
             }
         }
@@ -2201,14 +2267,17 @@ object SongPlayer {
     }
 
     fun previous(context: Context) {
+        acquireWakeLock(context, "spotui:previous", 60_000L)
         val state = boundState
         if (state == null) {
             android.util.Log.w(TAG, "previous: boundState is null")
+            releaseWakeLock("spotui:previous")
             return
         }
         val q = state.queue.value
         if (q.isEmpty()) {
             android.util.Log.w(TAG, "previous: queue is empty")
+            releaseWakeLock("spotui:previous")
             return
         }
         val curId = state.songId.value
@@ -2225,6 +2294,7 @@ object SongPlayer {
                 nextIdx = q.size - 1
             } else {
                 android.util.Log.d(TAG, "previous: at start, repeat off - not going back")
+                releaseWakeLock("spotui:previous")
                 return
             }
         }
@@ -2246,6 +2316,7 @@ object SongPlayer {
     fun release() {
         positionWatchJob?.cancel()
         cancelCrossfade()
+        releaseWakeLock("spotui:release")
         player?.release()
         player = null
         loadedQuery = null
@@ -2320,6 +2391,7 @@ object SongPlayer {
         secondaryPlayerFilter = null
         player?.volume = 1f
         isCrossfading = false
+        releaseWakeLock("spotui:crossfade")
     }
 
     /** (Re)start the loop that watches playback position and fires a crossfade as the
@@ -2372,10 +2444,13 @@ object SongPlayer {
         if (cur < 0 || cur >= q.size - 1) return // last track ends normally
         val nextSong = q[cur + 1]
         isCrossfading = true
+        acquireWakeLock(ctx, "spotui:crossfade", 60_000L)
         scope.launch {
             try {
                 val nextUrl = resolveStreamUrl(nextSong.url, ctx, forPlayback = true) ?: run {
-                    isCrossfading = false; return@launch
+                    isCrossfading = false
+                    releaseWakeLock("spotui:crossfade")
+                    return@launch
                 }
                 // Effective duration: never longer than the real time left on the outgoing track.
                 val remaining = withContext(Dispatchers.Main) {
@@ -2469,7 +2544,11 @@ object SongPlayer {
         nextIdx: Int,
     ) {
         withContext(Dispatchers.Main) {
-            val incoming = secondaryPlayer ?: run { isCrossfading = false; return@withContext }
+            val incoming = secondaryPlayer ?: run {
+                isCrossfading = false
+                releaseWakeLock("spotui:crossfade")
+                return@withContext
+            }
             val old = player
             // Promote the incoming (secondary) player to primary.
             currentPlayerFilter?.enabled = false
@@ -2496,6 +2575,7 @@ object SongPlayer {
             incoming.setHandleAudioBecomingNoisy(true)
             runCatching { old?.stop(); old?.release() }
             isCrossfading = false
+            releaseWakeLock("spotui:crossfade")
             // Re-bind the media session to the new player.
             onPlayerSwapped?.invoke(incoming)
         }

@@ -16,7 +16,7 @@ class PoTokenGenerator {
      *  In the background the WebView's evaluateJavascript() may never call back,
      *  so an indefinite wait would stall the entire stream resolution pipeline. */
     private companion object {
-        const val POTOKEN_TIMEOUT_MS = 12_000L
+        const val POTOKEN_TIMEOUT_MS = 5_000L
     }
 
     private val webViewSupported by lazy { runCatching { CookieManager.getInstance() }.isSuccess }

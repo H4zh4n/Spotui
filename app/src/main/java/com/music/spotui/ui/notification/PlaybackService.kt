@@ -80,12 +80,16 @@ class PlaybackService : MediaLibraryService() {
     private val playerListener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
             currentSongState.updateBufferingState(playbackState == Player.STATE_BUFFERING)
+            if (playbackState == Player.STATE_READY && (SongPlayer.exoPlayer?.playWhenReady == true)) {
+                SongPlayer.releaseWakeLock()
+            }
             if (playbackState == Player.STATE_ENDED) {
                 if (SongPlayer.isCrossfadeActive()) {
                     // Ignore the old player's STATE_ENDED event during an active crossfade.
                     // The crossfade routine itself handles the transition and promotes the new player.
                     return
                 }
+                SongPlayer.acquireWakeLock(applicationContext, "spotui:advance", 60_000L)
                 when (currentSongState.repeat.value) {
                     RepeatMode.ONE -> {
                         val p = SongPlayer.exoPlayer
@@ -102,6 +106,8 @@ class PlaybackService : MediaLibraryService() {
                                     ?: currentSongState.songIndex.value.coerceIn(0, queue.size - 1)
                                 val song = queue[cur]
                                 SongPlayer.playSong(song.url, applicationContext, "song/${song.id}")
+                            } else {
+                                SongPlayer.releaseWakeLock("spotui:advance")
                             }
                         }
                     }
@@ -120,7 +126,11 @@ class PlaybackService : MediaLibraryService() {
                                 ?: currentSongState.songIndex.value.coerceIn(0, queue.size - 1)
                             if (cur < queue.size - 1) {
                                 advance(forward = true)
+                            } else {
+                                SongPlayer.releaseWakeLock("spotui:advance")
                             }
+                        } else {
+                            SongPlayer.releaseWakeLock("spotui:advance")
                         }
                     }
                 }
@@ -132,6 +142,9 @@ class PlaybackService : MediaLibraryService() {
             // on-screen play button stays in sync when the notification controls are used.
             // Ignore transient stops/pauses from the outgoing player during an active crossfade.
             if (SongPlayer.isCrossfadeActive()) return
+            if (isPlaying) {
+                SongPlayer.releaseWakeLock()
+            }
             if (!showingWeb) currentSongState.updatePlayingState(isPlaying)
         }
 
@@ -141,6 +154,7 @@ class PlaybackService : MediaLibraryService() {
                 "Player error during playback: ${error.message}",
                 error
             )
+            SongPlayer.acquireWakeLock(applicationContext, "spotui:error_advance", 60_000L)
             val queue = currentSongState.queue.value
             val curId = currentSongState.songId.value
             val cur = queue.indexOfFirst { it.id == curId }

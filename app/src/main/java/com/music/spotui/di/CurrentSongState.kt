@@ -264,9 +264,10 @@ class CurrentSongState @Inject constructor() {
             }
             // Prefetch the next track in the queue to make transitions seamless.
             val q = _queue.value
-            if (q.isNotEmpty() && songIndex >= 0) {
-                val nextIdx = songIndex + 1
-                if (nextIdx < q.size) {
+            if (q.isNotEmpty()) {
+                val curIndex = _songIndex.value
+                val nextIdx = if (curIndex + 1 < q.size) curIndex + 1 else if (repeat.value == RepeatMode.ALL) 0 else -1
+                if (nextIdx in q.indices) {
                     SongPlayer.prefetch(q[nextIdx].url, com.music.spotui.MyApplication.instance)
                 }
             }
