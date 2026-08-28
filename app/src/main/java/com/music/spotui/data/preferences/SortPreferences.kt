@@ -162,3 +162,43 @@ fun setLibrarySortOption(context: Context, option: LibrarySortOption, desc: Bool
         .putBoolean("library_desc", desc)
         .apply()
 }
+
+// ── Playlist Sort ──
+private const val PREF_PLAYLIST_SORTS = "PlaylistSorts"
+
+enum class PlaylistSortOption(val label: String) {
+    DATE("Date added"),
+    TITLE("Title"),
+    ARTIST("Artist"),
+    ALBUM("Album");
+
+    fun getDescriptiveLabel(isDescending: Boolean): String = when (this) {
+        DATE -> if (isDescending) "Date added (newest to oldest)" else "Date added (oldest to newest)"
+        TITLE -> if (isDescending) "Title (Z to A)" else "Title (A to Z)"
+        ARTIST -> if (isDescending) "Artist (Z to A)" else "Artist (A to Z)"
+        ALBUM -> if (isDescending) "Album (Z to A)" else "Album (A to Z)"
+    }
+}
+
+fun getPlaylistSortOption(context: Context, playlistId: String): PlaylistSortOption {
+    val prefs = context.getSharedPreferences(PREF_PLAYLIST_SORTS, Context.MODE_PRIVATE)
+    val saved = prefs.getString("sort_option_$playlistId", PlaylistSortOption.DATE.name)
+    return runCatching { PlaylistSortOption.valueOf(saved!!) }.getOrDefault(PlaylistSortOption.DATE)
+}
+
+fun isPlaylistSortDescending(context: Context, playlistId: String): Boolean {
+    val prefs = context.getSharedPreferences(PREF_PLAYLIST_SORTS, Context.MODE_PRIVATE)
+    if (!prefs.contains("sort_descending_$playlistId")) {
+        val opt = getPlaylistSortOption(context, playlistId)
+        return opt == PlaylistSortOption.DATE
+    }
+    return prefs.getBoolean("sort_descending_$playlistId", true)
+}
+
+fun setPlaylistSort(context: Context, playlistId: String, option: PlaylistSortOption, descending: Boolean) {
+    context.getSharedPreferences(PREF_PLAYLIST_SORTS, Context.MODE_PRIVATE).edit()
+        .putString("sort_option_$playlistId", option.name)
+        .putBoolean("sort_descending_$playlistId", descending)
+        .apply()
+}
+

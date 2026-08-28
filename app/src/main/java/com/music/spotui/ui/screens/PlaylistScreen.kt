@@ -87,49 +87,13 @@ import com.music.spotui.ui.components.Snackbar
 import com.music.spotui.ui.components.SwipeToPlayNextWrapper
 import com.music.spotui.ui.navigation.artistRoute
 import com.music.spotui.ui.theme.AppBackground
+import com.music.spotui.data.preferences.PlaylistSortOption
+import com.music.spotui.data.preferences.getPlaylistSortOption
+import com.music.spotui.data.preferences.isPlaylistSortDescending
+import com.music.spotui.data.preferences.setPlaylistSort
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.PlayerViewModel
 import com.music.spotui.ui.viewmodel.PlaylistViewModel
-
-enum class PlaylistSortOption(val label: String) {
-    DATE("Date added"),
-    TITLE("Title"),
-    ARTIST("Artist"),
-    ALBUM("Album")
-}
-
-fun PlaylistSortOption.getDescriptiveLabel(isDescending: Boolean): String {
-    return when (this) {
-        PlaylistSortOption.DATE -> if (isDescending) "Date added (newest to oldest)" else "Date added (oldest to newest)"
-        PlaylistSortOption.TITLE -> if (isDescending) "Title (Z to A)" else "Title (A to Z)"
-        PlaylistSortOption.ARTIST -> if (isDescending) "Artist (Z to A)" else "Artist (A to Z)"
-        PlaylistSortOption.ALBUM -> if (isDescending) "Album (Z to A)" else "Album (A to Z)"
-    }
-}
-
-private const val PREF_PLAYLIST_SORTS = "PlaylistSorts"
-
-fun getPlaylistSortOption(context: Context, playlistId: String): PlaylistSortOption {
-    val prefs = context.getSharedPreferences(PREF_PLAYLIST_SORTS, Context.MODE_PRIVATE)
-    val saved = prefs.getString("sort_option_$playlistId", PlaylistSortOption.DATE.name)
-    return runCatching { PlaylistSortOption.valueOf(saved!!) }.getOrDefault(PlaylistSortOption.DATE)
-}
-
-fun isPlaylistSortDescending(context: Context, playlistId: String): Boolean {
-    val prefs = context.getSharedPreferences(PREF_PLAYLIST_SORTS, Context.MODE_PRIVATE)
-    if (!prefs.contains("sort_descending_$playlistId")) {
-        val opt = getPlaylistSortOption(context, playlistId)
-        return opt == PlaylistSortOption.DATE
-    }
-    return prefs.getBoolean("sort_descending_$playlistId", true)
-}
-
-fun setPlaylistSort(context: Context, playlistId: String, option: PlaylistSortOption, descending: Boolean) {
-    context.getSharedPreferences(PREF_PLAYLIST_SORTS, Context.MODE_PRIVATE).edit()
-        .putString("sort_option_$playlistId", option.name)
-        .putBoolean("sort_descending_$playlistId", descending)
-        .apply()
-}
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalGlideComposeApi::class, ExperimentalFoundationApi::class)
@@ -242,6 +206,7 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                             if (name.isNotBlank()) {
                                 com.music.spotui.data.preferences.LocalPlaylistPref.renamePlaylist(context, playlistId, name)
                                 com.music.spotui.data.api.Api.HomeCache.library = null
+                                com.music.spotui.data.api.Api.HomeCache.invalidatePlaylist(playlistId)
                                 playlistViewModel.reloadPlaylist(playlistId)
                             }
                             showRenameDialog = false
@@ -278,6 +243,7 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                         .clickable {
                             com.music.spotui.data.preferences.LocalPlaylistPref.deletePlaylist(context, playlistId)
                             com.music.spotui.data.api.Api.HomeCache.library = null
+                            com.music.spotui.data.api.Api.HomeCache.invalidatePlaylist(playlistId)
                             showDeleteDialog = false
                             navController.navigateUp()
                         }
@@ -317,7 +283,10 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
             navController = navController,
             context = context,
             currentPlaylistId = playlistId,
-            onSongRemovedFromPlaylist = { playlistViewModel.reloadPlaylist(playlistId) },
+            onSongRemovedFromPlaylist = {
+                com.music.spotui.data.api.Api.HomeCache.invalidatePlaylist(playlistId)
+                playlistViewModel.reloadPlaylist(playlistId)
+            },
             onDismiss = { menuSong = null },
         )
     }

@@ -54,7 +54,10 @@ object SpotifySync {
         scope.launch {
             val ok = SpotifyTokenProvider.ensureToken(app) &&
                 Spotify.addTracksToPlaylist(playlistId, listOf("spotify:track:$trackId")).isSuccess
-            if (ok) membershipCache[playlistId]?.add(trackId)
+            if (ok) {
+                membershipCache[playlistId]?.add(trackId)
+                Api.HomeCache.invalidatePlaylist(playlistId)
+            }
             if (!ok) Log.w(TAG, "failed adding track $trackId to playlist $playlistId")
             onDone(ok)
         }
@@ -74,7 +77,10 @@ object SpotifySync {
                 .mapNotNull { pt -> pt.uid?.let { Spotify.PlaylistItemRef(uri = uri, uid = it) } }
             val ok = refs.isNotEmpty() &&
                 Spotify.removeTracksFromPlaylist(playlistId, refs).isSuccess
-            if (ok) membershipCache[playlistId]?.remove(trackId)
+            if (ok) {
+                membershipCache[playlistId]?.remove(trackId)
+                Api.HomeCache.invalidatePlaylist(playlistId)
+            }
             if (!ok) Log.w(TAG, "failed removing track $trackId from playlist $playlistId")
             onDone(ok)
         }
