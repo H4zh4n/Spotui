@@ -90,6 +90,11 @@ object SpotifyWebPlayer {
     @SuppressLint("SetJavaScriptEnabled")
     fun attach(activity: Activity) {
         if (webView != null) return
+        val spDc = com.music.spotui.data.api.SpotifySession.spDc(activity)
+        if (spDc.isBlank()) {
+            Log.d(TAG, "attach deferred: user not logged in yet")
+            return
+        }
         try {
             // Lets `chrome://inspect` attach to the hidden player for diagnosis.
             WebView.setWebContentsDebuggingEnabled(true)
@@ -124,19 +129,12 @@ object SpotifyWebPlayer {
                 setAcceptCookie(true)
                 setAcceptThirdPartyCookies(wv, true)
             }
-            // The login flow stores sp_dc in app prefs, NOT in this WebView's cookie
-            // jar — so without this the web player loads logged-OUT and can't stream.
             // Seed the auth cookie for the Spotify domain before we load the page.
-            val spDc = com.music.spotui.data.api.SpotifySession.spDc(activity)
-            if (spDc.isNotBlank()) {
-                val attrs = "Domain=.spotify.com; Path=/; Secure"
-                cookies.setCookie("https://open.spotify.com", "sp_dc=$spDc; $attrs")
-                cookies.setCookie("https://spotify.com", "sp_dc=$spDc; $attrs")
-                cookies.flush()
-                Log.d(TAG, "seeded sp_dc cookie into WebView jar")
-            } else {
-                Log.w(TAG, "no sp_dc — web player will be logged out (log in first)")
-            }
+            val attrs = "Domain=.spotify.com; Path=/; Secure"
+            cookies.setCookie("https://open.spotify.com", "sp_dc=$spDc; $attrs")
+            cookies.setCookie("https://spotify.com", "sp_dc=$spDc; $attrs")
+            cookies.flush()
+            Log.d(TAG, "seeded sp_dc cookie into WebView jar")
             val appContext = activity.applicationContext
             wv.webViewClient = object : WebViewClient() {
                 // Ad-free ("unlocked") playback, SpotiFuck-style: drop analytics and
@@ -232,9 +230,15 @@ object SpotifyWebPlayer {
      * login succeeds so the player picks up the new sp_dc session.
      */
     fun refreshLogin(context: Context) {
-        val wv = webView ?: return
         val spDc = com.music.spotui.data.api.SpotifySession.spDc(context)
         if (spDc.isBlank()) return
+        val wv = webView
+        if (wv == null) {
+            if (context is Activity) {
+                attach(context)
+            }
+            return
+        }
         CookieManager.getInstance().apply {
             val attrs = "Domain=.spotify.com; Path=/; Secure"
             setCookie("https://open.spotify.com", "sp_dc=$spDc; $attrs")

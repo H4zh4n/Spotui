@@ -3,7 +3,12 @@ package com.music.spotui.ui.screens
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.graphics.Bitmap
+import android.os.Message
+import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -11,23 +16,27 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -35,37 +44,30 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.NavController
 import com.metrolist.spotify.Spotify
 import com.metrolist.spotify.SpotifyAuth
-import com.music.spotui.R
 import com.music.spotui.data.api.SpotifySession
 import com.music.spotui.ui.navigation.Routes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import timber.log.Timber
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -75,11 +77,10 @@ private const val USER_AGENT_DESKTOP =
 private const val SPOTIFY_GREEN = 0xFF1ED760
 
 /**
- * Spotify-style native login. The user types their email + password into a
- * custom form; under the hood a hidden WebView loads Spotify's real login page
- * and we inject the credentials via JavaScript, then capture the `sp_dc` cookie
- * exactly as before. If Spotify throws a captcha / challenge that we can't drive
- * headlessly, the WebView is revealed so the user can finish in-page.
+ * Spotify authentication screen.
+ * Displays Spotify's official responsive web login within a configured Android WebView,
+ * captures the `sp_dc` cookie across all Spotify domains, and provides a manual `sp_dc`
+ * paste option as fallback.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -87,38 +88,47 @@ fun SpotifyLoginScreen(navController: NavController) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var showPassword by remember { mutableStateOf(false) }
-
     var isProcessing by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("") }
     var hasError by remember { mutableStateOf(false) }
-    var showWebFallback by remember { mutableStateOf(false) }
+
+    var isLoadingPage by remember { mutableStateOf(true) }
+    var loadingProgress by remember { mutableFloatStateOf(0f) }
+    var hasPageError by remember { mutableStateOf(false) }
+    var pageErrorMessage by remember { mutableStateOf("") }
+    var showManualCookieDialog by remember { mutableStateOf(false) }
 
     val pageReady = remember { AtomicBoolean(false) }
     val tokenFetchStarted = remember { AtomicBoolean(false) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
     val navigateToHome: () -> Unit = {
-        // The hidden playback WebView was created (logged out) before this login —
-        // reload it with the new session so playback doesn't show Spotify's "Oops".
+        // Reload hidden playback WebView with new session
         com.music.spotui.di.SpotifyWebPlayer.refreshLogin(context)
         navController.navigate(Routes.Home.route) {
             popUpTo(Routes.Login.route) { inclusive = true }
         }
     }
 
-    // Poll for the sp_dc cookie — it's set on .spotify.com the moment login
-    // succeeds, regardless of which page the (hidden) WebView ends up on.
+    // Enable WebView debugging for dev inspection
+    LaunchedEffect(Unit) {
+        WebView.setWebContentsDebuggingEnabled(true)
+    }
+
+    // Poll for the sp_dc cookie across Spotify domains
     LaunchedEffect(Unit) {
         while (true) {
             delay(1000)
             if (tokenFetchStarted.get()) continue
             val spDc = extractCookie("sp_dc")
+            val spKey = extractCookie("sp_key") ?: ""
             if (!spDc.isNullOrBlank() && tokenFetchStarted.compareAndSet(false, true)) {
                 finishLogin(
-                    webViewRef, context as Activity, scope,
+                    spDc = spDc,
+                    spKey = spKey,
+                    view = webViewRef,
+                    activity = context as Activity,
+                    scope = scope,
                     setProcessing = { isProcessing = it },
                     setStatus = { statusMessage = it },
                     setError = { hasError = it },
@@ -130,274 +140,392 @@ fun SpotifyLoginScreen(navController: NavController) {
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        // Login is 100% Spotify's own web page in a full-screen WebView — no custom
-        // form or credential injection. We just watch for the sp_dc cookie (polled
-        // above) to know when the user has signed in, then exchange it for a token.
+        // Main Spotify Web Login View
         AndroidView(
-            modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(top = 40.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(top = 48.dp),
             factory = { ctx ->
                 val cookieManager = CookieManager.getInstance()
                 cookieManager.setAcceptCookie(true)
-                cookieManager.removeAllCookies(null)
-                cookieManager.flush()
 
                 WebView(ctx).apply {
+                    layoutParams = android.view.ViewGroup.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                        android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    )
                     webViewRef = this
                     cookieManager.setAcceptThirdPartyCookies(this, true)
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.databaseEnabled = true
-                    settings.loadWithOverviewMode = true
-                    settings.useWideViewPort = true
-                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                    settings.javaScriptCanOpenWindowsAutomatically = true
-                    // Keep the WebView's REAL (mobile Chrome) User-Agent for login —
-                    // a spoofed desktop UA on a phone trips Spotify's reCAPTCHA bot
-                    // check and it wrongly returns "Incorrect email or password".
+
+                    setBackgroundColor(android.graphics.Color.BLACK)
+
+                    settings.apply {
+                        javaScriptEnabled = true
+                        domStorageEnabled = true
+                        databaseEnabled = true
+                        loadWithOverviewMode = true
+                        useWideViewPort = true
+                        mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                        javaScriptCanOpenWindowsAutomatically = true
+                        @Suppress("DEPRECATION")
+                        setSupportMultipleWindows(false)
+                        cacheMode = WebSettings.LOAD_DEFAULT
+                        userAgentString = USER_AGENT_DESKTOP
+                    }
+
+                    webChromeClient = object : WebChromeClient() {
+                        override fun onProgressChanged(view: WebView?, newProgress: Int) {
+                            loadingProgress = newProgress / 100f
+                            if (newProgress >= 100) {
+                                isLoadingPage = false
+                            }
+                        }
+
+                        override fun onConsoleMessage(m: ConsoleMessage): Boolean {
+                            Timber.d("SpotifyLogin console: ${m.message()} @${m.sourceId()}:${m.lineNumber()}")
+                            return true
+                        }
+                    }
 
                     webViewClient = object : WebViewClient() {
                         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                             pageReady.set(false)
+                            isLoadingPage = true
+                            hasPageError = false
                         }
+
                         override fun onPageFinished(view: WebView?, url: String?) {
                             pageReady.set(true)
+                            isLoadingPage = false
+                        }
+
+                        override fun onReceivedSslError(
+                            view: WebView?,
+                            handler: android.webkit.SslErrorHandler?,
+                            error: android.net.http.SslError?,
+                        ) {
+                            Timber.w("SpotifyLogin onReceivedSslError: $error")
+                            handler?.proceed()
+                        }
+
+                        override fun onReceivedError(
+                            view: WebView?,
+                            request: WebResourceRequest?,
+                            error: WebResourceError?,
+                        ) {
+                            if (request?.isForMainFrame == true) {
+                                val desc = error?.description?.toString() ?: "Connection error"
+                                Timber.w("SpotifyLogin WebView error: $desc on ${request.url}")
+                                pageErrorMessage = desc
+                                hasPageError = true
+                            }
+                        }
+
+                        @Suppress("OVERRIDE_DEPRECATION")
+                        override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                            return false
+                        }
+
+                        override fun shouldOverrideUrlLoading(
+                            view: WebView?,
+                            request: WebResourceRequest?,
+                        ): Boolean {
+                            return false
                         }
                     }
+
                     loadUrl(SpotifyAuth.LOGIN_URL)
                 }
             },
         )
 
-        // Slim top bar: title, or the "Signing in…" status once the cookie lands.
-        Box(
-            modifier = Modifier.fillMaxWidth().statusBarsPadding().height(40.dp).background(Color.Black),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = if (isProcessing) statusMessage.ifBlank { "Signing in…" } else "Log in to Spotify",
-                color = if (hasError) Color(0xFFE22134) else Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp,
-            )
-        }
-    }
-}
-
-@Composable
-private fun LoginForm(
-    email: String,
-    onEmail: (String) -> Unit,
-    password: String,
-    onPassword: (String) -> Unit,
-    showPassword: Boolean,
-    onTogglePassword: () -> Unit,
-    isProcessing: Boolean,
-    statusMessage: String,
-    hasError: Boolean,
-    onSubmit: () -> Unit,
-    onUseWeb: () -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(Modifier.height(72.dp))
-        Icon(
-            painter = painterResource(id = R.drawable.logo),
-            contentDescription = "Spotify",
-            tint = Color(SPOTIFY_GREEN),
-            modifier = Modifier.size(56.dp),
-        )
-        Spacer(Modifier.height(28.dp))
-        Text(
-            "Log in to Spotify",
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
-            fontSize = 26.sp,
-        )
-        Spacer(Modifier.height(32.dp))
-
-        Text(
-            "Email or username",
-            color = Color.White,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 13.sp,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(6.dp))
-        OutlinedTextField(
-            value = email,
-            onValueChange = onEmail,
-            singleLine = true,
-            placeholder = { Text("Email or username", color = Color(0xFF8A8A8A)) },
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Email,
-                imeAction = ImeAction.Next,
-            ),
-            colors = spotifyFieldColors(),
-            shape = RoundedCornerShape(6.dp),
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        Spacer(Modifier.height(16.dp))
-        Text(
-            "Password",
-            color = Color.White,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 13.sp,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(6.dp))
-        OutlinedTextField(
-            value = password,
-            onValueChange = onPassword,
-            singleLine = true,
-            placeholder = { Text("Password", color = Color(0xFF8A8A8A)) },
-            visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Password,
-                imeAction = ImeAction.Done,
-            ),
-            trailingIcon = {
-                IconButton(onClick = onTogglePassword) {
-                    Icon(
-                        painter = painterResource(
-                            id = if (showPassword) R.drawable.visibility else R.drawable.visibility_off
-                        ),
-                        contentDescription = "Toggle password",
-                        tint = Color(0xFFB3B3B3),
+        // Error / Retry view if page failed to load
+        if (hasPageError && !pageReady.get()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+                    .padding(32.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(
+                        text = "Unable to load Spotify login page",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        textAlign = TextAlign.Center,
                     )
+                    if (pageErrorMessage.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = pageErrorMessage,
+                            color = Color(0xFFB3B3B3),
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    Spacer(Modifier.height(24.dp))
+                    Button(
+                        onClick = {
+                            hasPageError = false
+                            isLoadingPage = true
+                            webViewRef?.loadUrl(SpotifyAuth.LOGIN_URL)
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(SPOTIFY_GREEN),
+                            contentColor = Color.Black,
+                        ),
+                        shape = RoundedCornerShape(50),
+                    ) {
+                        Text("Retry", fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    TextButton(
+                        onClick = { showManualCookieDialog = true },
+                    ) {
+                        Text("Or Log In with Cookie (sp_dc)", color = Color.White)
+                    }
                 }
-            },
-            colors = spotifyFieldColors(),
-            shape = RoundedCornerShape(6.dp),
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        if (statusMessage.isNotBlank()) {
-            Spacer(Modifier.height(14.dp))
-            Text(
-                statusMessage,
-                color = if (hasError) Color(0xFFFF5252) else Color(0xFFB3B3B3),
-                fontSize = 13.sp,
-                textAlign = TextAlign.Center,
-            )
-        }
-
-        Spacer(Modifier.height(24.dp))
-        Button(
-            onClick = onSubmit,
-            enabled = !isProcessing,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color(SPOTIFY_GREEN),
-                contentColor = Color.Black,
-                disabledContainerColor = Color(0xFF12863B),
-            ),
-            shape = RoundedCornerShape(50),
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) {
-            if (isProcessing) {
-                CircularProgressIndicator(
-                    color = Color.Black,
-                    strokeWidth = 2.dp,
-                    modifier = Modifier.size(22.dp),
-                )
-            } else {
-                Text("Log In", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
         }
 
-        Spacer(Modifier.height(16.dp))
-        TextButton(onClick = onUseWeb, enabled = !isProcessing) {
-            Text(
-                "Trouble logging in? Use the Spotify web page",
-                color = Color(0xFFB3B3B3),
-                fontSize = 13.sp,
-                textAlign = TextAlign.Center,
+        // Top App Bar with navigation, title/status, refresh, and manual cookie entry
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .background(Color.Black),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .padding(horizontal = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    if (navController.previousBackStackEntry != null) {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = Color.White,
+                            )
+                        }
+                    }
+                    Text(
+                        text = if (isProcessing) {
+                            statusMessage.ifBlank { "Signing in…" }
+                        } else {
+                            "Log in to Spotify"
+                        },
+                        color = if (hasError) Color(0xFFE22134) else Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isProcessing) {
+                        CircularProgressIndicator(
+                            color = Color(SPOTIFY_GREEN),
+                            strokeWidth = 2.dp,
+                            modifier = Modifier
+                                .size(20.dp)
+                                .padding(end = 8.dp),
+                        )
+                    } else {
+                        IconButton(
+                            onClick = { showManualCookieDialog = true },
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Key,
+                                contentDescription = "Manual cookie login",
+                                tint = Color(0xFFB3B3B3),
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                hasPageError = false
+                                isLoadingPage = true
+                                webViewRef?.loadUrl(SpotifyAuth.LOGIN_URL)
+                            },
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Reload page",
+                                tint = Color(0xFFB3B3B3),
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Visual loading progress bar
+            if (isLoadingPage && !isProcessing) {
+                LinearProgressIndicator(
+                    progress = { loadingProgress },
+                    modifier = Modifier.fillMaxWidth().height(2.dp),
+                    color = Color(SPOTIFY_GREEN),
+                    trackColor = Color.Transparent,
+                )
+            }
+        }
+
+        // Manual sp_dc cookie entry dialog
+        if (showManualCookieDialog) {
+            ManualCookieDialog(
+                onDismiss = { showManualCookieDialog = false },
+                onSubmit = { pastedSpDc ->
+                    showManualCookieDialog = false
+                    if (pastedSpDc.isNotBlank()) {
+                        tokenFetchStarted.set(true)
+                        finishLogin(
+                            spDc = pastedSpDc.trim(),
+                            spKey = "",
+                            view = webViewRef,
+                            activity = context as Activity,
+                            scope = scope,
+                            setProcessing = { isProcessing = it },
+                            setStatus = { statusMessage = it },
+                            setError = { hasError = it },
+                            tokenFetchStarted = tokenFetchStarted,
+                            onSuccess = navigateToHome,
+                        )
+                    }
+                },
             )
         }
-        // Full web signup: reveals the real Spotify page (its "Sign up" link works
-        // there since the WebView navigation is unrestricted).
-        TextButton(onClick = onUseWeb, enabled = !isProcessing) {
-            Text(
-                "Don't have an account? Sign up",
-                color = Color.White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-            )
-        }
-        Spacer(Modifier.height(40.dp))
     }
 }
 
 @Composable
-private fun spotifyFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedTextColor = Color.White,
-    unfocusedTextColor = Color.White,
-    cursorColor = Color.White,
-    focusedBorderColor = Color.White,
-    unfocusedBorderColor = Color(0xFF727272),
-    focusedContainerColor = Color(0xFF121212),
-    unfocusedContainerColor = Color(0xFF121212),
-)
+private fun ManualCookieDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit,
+) {
+    val context = LocalContext.current
+    var spDcInput by remember { mutableStateOf("") }
 
-/**
- * Fill Spotify's login form with [email] / [password] and submit it. React tracks
- * the input value internally, so we set it through the native value setter and
- * dispatch input/change events for it to register. Returns the script's verdict:
- * "SUBMIT" (clicked login), "NOFORM" (page not ready), or "NOBTN".
- */
-private suspend fun injectCredentials(webView: WebView?, email: String, password: String): String {
-    webView ?: return "NOFORM"
-    val u = JSONObject.quote(email)
-    val p = JSONObject.quote(password)
-    val js = """
-        (function(){
-          function setVal(el, val){
-            try {
-              var proto = window.HTMLInputElement.prototype;
-              var setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
-              setter.call(el, val);
-            } catch(e) { el.value = val; }
-            el.dispatchEvent(new Event('input', {bubbles:true}));
-            el.dispatchEvent(new Event('change', {bubbles:true}));
-          }
-          var u = document.querySelector('#login-username, input[data-testid=login-username], input[autocomplete=username], input[name=username], input[type=email]');
-          var p = document.querySelector('#login-password, input[data-testid=login-password], input[type=password]');
-          if(!u || !p){ return 'NOFORM'; }
-          setVal(u, $u);
-          setVal(p, $p);
-          var b = document.querySelector('#login-button, button[data-testid=login-button], button[type=submit]');
-          if(b){ b.click(); return 'SUBMIT'; }
-          if(p.form){ p.form.submit(); return 'SUBMIT'; }
-          return 'NOBTN';
-        })();
-    """.trimIndent()
-    return withContext(Dispatchers.Main) {
-        val done = kotlinx.coroutines.CompletableDeferred<String>()
-        webView.evaluateJavascript(js) { raw ->
-            done.complete(raw?.trim('"') ?: "NOFORM")
-        }
-        done.await()
-    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Color(0xFF1E1E1E),
+        title = {
+            Text(
+                "Manual Spotify Cookie Login",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    "Paste your Spotify 'sp_dc' cookie value from your web browser (inspect cookies on open.spotify.com), or open Spotify in your browser.",
+                    color = Color(0xFFB3B3B3),
+                    fontSize = 13.sp,
+                )
+                Spacer(Modifier.height(12.dp))
+                androidx.compose.material3.OutlinedButton(
+                    onClick = {
+                        val browserIntent = android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse(SpotifyAuth.LOGIN_URL)
+                        )
+                        context.startActivity(browserIntent)
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Open Spotify in Browser", color = Color.White, fontSize = 13.sp)
+                }
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = spDcInput,
+                    onValueChange = { spDcInput = it },
+                    label = { Text("sp_dc cookie value", color = Color(0xFF8A8A8A)) },
+                    placeholder = { Text("AQB...", color = Color(0xFF555555)) },
+                    singleLine = false,
+                    maxLines = 4,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        cursorColor = Color(SPOTIFY_GREEN),
+                        focusedBorderColor = Color(SPOTIFY_GREEN),
+                        unfocusedBorderColor = Color(0xFF727272),
+                        focusedContainerColor = Color(0xFF121212),
+                        unfocusedContainerColor = Color(0xFF121212),
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSubmit(spDcInput) },
+                enabled = spDcInput.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(SPOTIFY_GREEN),
+                    contentColor = Color.Black,
+                    disabledContainerColor = Color(0xFF12863B),
+                ),
+            ) {
+                Text("Log In", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = Color(0xFFB3B3B3))
+            }
+        },
+    )
 }
 
+/**
+ * Searches the cookie jar across all Spotify domains for a cookie by [name].
+ */
 private fun extractCookie(name: String): String? {
-    val allCookies = CookieManager.getInstance().getCookie("https://open.spotify.com") ?: return null
-    return allCookies.split(";")
-        .mapNotNull {
-            val parts = it.trim().split("=", limit = 2)
-            if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
+    val cookieManager = CookieManager.getInstance()
+    val domains = listOf(
+        "https://open.spotify.com",
+        "https://accounts.spotify.com",
+        "https://spotify.com",
+    )
+    for (domain in domains) {
+        val allCookies = cookieManager.getCookie(domain) ?: continue
+        val match = allCookies.split(";")
+            .mapNotNull {
+                val parts = it.trim().split("=", limit = 2)
+                if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
+            }
+            .firstOrNull { it.first == name && it.second.isNotBlank() }
+            ?.second
+        if (!match.isNullOrBlank()) {
+            return match
         }
-        .firstOrNull { it.first == name && it.second.isNotBlank() }
-        ?.second
+    }
+    return null
 }
 
 private fun finishLogin(
+    spDc: String,
+    spKey: String,
     view: WebView?,
     activity: Activity,
     scope: kotlinx.coroutines.CoroutineScope,
@@ -407,9 +535,7 @@ private fun finishLogin(
     tokenFetchStarted: AtomicBoolean,
     onSuccess: () -> Unit,
 ) {
-    val spDc = extractCookie("sp_dc")
-    val spKey = extractCookie("sp_key") ?: ""
-    if (spDc.isNullOrBlank()) {
+    if (spDc.isBlank()) {
         setProcessing(true)
         setError(true)
         setStatus("Couldn't read login cookie. Make sure you completed the Spotify login, then try again.")
