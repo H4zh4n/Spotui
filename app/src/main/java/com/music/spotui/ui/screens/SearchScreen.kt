@@ -69,6 +69,7 @@ import com.music.spotui.data.preferences.isSongLiked
 import com.music.spotui.data.preferences.removeLikedSongId
 import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.components.SavedInSheet
+import com.music.spotui.ui.components.SongOptionsSheet
 import com.music.spotui.ui.components.SwipeToPlayNextWrapper
 import com.music.spotui.ui.navigation.albumRoute
 import com.music.spotui.ui.navigation.artistRoute
@@ -142,6 +143,16 @@ fun SumUpSearchScreen(
 
     var recents by remember {
         mutableStateOf(com.music.spotui.data.preferences.getRecentItems(context))
+    }
+
+    var menuSong by remember { mutableStateOf<SongsModel?>(null) }
+    menuSong?.let { sel ->
+        SongOptionsSheet(
+            song = sel,
+            navController = navController,
+            context = context,
+            onDismiss = { menuSong = null },
+        )
     }
     val recordRecent: (com.music.spotui.data.preferences.RecentItem) -> Unit = { item ->
         com.music.spotui.data.preferences.addRecentItem(context, item)
@@ -285,6 +296,21 @@ fun SumUpSearchScreen(
                                 com.music.spotui.data.preferences.removeRecentItem(context, item)
                                 recents = com.music.spotui.data.preferences.getRecentItems(context)
                             },
+                            onLongClick = {
+                                if (item.type == "song") {
+                                    menuSong = SongsModel(
+                                        id = item.songId,
+                                        title = item.name,
+                                        album = item.songAlbum,
+                                        singer = item.singer,
+                                        coverUri = item.image,
+                                        url = item.songUrl,
+                                        spotifyTrackId = item.spotifyTrackId,
+                                        explicit = item.explicit,
+                                        durationMs = item.durationMs,
+                                    )
+                                }
+                            },
                         )
                     }
                 } else {
@@ -301,12 +327,16 @@ fun SumUpSearchScreen(
                 items(mixed.size) { i ->
                     when (val row = mixed[i]) {
                         is SearchRow.Song -> SearchSongRow(
-                            row.song,
-                            searchedList,
-                            searchViewModel,
+                            song = row.song,
+                            songList = searchedList,
+                            searchViewModel = searchViewModel,
                             onPlayed = {
                                 recordRecent(row.song.toRecentItem())
-                            })
+                            },
+                            onLongClick = {
+                                menuSong = row.song
+                            },
+                        )
 
                         is SearchRow.Artist -> SearchArtistRow(row.artist) {
                             recordRecent(
@@ -357,9 +387,17 @@ fun SumUpSearchScreen(
                     item { SearchSectionHeader("Episodes") }
                     items(results.episodes.size) { i ->
                         val ep = results.episodes[i]
-                        SearchSongRow(ep, results.episodes, searchViewModel, onPlayed = {
-                            recordRecent(ep.toRecentItem())
-                        })
+                        SearchSongRow(
+                            song = ep,
+                            songList = results.episodes,
+                            searchViewModel = searchViewModel,
+                            onPlayed = {
+                                recordRecent(ep.toRecentItem())
+                            },
+                            onLongClick = {
+                                menuSong = ep
+                            },
+                        )
                     }
                 }
             }
@@ -417,21 +455,24 @@ private fun SongsModel.toRecentItem() = com.music.spotui.data.preferences.Recent
 )
 
 /** A recent item row (song/artist/album/show the user opened), with remove (x). */
-@OptIn(ExperimentalGlideComposeApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalGlideComposeApi::class)
 @Composable
 fun RecentItemRow(
     item: com.music.spotui.data.preferences.RecentItem,
     onClick: () -> Unit,
     onRemove: () -> Unit,
+    onLongClick: () -> Unit = {},
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(
+            .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-            ) { onClick() }
+                onLongClick = onLongClick,
+                onClick = onClick,
+            )
             .padding(16.dp, 8.dp),
     ) {
         GlideImage(
@@ -493,6 +534,7 @@ fun SearchSongRow(
     songList: List<SongsModel>,
     searchViewModel: SearchViewModel,
     onPlayed: () -> Unit = {},
+    onLongClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
     var isLiked by remember { mutableStateOf(isSongLiked(context, song.id.toString())) }
@@ -527,25 +569,27 @@ fun SearchSongRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(AppBackground)
-                .clickable(
+                .combinedClickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                ) {
-                    onPlayed()
-                    // Start a radio from the tapped track (queue = this song + Spotify
-                    // recommendations) rather than queuing the whole search list.
-                    searchViewModel.startRadioFromSong(song)
-                    searchViewModel.updateSongState(
-                        song.coverUri,
-                        song.title,
-                        song.singer,
-                        true,
-                        song.id,
-                        0,
-                        song.album,
-                    )
-                    SongPlayer.playSong(song.url, context, "song/${song.id}")
-                }
+                    onLongClick = onLongClick,
+                    onClick = {
+                        onPlayed()
+                        // Start a radio from the tapped track (queue = this song + Spotify
+                        // recommendations) rather than queuing the whole search list.
+                        searchViewModel.startRadioFromSong(song)
+                        searchViewModel.updateSongState(
+                            song.coverUri,
+                            song.title,
+                            song.singer,
+                            true,
+                            song.id,
+                            0,
+                            song.album,
+                        )
+                        SongPlayer.playSong(song.url, context, "song/${song.id}")
+                    },
+                )
                 .padding(16.dp, 8.dp),
         ) {
             Row(

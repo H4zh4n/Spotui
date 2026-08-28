@@ -1,7 +1,9 @@
 package com.music.spotui.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -74,6 +76,7 @@ import com.music.spotui.data.preferences.isHistorySortDescending
 import com.music.spotui.data.preferences.removeListeningHistory
 import com.music.spotui.data.preferences.setHistorySortOption
 import com.music.spotui.di.SongPlayer
+import com.music.spotui.ui.components.SongOptionsSheet
 import com.music.spotui.ui.navigation.artistRoute
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
@@ -98,6 +101,15 @@ fun HistoryScreen(navController: NavController) {
     var currentSort by remember { mutableStateOf(getHistorySortOption(context)) }
     var isDescending by remember { mutableStateOf(isHistorySortDescending(context)) }
     var showSortSheet by remember { mutableStateOf(false) }
+    var menuSong by remember { mutableStateOf<SongsModel?>(null) }
+    menuSong?.let { sel ->
+        SongOptionsSheet(
+            song = sel,
+            navController = navController,
+            context = context,
+            onDismiss = { menuSong = null },
+        )
+    }
 
     val filteredHistory = remember(history, searchQuery, currentSort, isDescending) {
         val filtered = if (searchQuery.isBlank()) {
@@ -442,6 +454,16 @@ fun HistoryScreen(navController: NavController) {
                                     history = getListeningHistory(context)
                                 },
                                 onClick = { playEntry(entry) },
+                                onLongClick = {
+                                    menuSong = SongsModel(
+                                        id = entry.songId,
+                                        title = entry.title,
+                                        album = entry.album,
+                                        singer = entry.singer,
+                                        coverUri = entry.image,
+                                        url = entry.url,
+                                    )
+                                },
                             )
                         }
                     }
@@ -719,19 +741,26 @@ private fun TopTrackRow(
     }
 }
 
-@OptIn(ExperimentalGlideComposeApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalGlideComposeApi::class)
 @Composable
-private fun HistoryRow(entry: HistoryEntry, onRemove: () -> Unit, onClick: () -> Unit) {
+private fun HistoryRow(
+    entry: HistoryEntry,
+    onRemove: () -> Unit,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp, 6.dp)
             .clip(RoundedCornerShape(8.dp))
-            .clickable(
+            .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-            ) { onClick() },
+                onLongClick = onLongClick,
+                onClick = onClick,
+            ),
     ) {
         GlideImage(
             modifier = Modifier

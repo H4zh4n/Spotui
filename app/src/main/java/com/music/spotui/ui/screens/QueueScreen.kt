@@ -1,9 +1,12 @@
 package com.music.spotui.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.music.spotui.ui.components.SongOptionsSheet
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -80,6 +84,16 @@ fun QueueScreen(navController: NavController) {
     var dragOffset by remember { mutableFloatStateOf(0f) }
     val rowHeightPx = with(LocalDensity.current) { 64.dp.toPx() }
 
+    var menuSong by remember { mutableStateOf<com.music.spotui.data.entity.SongsModel?>(null) }
+    menuSong?.let { sel ->
+        SongOptionsSheet(
+            song = sel,
+            navController = navController,
+            context = context,
+            onDismiss = { menuSong = null },
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -123,7 +137,12 @@ fun QueueScreen(navController: NavController) {
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(16.dp, 12.dp, 16.dp, 6.dp)
                     )
-                    QueueRow(song = it, highlight = true, onClick = {})
+                    QueueRow(
+                        song = it,
+                        highlight = true,
+                        onClick = {},
+                        onLongClick = { menuSong = it },
+                    )
                 }
             }
             if (upcoming.isNotEmpty()) {
@@ -166,6 +185,7 @@ fun QueueScreen(navController: NavController) {
                         QueueRow(
                             song = song,
                             highlight = false,
+                            onLongClick = { menuSong = song },
                             onClick = {
                                 val idx = queue.indexOfFirst { it.id == song.id }
                                 playerViewModel.updateSongState(
@@ -211,12 +231,13 @@ fun QueueScreen(navController: NavController) {
     }
 }
 
-@OptIn(ExperimentalGlideComposeApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalGlideComposeApi::class)
 @Composable
 private fun QueueRow(
     song: com.music.spotui.data.entity.SongsModel,
     highlight: Boolean,
     onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
     dragHandle: Modifier? = null,
 ) {
     Row(
@@ -225,10 +246,12 @@ private fun QueueRow(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color(0xFF121212))
-            .clickable(
+            .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-            ) { onClick() }
+                onLongClick = onLongClick,
+                onClick = onClick,
+            )
             .padding(16.dp, 8.dp)
     ) {
         GlideImage(

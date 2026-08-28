@@ -66,6 +66,7 @@ import com.music.spotui.data.preferences.removeLikedSongId
 import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.components.Loader
 import com.music.spotui.ui.components.SavedInSheet
+import com.music.spotui.ui.components.SongOptionsSheet
 import com.music.spotui.ui.navigation.Routes
 import com.music.spotui.ui.navigation.albumRoute
 import com.music.spotui.ui.navigation.artistRoute
@@ -142,6 +143,16 @@ private fun ArtistOverviewContent(
         val s = songs[index]
         artistViewModel.updateSongState(s.coverUri, s.title, s.singer, true, s.id, index)
         SongPlayer.playSong(s.url, context, "song/${s.id}")
+    }
+
+    var menuSong by remember { mutableStateOf<SongsModel?>(null) }
+    menuSong?.let { sel ->
+        SongOptionsSheet(
+            song = sel,
+            navController = navController,
+            context = context,
+            onDismiss = { menuSong = null },
+        )
     }
 
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -320,7 +331,13 @@ private fun ArtistOverviewContent(
                 )
             }
             itemsIndexed(tracks.take(5)) { index, item ->
-                PopularTrackRow(item, index, artistViewModel) { playTrackAt(index) }
+                PopularTrackRow(
+                    item = item,
+                    index = index,
+                    artistViewModel = artistViewModel,
+                    onPlay = { playTrackAt(index) },
+                    onLongClick = { menuSong = item.song },
+                )
             }
         }
 
@@ -481,6 +498,7 @@ private fun PopularTrackRow(
     index: Int,
     artistViewModel: ArtistViewModel,
     onPlay: () -> Unit,
+    onLongClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val song = item.song
@@ -515,10 +533,12 @@ private fun PopularTrackRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(AppBackground)
-                .clickable(
+                .combinedClickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                ) { onPlay() }
+                    onLongClick = onLongClick,
+                    onClick = { onPlay() },
+                )
                 .padding(16.dp, 6.dp),
         ) {
             Text(

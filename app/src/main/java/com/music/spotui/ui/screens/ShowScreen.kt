@@ -1,7 +1,9 @@
 package com.music.spotui.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,12 +62,14 @@ import com.bumptech.glide.integration.compose.GlideImage
 import com.bumptech.glide.integration.compose.placeholder
 import com.music.spotui.R
 import com.music.spotui.data.api.Response
+import com.music.spotui.data.entity.SongsModel
 import com.music.spotui.data.preferences.ShowSortOption
 import com.music.spotui.data.preferences.getShowSortOption
 import com.music.spotui.data.preferences.isShowSortDescending
 import com.music.spotui.data.preferences.setShowSortOption
 import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.components.Loader
+import com.music.spotui.ui.components.SongOptionsSheet
 import com.music.spotui.ui.components.SwipeToPlayNextWrapper
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
@@ -88,6 +92,15 @@ fun ShowScreen(navController: NavController, showId: String, showName: String = 
     var currentSort by remember(showId) { mutableStateOf(getShowSortOption(context, showId)) }
     var isDescending by remember(showId) { mutableStateOf(isShowSortDescending(context, showId)) }
     var showSortSheet by remember { mutableStateOf(false) }
+    var menuSong by remember { mutableStateOf<SongsModel?>(null) }
+    menuSong?.let { sel ->
+        SongOptionsSheet(
+            song = sel,
+            navController = navController,
+            context = context,
+            onDismiss = { menuSong = null },
+        )
+    }
 
     val filteredEpisodes = remember(episodes, searchQuery, currentSort, isDescending) {
         val filtered = if (searchQuery.isBlank()) {
@@ -311,14 +324,16 @@ fun ShowScreen(navController: NavController, showId: String, showName: String = 
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .background(AppBackground)
-                                .clickable(
+                                .combinedClickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null,
-                                ) {
-                                    vm.updateQueue(filteredEpisodes)
-                                    vm.updateSongState(ep.coverUri, ep.title, ep.singer, true, ep.id, i, ep.album)
-                                    SongPlayer.playSong(ep.url, context, "song/${ep.id}")
-                                }
+                                    onLongClick = { menuSong = ep },
+                                    onClick = {
+                                        vm.updateQueue(filteredEpisodes)
+                                        vm.updateSongState(ep.coverUri, ep.title, ep.singer, true, ep.id, i, ep.album)
+                                        SongPlayer.playSong(ep.url, context, "song/${ep.id}")
+                                    },
+                                )
                                 .padding(16.dp, 10.dp),
                         ) {
                             GlideImage(

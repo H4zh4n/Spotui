@@ -3,9 +3,11 @@ package com.music.spotui.ui.screens
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -86,6 +88,7 @@ import com.music.spotui.data.entity.HomeSection
 import com.music.spotui.data.entity.SongsModel
 import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.components.Loader
+import com.music.spotui.ui.components.SongOptionsSheet
 import com.music.spotui.ui.navigation.Routes
 import com.music.spotui.ui.navigation.albumRoute
 import com.music.spotui.ui.navigation.artistRoute
@@ -113,6 +116,16 @@ fun HomeScreen(navController: NavController){
     val followedArtists by homeViewModel.followedArtists.collectAsState()
     val selectedFilter by homeViewModel.selectedFilter.collectAsState()
     val isFollowingOnly by homeViewModel.isFollowingOnly.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var menuSong by remember { mutableStateOf<SongsModel?>(null) }
+    menuSong?.let { sel ->
+        SongOptionsSheet(
+            song = sel,
+            navController = navController,
+            context = context,
+            onDismiss = { menuSong = null },
+        )
+    }
 
     Surface(
         modifier = Modifier
@@ -136,7 +149,8 @@ fun HomeScreen(navController: NavController){
                     songsList = songsList,
                     followedArtists = followedArtists,
                     selectedFilter = selectedFilter,
-                    isFollowingOnly = isFollowingOnly
+                    isFollowingOnly = isFollowingOnly,
+                    onTrackOptions = { menuSong = it },
                 )
             }
             "Podcasts" -> {
@@ -145,7 +159,8 @@ fun HomeScreen(navController: NavController){
                     homeViewModel = homeViewModel,
                     podcastsResult = podcasts,
                     selectedFilter = selectedFilter,
-                    isFollowingOnly = isFollowingOnly
+                    isFollowingOnly = isFollowingOnly,
+                    onTrackOptions = { menuSong = it },
                 )
             }
             "Audiobooks" -> {
@@ -514,6 +529,7 @@ private fun HomeMusicFeedContent(
     followedArtists: List<ArtistsModel>,
     selectedFilter: String,
     isFollowingOnly: Boolean,
+    onTrackOptions: (SongsModel) -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val playerViewModel: PlayerViewModel = hiltViewModel()
@@ -611,7 +627,10 @@ private fun HomeMusicFeedContent(
                         onPlay = {
                             playerViewModel.updateQueue(topList)
                             playerViewModel.playSongAt(topList, i, context)
-                        }
+                        },
+                        onLongClick = {
+                            onTrackOptions(song)
+                        },
                     )
                 }
             }
@@ -968,11 +987,12 @@ private fun LatestReleaseCard(
     }
 }
 
-@OptIn(ExperimentalGlideComposeApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalGlideComposeApi::class)
 @Composable
 private fun HomeSongRow(
     song: SongsModel,
-    onPlay: () -> Unit
+    onPlay: () -> Unit,
+    onLongClick: () -> Unit = {},
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -981,7 +1001,12 @@ private fun HomeSongRow(
             .padding(horizontal = 16.dp, vertical = 5.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(Color(0xFF181818))
-            .clickable { onPlay() }
+            .combinedClickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onLongClick = onLongClick,
+                onClick = onPlay,
+            )
             .padding(8.dp)
     ) {
         GlideImage(
@@ -1036,7 +1061,8 @@ private fun HomePodcastsFeedContent(
     homeViewModel: HomeViewModel,
     podcastsResult: Response<com.music.spotui.data.entity.SearchResults>,
     selectedFilter: String,
-    isFollowingOnly: Boolean
+    isFollowingOnly: Boolean,
+    onTrackOptions: (SongsModel) -> Unit = {},
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val playerViewModel: PlayerViewModel = hiltViewModel()
@@ -1147,7 +1173,10 @@ private fun HomePodcastsFeedContent(
                     onPlay = {
                         playerViewModel.updateQueue(episodes)
                         playerViewModel.playSongAt(episodes, i, context)
-                    }
+                    },
+                    onLongClick = {
+                        onTrackOptions(ep)
+                    },
                 )
             }
         } else if (shows.isEmpty() && podcastsResult is Response.Loading) {
