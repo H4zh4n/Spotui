@@ -378,6 +378,7 @@ fun PlayerScreen(navController: NavController) {
     var showLyrics by remember { mutableStateOf(false) }
     var showSavedIn by remember { mutableStateOf(false) }
     var showArtistSheet by remember { mutableStateOf(false) }
+    var showQueueSheet by remember { mutableStateOf(false) }
 
     if (showMenu) {
         PlayerOptionsSheet(
@@ -385,7 +386,8 @@ fun PlayerScreen(navController: NavController) {
             playerViewModel = playerViewModel,
             context = context,
             isLiked = isLiked,
-            onDismiss = { showMenu = false }
+            onDismiss = { showMenu = false },
+            onOpenQueue = { showQueueSheet = true }
         )
     }
 
@@ -810,7 +812,8 @@ fun PlayerScreen(navController: NavController) {
                         navController = navController,
                         context = context,
                         currentTrack = queueSongs.firstOrNull { it.id == playerViewModel.currentSongId.value },
-                        onOpenDevices = { showDevicesSheet = true }
+                        onOpenDevices = { showDevicesSheet = true },
+                        onOpenQueue = { showQueueSheet = true }
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -843,6 +846,13 @@ fun PlayerScreen(navController: NavController) {
             com.music.spotui.ui.components.DevicesSheet(
                 context = context,
                 onDismiss = { showDevicesSheet = false }
+            )
+        }
+
+        if (showQueueSheet) {
+            QueueSheet(
+                navController = navController,
+                onDismiss = { showQueueSheet = false }
             )
         }
     }
@@ -1534,6 +1544,7 @@ fun PlayerConnectRow(
     context: Context,
     currentTrack: SongsModel?,
     onOpenDevices: () -> Unit = {},
+    onOpenQueue: () -> Unit = {},
 ) {
     DisposableEffect(context) {
         val am = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
@@ -1619,7 +1630,7 @@ fun PlayerConnectRow(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                    ) { navController.navigate(Routes.Queue.route) },
+                    ) { onOpenQueue() },
                 contentDescription = "Queue",
             )
         }
@@ -1815,7 +1826,8 @@ fun PlayerOptionsSheet(
     playerViewModel: PlayerViewModel,
     context: Context,
     isLiked: MutableState<Boolean>,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onOpenQueue: () -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showSleep by remember { mutableStateOf(false) }
@@ -2094,7 +2106,7 @@ fun PlayerOptionsSheet(
                     label = "View queue"
                 ) {
                     onDismiss()
-                    navController.navigate(Routes.Queue.route)
+                    onOpenQueue()
                 }
                 // Use the track's REAL album (currentSongAlbum is the playing
                 // context — a playlist name would resolve to garbage).
