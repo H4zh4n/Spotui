@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -76,6 +77,7 @@ import com.music.spotui.ui.navigation.artistRoute
 import com.music.spotui.ui.navigation.categoryRoute
 import com.music.spotui.ui.navigation.showRoute
 import com.music.spotui.ui.theme.AppBackground
+import com.music.spotui.ui.components.AppSearchBar
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.PlayerViewModel
 import com.music.spotui.ui.viewmodel.SearchViewModel
@@ -931,54 +933,12 @@ fun SearchStickyBar(
         }
     }
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(10.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .height(55.dp)
-            .background(Color.White)
-            .padding(10.dp, 0.dp)
-    ) {
-        Icon(
-            painterResource(id = R.drawable.ic_search_big),
-            tint = Color.Black,
-            contentDescription = "",
-            modifier = Modifier.clickable { focusRequester.requestFocus() }
-        )
-
-        TextField(
-            enabled = true,
-            modifier = Modifier
-                .onFocusChanged { onFocusChange(it.isFocused) }
-                .focusRequester(focusRequester),
-            value = text,
-            textStyle = TextStyle.Default.copy(
-                fontSize = 16.sp,
-                color = Color.Black,
-                fontWeight = FontWeight(500)
-            ),
-            colors = TextFieldDefaults.colors(
-                unfocusedContainerColor = Color.Transparent,
-                disabledContainerColor = Color.Transparent,
-                focusedContainerColor = Color.Transparent,
-                disabledIndicatorColor = Color.Transparent,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-                cursorColor = Color.Black
-
-            ),
-            singleLine = true,
-            onValueChange = onTextChange,
-            placeholder = {
-                Text(
-                    textAlign = TextAlign.Center,
-                    fontWeight = FontWeight.Bold,
-                    text = "What do you want to listen to?"
-
-                )
-            }
-        )
-    }
+    AppSearchBar(
+        query = text,
+        onQueryChange = onTextChange,
+        modifier = Modifier.padding(10.dp),
+        placeholder = "What do you want to listen to?",
+        focusRequester = focusRequester,
+        onFocusChange = onFocusChange,
+    )
 }

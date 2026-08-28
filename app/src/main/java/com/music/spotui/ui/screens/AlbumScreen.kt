@@ -5,6 +5,7 @@ import android.content.Context
 import android.util.Log
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -86,6 +87,7 @@ import com.music.spotui.data.preferences.removeLikedAlbumId
 import com.music.spotui.data.preferences.removeLikedSongId
 import com.music.spotui.di.Palette
 import com.music.spotui.di.SongPlayer
+import com.music.spotui.ui.components.AppSearchBar
 import com.music.spotui.ui.components.LikedSongsScreen
 import com.music.spotui.ui.components.Loader
 import com.music.spotui.ui.components.SavedInSheet
@@ -576,65 +578,12 @@ fun SumUpAlbumScreen(
 
             if (albumSongs.isNotEmpty()) {
                 // Search Bar
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp, 8.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .height(55.dp)
-                        .background(Color.White)
-                        .padding(10.dp, 0.dp)
-                ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_search_big),
-                        tint = Color.Black,
-                        contentDescription = "Search",
-                        modifier = Modifier.size(24.dp)
-                    )
-
-                    TextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier.weight(1f),
-                        textStyle = TextStyle.Default.copy(
-                            fontSize = 16.sp,
-                            color = Color.Black,
-                            fontWeight = FontWeight(500)
-                        ),
-                        colors = TextFieldDefaults.colors(
-                            unfocusedContainerColor = Color.Transparent,
-                            disabledContainerColor = Color.Transparent,
-                            focusedContainerColor = Color.Transparent,
-                            disabledIndicatorColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            cursorColor = Color.Black
-                        ),
-                        singleLine = true,
-                        placeholder = {
-                            Text(
-                                text = "Search in album",
-                                color = Color.Gray,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    )
-
-                    if (searchQuery.isNotEmpty()) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Clear",
-                            tint = Color.Black,
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) { searchQuery = "" }
-                        )
-                    }
-                }
+                AppSearchBar(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    modifier = Modifier.padding(20.dp, 8.dp),
+                    placeholder = "Search in album",
+                )
 
                 // Sort action button
                 Row(

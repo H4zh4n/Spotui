@@ -3,6 +3,7 @@ package com.music.spotui.ui.screens
 import android.annotation.SuppressLint
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -32,6 +33,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
+import com.music.spotui.ui.components.AppSearchBar
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -384,65 +386,12 @@ fun LikedSongsScreen(navController: NavController) {
                     if (songs.isNotEmpty()) {
                         // Search Bar
                         item {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(20.dp, 8.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .height(55.dp)
-                                    .background(Color.White)
-                                    .padding(10.dp, 0.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = R.drawable.ic_search_big),
-                                    tint = Color.Black,
-                                    contentDescription = "Search",
-                                    modifier = Modifier.size(24.dp)
-                                )
-
-                                TextField(
-                                    value = searchQuery,
-                                    onValueChange = { searchQuery = it },
-                                    modifier = Modifier.weight(1f),
-                                    textStyle = TextStyle.Default.copy(
-                                        fontSize = 16.sp,
-                                        color = Color.Black,
-                                        fontWeight = FontWeight(500)
-                                    ),
-                                    colors = TextFieldDefaults.colors(
-                                        unfocusedContainerColor = Color.Transparent,
-                                        disabledContainerColor = Color.Transparent,
-                                        focusedContainerColor = Color.Transparent,
-                                        disabledIndicatorColor = Color.Transparent,
-                                        focusedIndicatorColor = Color.Transparent,
-                                        unfocusedIndicatorColor = Color.Transparent,
-                                        cursorColor = Color.Black
-                                    ),
-                                    singleLine = true,
-                                    placeholder = {
-                                        Text(
-                                            text = "Search in liked songs",
-                                            color = Color.Gray,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                )
-
-                                if (searchQuery.isNotEmpty()) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Clear",
-                                        tint = Color.Black,
-                                        modifier = Modifier
-                                            .size(24.dp)
-                                            .clickable(
-                                                interactionSource = remember { MutableInteractionSource() },
-                                                indication = null
-                                            ) { searchQuery = "" }
-                                    )
-                                }
-                            }
+                            AppSearchBar(
+                                query = searchQuery,
+                                onQueryChange = { searchQuery = it },
+                                modifier = Modifier.padding(20.dp, 8.dp),
+                                placeholder = "Search in liked songs",
+                            )
                         }
 
                         // Sort action button

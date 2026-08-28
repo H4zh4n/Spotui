@@ -16,9 +16,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -29,7 +31,14 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -634,5 +643,113 @@ fun SwipeToPlayNextWrapper(
         }
     ) {
         content()
+    }
+}
+
+/**
+ * Modular dark-themed search bar used across all screens in the app.
+ */
+@Composable
+fun AppSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "What do you want to listen to?",
+    focusRequester: FocusRequester? = null,
+    onFocusChange: ((Boolean) -> Unit)? = null,
+    onClear: (() -> Unit)? = null,
+    height: Dp = 52.dp,
+    enabled: Boolean = true,
+) {
+    val internalFocusRequester = remember { FocusRequester() }
+    val effectiveFocusRequester = focusRequester ?: internalFocusRequester
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, Color(0xFF383838), RoundedCornerShape(10.dp))
+            .height(height)
+            .background(Color(0xFF242424))
+            .padding(horizontal = 12.dp)
+    ) {
+        Icon(
+            painter = painterResource(id = R.drawable.ic_search_big),
+            tint = Color(0xFFB3B3B3),
+            contentDescription = "Search",
+            modifier = Modifier
+                .size(22.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    effectiveFocusRequester.requestFocus()
+                }
+        )
+
+        TextField(
+            enabled = enabled,
+            modifier = Modifier
+                .weight(1f)
+                .then(
+                    if (onFocusChange != null) {
+                        Modifier.onFocusChanged { onFocusChange(it.isFocused) }
+                    } else {
+                        Modifier
+                    }
+                )
+                .focusRequester(effectiveFocusRequester),
+            value = query,
+            onValueChange = onQueryChange,
+            textStyle = TextStyle.Default.copy(
+                fontSize = 15.sp,
+                color = Color.White,
+                fontWeight = FontWeight.Medium
+            ),
+            colors = TextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                focusedPlaceholderColor = Color(0xFFB3B3B3),
+                unfocusedPlaceholderColor = Color(0xFFB3B3B3),
+                unfocusedContainerColor = Color.Transparent,
+                disabledContainerColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+                cursorColor = Color(0xFF1ED760)
+            ),
+            singleLine = true,
+            placeholder = {
+                Text(
+                    text = placeholder,
+                    color = Color(0xFFB3B3B3),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    textAlign = TextAlign.Start
+                )
+            }
+        )
+
+        if (query.isNotEmpty()) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Clear",
+                tint = Color(0xFFB3B3B3),
+                modifier = Modifier
+                    .size(20.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        if (onClear != null) {
+                            onClear()
+                        } else {
+                            onQueryChange("")
+                        }
+                    }
+            )
+        }
     }
 }
