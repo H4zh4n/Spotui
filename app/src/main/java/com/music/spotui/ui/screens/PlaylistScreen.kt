@@ -82,11 +82,12 @@ import com.music.spotui.di.Palette
 import com.music.spotui.di.SongPlayer
 import com.music.spotui.ui.components.Loader
 import com.music.spotui.ui.components.Snackbar
+import com.music.spotui.ui.components.SwipeToPlayNextWrapper
+import com.music.spotui.ui.navigation.artistRoute
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
-import com.music.spotui.ui.viewmodel.PlaylistViewModel
 import com.music.spotui.ui.viewmodel.PlayerViewModel
-import com.music.spotui.ui.components.SwipeToPlayNextWrapper
+import com.music.spotui.ui.viewmodel.PlaylistViewModel
 
 enum class PlaylistSortOption(val label: String) {
     DATE("Date added"),
@@ -294,6 +295,20 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
         )
     }
 
+    val playlistArtists = playlist.artists
+    val playlistArtistList = remember(playlistArtists) {
+        playlistArtists.split(",").map { it.trim() }.filter { it.isNotBlank() }
+    }
+    var showArtistSheet by remember { mutableStateOf(false) }
+    if (showArtistSheet) {
+        ArtistsSheet(
+            artistNames = playlistArtistList,
+            context = context,
+            onDismiss = { showArtistSheet = false },
+            navController = navController,
+        )
+    }
+
     menuSong?.let { sel ->
         com.music.spotui.ui.components.SongOptionsSheet(
             song = sel,
@@ -444,12 +459,30 @@ fun PlaylistScreen(navController: NavController, playlistId: String, playlistNam
                                     fontWeight = FontWeight.Medium
                                 )
                             } else if (playlist.artists.isNotBlank()) {
-                                Text(
-                                    text = "Playlist • ${playlist.artists}",
-                                    color = Color.White,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Playlist • ",
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = playlist.artists,
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                        ) {
+                                            if (playlistArtistList.size == 1) {
+                                                navController.navigate(artistRoute(playlistArtistList[0]))
+                                            } else if (playlistArtistList.size > 1) {
+                                                showArtistSheet = true
+                                            }
+                                        }
+                                    )
+                                }
                             }
                         }
 

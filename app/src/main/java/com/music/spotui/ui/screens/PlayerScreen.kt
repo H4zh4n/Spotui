@@ -141,6 +141,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 private val artistImageCache = java.util.concurrent.ConcurrentHashMap<String, String>()
+private val artistIdCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
 @OptIn(
     ExperimentalGlideComposeApi::class,
@@ -1629,45 +1630,49 @@ fun PlayerConnectRow(
 @Composable
 fun ArtistsSheet(
     artistNames: List<String>,
-    artistIds: List<String>,
+    artistIds: List<String> = emptyList(),
     context: Context,
     onDismiss: () -> Unit,
     navController: NavController,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val artistImages = remember { androidx.compose.runtime.mutableStateMapOf<String, String>() }
+    val resolvedIds = remember { androidx.compose.runtime.mutableStateMapOf<String, String>() }
 
-    LaunchedEffect(artistIds) {
-        artistIds.filter { it.isNotBlank() }.forEach { id ->
-            val cachedUrl = artistImageCache[id]
-            android.util.Log.d(
-                "ArtistsSheetCache",
-                "Checking in-memory cache for $id -> $cachedUrl"
-            )
-            if (!cachedUrl.isNullOrBlank()) {
-                artistImages[id] = cachedUrl
-            } else {
-                android.util.Log.d(
-                    "ArtistsSheetCache",
-                    "Cache miss for $id, fetching from Spotify..."
-                )
-                if (com.music.spotui.data.api.SpotifyTokenProvider.ensureToken(context)) {
-                    com.metrolist.spotify.Spotify.artist(id).getOrNull()?.let { artist ->
-                        val url = artist.images.firstOrNull()?.url.orEmpty()
-                        android.util.Log.d("ArtistsSheetCache", "Fetched $id image: $url")
-                        artistImageCache[id] = url
-                        artistImages[id] = url
-                    } ?: run {
-                        android.util.Log.e(
-                            "ArtistsSheetCache",
-                            "Failed to fetch artist details for $id"
-                        )
-                    }
+    LaunchedEffect(artistNames, artistIds) {
+        artistNames.forEachIndexed { index, name ->
+            val id = artistIds.getOrElse(index) { "" }
+            if (id.isNotBlank()) {
+                val cachedUrl = artistImageCache[id]
+                if (!cachedUrl.isNullOrBlank()) {
+                    artistImages[id] = cachedUrl
                 } else {
-                    android.util.Log.e(
-                        "ArtistsSheetCache",
-                        "Failed to ensure Spotify token for $id"
-                    )
+                    if (com.music.spotui.data.api.SpotifyTokenProvider.ensureToken(context)) {
+                        com.metrolist.spotify.Spotify.artist(id).getOrNull()?.let { artist ->
+                            val url = artist.images.firstOrNull()?.url.orEmpty()
+                            artistImageCache[id] = url
+                            artistImages[id] = url
+                        }
+                    }
+                }
+            } else if (name.isNotBlank()) {
+                val cachedId = artistIdCache[name]
+                val cachedUrl = artistImageCache[cachedId ?: name]
+                if (!cachedUrl.isNullOrBlank()) {
+                    artistImages[name] = cachedUrl
+                    if (!cachedId.isNullOrBlank()) resolvedIds[name] = cachedId
+                } else {
+                    if (com.music.spotui.data.api.SpotifyTokenProvider.ensureToken(context)) {
+                        com.metrolist.spotify.Spotify.search(name, types = listOf("artist"), limit = 1).getOrNull()
+                            ?.artists?.items?.firstOrNull()?.let { artist ->
+                                val url = artist.images.firstOrNull()?.url.orEmpty()
+                                artistIdCache[name] = artist.id
+                                artistImageCache[name] = url
+                                artistImageCache[artist.id] = url
+                                artistImages[name] = url
+                                resolvedIds[name] = artist.id
+                            }
+                    }
                 }
             }
         }
@@ -1693,13 +1698,18 @@ fun ArtistsSheet(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
             )
             artistNames.forEachIndexed { index, name ->
-                val aId = artistIds.getOrElse(index) { "" }
-                val imageUrl = aId.let { artistImages[it].orEmpty() }
-                var following by remember(aId) {
+                val directId = artistIds.getOrElse(index) { "" }
+                val effectiveId = directId.ifBlank { resolvedIds[name].orEmpty() }
+                val imageUrl = if (directId.isNotBlank()) {
+                    artistImages[directId].orEmpty()
+                } else {
+                    artistImages[name].orEmpty()
+                }
+                var following by remember(effectiveId) {
                     mutableStateOf(
-                        aId.isNotBlank() && com.music.spotui.data.preferences.isArtistFollowed(
+                        effectiveId.isNotBlank() && com.music.spotui.data.preferences.isArtistFollowed(
                             context,
-                            aId
+                            effectiveId
                         )
                     )
                 }
@@ -1745,11 +1755,11 @@ fun ArtistsSheet(
                             .clickable {
                                 onDismiss()
                                 navController.navigate(
-                                    com.music.spotui.ui.navigation.artistRoute(name, aId)
+                                    com.music.spotui.ui.navigation.artistRoute(name, effectiveId)
                                 )
                             },
                     )
-                    if (aId.isNotBlank()) {
+                    if (effectiveId.isNotBlank()) {
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
@@ -1767,18 +1777,18 @@ fun ArtistsSheet(
                                     if (following) {
                                         com.music.spotui.data.preferences.addFollowedArtist(
                                             context,
-                                            aId,
+                                            effectiveId,
                                             name
                                         )
                                     } else {
                                         com.music.spotui.data.preferences.removeFollowedArtist(
                                             context,
-                                            aId
+                                            effectiveId
                                         )
                                     }
                                     com.music.spotui.data.api.SpotifySync.setArtistFollowed(
                                         context,
-                                        aId,
+                                        effectiveId,
                                         following
                                     )
                                 }

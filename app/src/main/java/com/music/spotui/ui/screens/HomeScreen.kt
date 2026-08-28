@@ -859,6 +859,19 @@ private fun LatestReleaseCard(
         }
     }
 
+    val artistList = remember(album.artists) {
+        album.artists.split(",").map { it.trim() }.filter { it.isNotBlank() }
+    }
+    var showArtistSheet by remember { mutableStateOf(false) }
+    if (showArtistSheet) {
+        ArtistsSheet(
+            artistNames = artistList,
+            context = context,
+            onDismiss = { showArtistSheet = false },
+            navController = navController,
+        )
+    }
+
     if (showBottomSheet) {
         ModalBottomSheet(
             onDismissRequest = { showBottomSheet = false },
@@ -914,7 +927,11 @@ private fun LatestReleaseCard(
                             .clip(RoundedCornerShape(8.dp))
                             .clickable {
                                 showBottomSheet = false
-                                navController.navigate(artistRoute(album.artists))
+                                if (artistList.size == 1) {
+                                    navController.navigate(artistRoute(artistList[0]))
+                                } else if (artistList.size > 1) {
+                                    showArtistSheet = true
+                                }
                             }
                             .padding(vertical = 12.dp, horizontal = 8.dp)
                     ) {

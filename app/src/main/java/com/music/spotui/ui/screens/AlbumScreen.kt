@@ -90,6 +90,7 @@ import com.music.spotui.ui.components.LikedSongsScreen
 import com.music.spotui.ui.components.Loader
 import com.music.spotui.ui.components.SavedInSheet
 import com.music.spotui.ui.components.Snackbar
+import com.music.spotui.ui.navigation.artistRoute
 import com.music.spotui.ui.theme.AppBackground
 import com.music.spotui.ui.theme.AppPalette
 import com.music.spotui.ui.viewmodel.AlbumViewModel
@@ -236,6 +237,20 @@ fun SumUpAlbumScreen(
         }
     }
 
+    val albumArtists = album[0].artists.ifBlank { albumSongs.firstOrNull()?.singer ?: artist }
+    val albumArtistList = remember(albumArtists) {
+        albumArtists.split(",").map { it.trim() }.filter { it.isNotBlank() }
+    }
+    var showArtistSheet by remember { mutableStateOf(false) }
+    if (showArtistSheet) {
+        ArtistsSheet(
+            artistNames = albumArtistList,
+            context = context,
+            onDismiss = { showArtistSheet = false },
+            navController = navController,
+        )
+    }
+
     var menuSong by remember { mutableStateOf<SongsModel?>(null) }
     menuSong?.let { sel ->
         com.music.spotui.ui.components.SongOptionsSheet(
@@ -326,12 +341,26 @@ fun SumUpAlbumScreen(
                     color = Color.White,
                     fontSize = 23.sp,
                     fontWeight = FontWeight.Bold)
-                Text(modifier = Modifier
-                    .padding(20.dp, 0.dp, 0.dp, 0.dp),
-                    text = album[0].artists.ifBlank { albumSongs.firstOrNull()?.singer ?: "" },
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium)
+                if (albumArtists.isNotBlank()) {
+                    Text(
+                        modifier = Modifier
+                            .padding(20.dp, 0.dp, 0.dp, 0.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) {
+                                if (albumArtistList.size == 1) {
+                                    navController.navigate(artistRoute(albumArtistList[0]))
+                                } else if (albumArtistList.size > 1) {
+                                    showArtistSheet = true
+                                }
+                            },
+                        text = albumArtists,
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
                 Text(modifier = Modifier
                     .padding(20.dp, 0.dp, 0.dp, 0.dp),
                     text = "Album : ${album[0].time}",
