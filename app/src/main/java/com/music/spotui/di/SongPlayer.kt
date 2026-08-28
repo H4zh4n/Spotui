@@ -961,6 +961,7 @@ object SongPlayer {
                     logResolution("Query: mediaId=${flacSpotifyId ?: "(none)"}, title='$cleanTitle', artist='$metaArtist', isrc=${isrc ?: "(none)"}, duration=${durationMs ?: "(none)"}ms")
                 }
                 var result: Triple<String, String, String>? = null
+                var dzLossyFallback: Triple<String, String, String>? = null
                 for (item in providerOrder) {
                     if (result != null) break
                     when (item) {
@@ -1046,8 +1047,13 @@ object SongPlayer {
                                     )
                                 }.getOrNull()
                                 if (dzRes is com.music.spotui.deezer.DeezerSource.Result.Success) {
-                                    if (forPlayback) logResolution("✓ Deezer Direct SUCCESS (${dzRes.qualityLabel})")
-                                    result = Triple(dzRes.uri, "Deezer", dzRes.qualityLabel)
+                                    if (dzRes.mimeFlac || !quality.lossless) {
+                                        if (forPlayback) logResolution("✓ Deezer Direct SUCCESS (${dzRes.qualityLabel})")
+                                        result = Triple(dzRes.uri, "Deezer", dzRes.qualityLabel)
+                                    } else {
+                                        if (forPlayback) logResolution("ℹ Deezer Direct is ${dzRes.qualityLabel} (lossy); searching lossless providers first.")
+                                        dzLossyFallback = Triple(dzRes.uri, "Deezer", dzRes.qualityLabel)
+                                    }
                                 }
                             }
                             if (result == null) {
@@ -1127,6 +1133,10 @@ object SongPlayer {
                         com.music.spotui.data.preferences.AudioProviderOrderItem.YOUTUBE_MUSIC -> Unit
                     }
                 }
+                if (result == null && dzLossyFallback != null) {
+                    if (forPlayback) logResolution("Falling back to Deezer Direct (${dzLossyFallback.third}).")
+                    result = dzLossyFallback
+                }
                 if (result == null && forPlayback) {
                     logResolution("All lossless providers exhausted. Proceeding to YouTube Music fallback.")
                 }
@@ -1153,20 +1163,24 @@ object SongPlayer {
             val flacResult = flacDeferred.await()
             if (flacResult != null) {
                 val (url, providerName, flacQuality) = flacResult
-                Log.d(TAG, "Lossless resolved via $providerName ($flacQuality) for: $song")
+                val isLossless = flacQuality.contains("FLAC", ignoreCase = true) ||
+                    flacQuality.contains("Hi-Res", ignoreCase = true) ||
+                    flacQuality.contains("Ultra HD", ignoreCase = true)
+                val sourceLabel = if (isLossless) "Lossless • $providerName" else providerName
+                Log.d(TAG, "Resolved via $providerName ($flacQuality) [lossless=$isLossless] for: $song")
                 if (forPlayback) {
-                    currentSource = "Lossless • $providerName"
+                    currentSource = sourceLabel
                     currentQuality = flacQuality
                     val note = "Source: $providerName • Format: $flacQuality"
                     boundState?.updateResolveDetailNote(note)
                     updateResolveStatus(false)
                 }
                 streamCache[song] = url
-                sourceCache[song] = "Lossless • $providerName"
+                sourceCache[song] = sourceLabel
                 qualityCache[song] = flacQuality
                 qualityTierCache[song] = expectedTier
                 com.music.spotui.data.preferences.setCachedStream(
-                    appContext, song, url, "Lossless • $providerName", flacQuality,
+                    appContext, song, url, sourceLabel, flacQuality,
                     21600, qualityTier = expectedTier,
                 )
                 ytDeferred?.cancelAndJoin()
@@ -1516,8 +1530,8 @@ object SongPlayer {
 
         val dir = java.io.File(appContext.filesDir, "downloads").apply { mkdirs() }
         val ext = when {
-            streamUrl.contains(".flac", ignoreCase = true) || source.contains("FLAC", ignoreCase = true) -> "flac"
-            streamUrl.contains(".mp3", ignoreCase = true) || source.contains("MP3", ignoreCase = true) -> "mp3"
+            streamUrl.contains(".flac", ignoreCase = true) || quality.contains("FLAC", ignoreCase = true) || source.contains("FLAC", ignoreCase = true) -> "flac"
+            streamUrl.contains(".mp3", ignoreCase = true) || quality.contains("MP3", ignoreCase = true) || source.contains("MP3", ignoreCase = true) -> "mp3"
             else -> "flac"
         }
         val outFile = java.io.File(dir, "${song.id}.$ext")

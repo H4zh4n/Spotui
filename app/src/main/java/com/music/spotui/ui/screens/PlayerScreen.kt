@@ -1106,6 +1106,7 @@ fun PlayerInfo(
                             isResolvingState -> Color(0xFF3DABFF)
                             source == "Spotify" -> Color(0xFF1ED760)
                             source.startsWith("Lossless") -> Color(0xFFFFC862)
+                            source.startsWith("Deezer") || source == "Deezer" -> Color(0xFFA238FF)
                             source == "Downloaded" -> Color(0xFF9C9C9C)
                             else -> Color(0xFFFF6B6B)
                         }
