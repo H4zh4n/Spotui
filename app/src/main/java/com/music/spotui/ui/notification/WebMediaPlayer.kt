@@ -70,11 +70,19 @@ class WebMediaPlayer(
                 Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM,
                 Player.COMMAND_SEEK_BACK,
                 Player.COMMAND_SEEK_FORWARD,
+                Player.COMMAND_SET_REPEAT_MODE,
             )
             .build()
 
+        val repeatModeInt = when (currentSongState.repeat.value) {
+            com.music.spotui.di.RepeatMode.OFF -> Player.REPEAT_MODE_OFF
+            com.music.spotui.di.RepeatMode.ONE -> Player.REPEAT_MODE_ONE
+            com.music.spotui.di.RepeatMode.ALL -> Player.REPEAT_MODE_ALL
+        }
+
         return State.Builder()
             .setAvailableCommands(commands)
+            .setRepeatMode(repeatModeInt)
             .setPlaybackState(Player.STATE_READY)
             .setPlayWhenReady(
                 SpotifyWebPlayer.isPlaying,
@@ -84,6 +92,17 @@ class WebMediaPlayer(
             .setCurrentMediaItemIndex(0)
             .setContentPositionMs(posMs)
             .build()
+    }
+
+    override fun handleSetRepeatMode(repeatMode: Int): ListenableFuture<*> {
+        val mode = when (repeatMode) {
+            Player.REPEAT_MODE_ONE -> com.music.spotui.di.RepeatMode.ONE
+            Player.REPEAT_MODE_ALL -> com.music.spotui.di.RepeatMode.ALL
+            else -> com.music.spotui.di.RepeatMode.OFF
+        }
+        currentSongState.updateRepeatState(mode)
+        invalidateState()
+        return Futures.immediateVoidFuture()
     }
 
     override fun handleSetPlayWhenReady(playWhenReady: Boolean): ListenableFuture<*> {

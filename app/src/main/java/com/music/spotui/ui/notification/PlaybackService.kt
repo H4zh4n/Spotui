@@ -363,14 +363,35 @@ class PlaybackService : MediaLibraryService() {
                     .add(COMMAND_SEEK_TO_PREVIOUS)
                     .add(COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
                     .add(COMMAND_PLAY_PAUSE)
+                    .add(COMMAND_SET_REPEAT_MODE)
                     .build()
 
             override fun isCommandAvailable(command: Int): Boolean = when (command) {
                 COMMAND_SEEK_TO_NEXT, COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
                 COMMAND_SEEK_TO_PREVIOUS, COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
-                COMMAND_PLAY_PAUSE -> true
+                COMMAND_PLAY_PAUSE, COMMAND_SET_REPEAT_MODE -> true
 
                 else -> super.isCommandAvailable(command)
+            }
+
+            override fun getRepeatMode(): Int = when (currentSongState.repeat.value) {
+                RepeatMode.OFF -> Player.REPEAT_MODE_OFF
+                RepeatMode.ONE -> Player.REPEAT_MODE_ONE
+                RepeatMode.ALL -> Player.REPEAT_MODE_ALL
+            }
+
+            override fun setRepeatMode(repeatMode: Int) {
+                val mode = when (repeatMode) {
+                    Player.REPEAT_MODE_ONE -> RepeatMode.ONE
+                    Player.REPEAT_MODE_ALL -> RepeatMode.ALL
+                    else -> RepeatMode.OFF
+                }
+                currentSongState.updateRepeatState(mode)
+                // Always ensure the underlying ExoPlayer repeatMode stays REPEAT_MODE_OFF.
+                // Spotui manages single-track / all-track looping at the queue & PlaybackService level.
+                // If ExoPlayer itself is set to REPEAT_MODE_ONE or REPEAT_MODE_ALL on a single-item
+                // timeline, ExoPlayer silently loops the single item internally and NEVER emits STATE_ENDED.
+                base.repeatMode = Player.REPEAT_MODE_OFF
             }
 
             override fun play() {
